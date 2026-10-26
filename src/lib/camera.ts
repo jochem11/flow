@@ -1,0 +1,77 @@
+// Twee ruimtes: scherm (pixels binnen de viewport) en wereld (waar nodes staan).
+//   scherm = wereld * zoom + camera
+//   wereld = (scherm - camera) / zoom
+
+import { board, setCamera } from "./store";
+
+export const MIN_ZOOM = 0.1;
+export const MAX_ZOOM = 4;
+const clampZoom = (z: number) => Math.min(MAX_ZOOM, Math.max(MIN_ZOOM, z));
+
+let viewport: HTMLElement | undefined;
+export const setViewport = (el: HTMLElement) => (viewport = el);
+
+export function viewportRect(): DOMRect {
+  return viewport?.getBoundingClientRect() ?? new DOMRect(0, 0, window.innerWidth, window.innerHeight);
+}
+
+/** clientX/clientY (van een PointerEvent) naar wereld-coördinaten */
+export function toWorld(clientX: number, clientY: number) {
+  const r = viewportRect();
+  const c = board.camera;
+  return { x: (clientX - r.left - c.x) / c.zoom, y: (clientY - r.top - c.y) / c.zoom };
+}
+
+/** Wereld naar coördinaten binnen de viewport */
+export function toScreen(x: number, y: number) {
+  const c = board.camera;
+  return { x: x * c.zoom + c.x, y: y * c.zoom + c.y };
+}
+
+export function panBy(dx: number, dy: number) {
+  const c = board.camera;
+  setCamera({ x: c.x + dx, y: c.y + dy });
+}
+
+/** Zoom zo dat het wereldpunt onder de cursor op dezelfde plek blijft. */
+export function zoomAt(clientX: number, clientY: number, factor: number) {
+  const r = viewportRect();
+  const c = board.camera;
+  const zoom = clampZoom(c.zoom * factor);
+  const k = zoom / c.zoom;
+  const sx = clientX - r.left;
+  const sy = clientY - r.top;
+  setCamera({ zoom, x: sx - (sx - c.x) * k, y: sy - (sy - c.y) * k });
+}
+
+export function zoomBy(factor: number) {
+  const r = viewportRect();
+  zoomAt(r.left + r.width / 2, r.top + r.height / 2, factor);
+}
+
+export function resetZoom() {
+  zoomBy(1 / board.camera.zoom);
+}
+
+export function fitView(padding = 80) {
+  const r = viewportRect();
+  if (!board.nodes.length) {
+    setCamera({ x: r.width / 2, y: r.height / 2, zoom: 1 });
+    return;
+  }
+  let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
+  for (const n of board.nodes) {
+    minX = Math.min(minX, n.x);
+    minY = Math.min(minY, n.y);
+    maxX = Math.max(maxX, n.x + n.w);
+    maxY = Math.max(maxY, n.y + n.h);
+  }
+  const w = maxX - minX;
+  const h = maxY - minY;
+  const zoom = clampZoom(Math.min((r.width - padding * 2) / w, (r.height - padding * 2) / h, 1.25));
+  setCamera({
+    zoom,
+    x: r.width / 2 - (minX + w / 2) * zoom,
+    y: r.height / 2 - (minY + h / 2) * zoom,
+  });
+}
