@@ -8,12 +8,14 @@ import { invoke as __TAURI_INVOKE } from "@tauri-apps/api/core";
 export const commands = {
 	/**  Alle borden, nieuwste eerst. Wordt aangeroepen bij opstarten en bij het openen van het menu. */
 	listBoards: () => typedError<BoardMeta[], string>(__TAURI_INVOKE("list_boards")),
-	loadBoard: (id: string) => typedError<Board, string>(__TAURI_INVOKE("load_board", { id })),
 	/**
-	 *  Wordt ~800ms na elke wijziging aangeroepen (autosave). Vul hier `updated_at` in.
-	 *  Tip: schrijf eerst naar `{id}.json.tmp` en hernoem dan, zodat een crash
-	 *  halverwege nooit een kapot bestand achterlaat.
+	 *  Laadt één bord.
+	 * 
+	 *  `app: AppHandle` en `id: String` zijn "owned": deze functie krijgt ze in bezit.
+	 *  Tauri maakt ze voor ons aan uit de aanroep vanuit TypeScript (`commands.loadBoard(id)`).
 	 */
+	loadBoard: (id: string) => typedError<Board, string>(__TAURI_INVOKE("load_board", { id })),
+	/**  Wordt ~800ms na elke wijziging aangeroepen (autosave). */
 	saveBoard: (board: Board) => typedError<null, string>(__TAURI_INVOKE("save_board", { board })),
 	deleteBoard: (id: string) => typedError<null, string>(__TAURI_INVOKE("delete_board", { id })),
 	autoLayout: (nodes: Node[], edges: Edge[]) => typedError<Position[], string>(__TAURI_INVOKE("auto_layout", { nodes, edges })),
