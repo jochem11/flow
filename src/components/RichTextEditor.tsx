@@ -1,0 +1,211 @@
+// What-you-see-is-what-you-get editor that reads and writes markdown.
+//
+// Built on Tiptap (ProseMirror). The text is still stored as markdown, so the
+// data model does not change, but you only ever see the formatted result.
+// Markdown shortcuts still work while typing: "## " for a heading, "- " for a
+// list, "[ ] " for a checkbox, **bold**, and so on.
+
+import { Editor } from "@tiptap/core";
+import { TaskItem, TaskList } from "@tiptap/extension-list";
+import { Placeholder } from "@tiptap/extensions";
+import { Markdown } from "@tiptap/markdown";
+import StarterKit from "@tiptap/starter-kit";
+import { createEffect, createSignal, For, on, onCleanup, onMount, Show } from "solid-js";
+import { handleLinkClick } from "../lib/markdown";
+
+type Action = {
+  label: string;
+  title: string;
+  class?: string;
+  run: (e: Editor) => void;
+  active?: (e: Editor) => boolean;
+};
+
+const ACTIONS: Action[][] = [
+  [
+    { label: "H1", title: "Heading 1", run: (e) => e.chain().focus().toggleHeading({ level: 1 }).run(), active: (e) => e.isActive("heading", { level: 1 }) },
+    { label: "H2", title: "Heading 2", run: (e) => e.chain().focus().toggleHeading({ level: 2 }).run(), active: (e) => e.isActive("heading", { level: 2 }) },
+    { label: "H3", title: "Heading 3", run: (e) => e.chain().focus().toggleHeading({ level: 3 }).run(), active: (e) => e.isActive("heading", { level: 3 }) },
+  ],
+  [
+    { label: "B", title: "Bold (Cmd+B)", class: "fmt-bold", run: (e) => e.chain().focus().toggleBold().run(), active: (e) => e.isActive("bold") },
+    { label: "I", title: "Italic (Cmd+I)", class: "fmt-italic", run: (e) => e.chain().focus().toggleItalic().run(), active: (e) => e.isActive("italic") },
+    { label: "S", title: "Strikethrough (Cmd+Shift+S)", class: "fmt-strike", run: (e) => e.chain().focus().toggleStrike().run(), active: (e) => e.isActive("strike") },
+    { label: "</>", title: "Code (Cmd+E)", class: "fmt-mono", run: (e) => e.chain().focus().toggleCode().run(), active: (e) => e.isActive("code") },
+  ],
+  [
+    { label: "•", title: "Bulleted list", run: (e) => e.chain().focus().toggleBulletList().run(), active: (e) => e.isActive("bulletList") },
+    { label: "1.", title: "Numbered list", run: (e) => e.chain().focus().toggleOrderedList().run(), active: (e) => e.isActive("orderedList") },
+    { label: "☐", title: "Checklist", run: (e) => e.chain().focus().toggleTaskList().run(), active: (e) => e.isActive("taskList") },
+    { label: "❝", title: "Quote", run: (e) => e.chain().focus().toggleBlockquote().run(), active: (e) => e.isActive("blockquote") },
+  ],
+  [
+    { label: "{ }", title: "Code block", class: "fmt-mono", run: (e) => e.chain().focus().toggleCodeBlock().run(), active: (e) => e.isActive("codeBlock") },
+    { label: "—", title: "Divider", run: (e) => e.chain().focus().setHorizontalRule().run() },
+  ],
+];
+
+export function RichTextEditor(p: {
+  value: string;
+  onChange: (markdown: string) => void;
+  placeholder?: string;
+  class?: string;
+  /** "page" fills the whole editor area, for text documents */
+  variant?: "inline" | "page";
+}) {
+  let host!: HTMLDivElement;
+  let editor: Editor | undefined;
+  /** The last markdown we emitted, to tell our own changes from outside ones. */
+  let lastValue = p.value;
+  /** Bumped on every editor transaction, so toolbar "active" states update. */
+  const [tick, setTick] = createSignal(0);
+  const [linkOpen, setLinkOpen] = createSignal(false);
+
+  onMount(() => {
+    editor = new Editor({
+      element: host,
+      extensions: [
+        StarterKit.configure({ link: { openOnClick: false, autolink: true } }),
+        TaskList,
+        TaskItem.configure({ nested: true }),
+        Placeholder.configure({ placeholder: p.placeholder ?? "" }),
+        Markdown,
+      ],
+      content: p.value,
+      contentType: "markdown",
+      editorProps: { attributes: { class: "markdown rich-text-content" } },
+      onUpdate: ({ editor }) => {
+        lastValue = cleanMarkdown(editor.getMarkdown());
+        p.onChange(lastValue);
+      },
+      onTransaction: () => setTick((t) => t + 1),
+    });
+  });
+
+  // Load new content when it changes from outside (e.g. another card is opened).
+  createEffect(
+    on(
+      () => p.value,
+      (value) => {
+        if (!editor || value === lastValue) return;
+        lastValue = value;
+        editor.commands.setContent(value, { contentType: "markdown", emitUpdate: false });
+      },
+      { defer: true },
+    ),
+  );
+
+  onCleanup(() => editor?.destroy());
+
+  const isActive = (a: Action) => {
+    tick();
+    return !!editor && !!a.active?.(editor);
+  };
+
+  return (
+    <div class={`rich-text ${p.variant ?? "inline"} ${p.class ?? ""}`}>
+      <div class="format-bar rich-text-toolbar" role="toolbar" aria-label="Formatting">
+        <For each={ACTIONS}>
+          {(group, i) => (
+            <>
+              <Show when={i() > 0}>
+                <span class="divider" />
+              </Show>
+              <For each={group}>
+                {(a) => (
+                  <button
+                    class={`fmt-btn ${a.class ?? ""}`}
+                    classList={{ active: isActive(a) }}
+                    title={a.title}
+                    // Keep the editor's selection when clicking a button
+                    onMouseDown={(e) => e.preventDefault()}
+                    onClick={() => editor && a.run(editor)}
+                  >
+                    {a.label}
+                  </button>
+                )}
+              </For>
+            </>
+          )}
+        </For>
+        <span class="divider" />
+        <button
+          class="fmt-btn"
+          classList={{ active: (tick(), !!editor?.isActive("link")) || linkOpen() }}
+          title="Link (Cmd+K)"
+          onMouseDown={(e) => e.preventDefault()}
+          onClick={() => {
+            if (editor?.isActive("link")) editor.chain().focus().unsetLink().run();
+            else setLinkOpen(!linkOpen());
+          }}
+        >
+          Link
+        </button>
+      </div>
+
+      <Show when={linkOpen()}>
+        <LinkInput
+          onDone={(url) => {
+            setLinkOpen(false);
+            if (!editor) return;
+            if (!url) return void editor.commands.focus();
+            const href = /^[a-z]+:/i.test(url) ? url : `https://${url}`;
+            const chain = editor.chain().focus();
+            // Without a selection, insert the url itself as the link text
+            if (editor.state.selection.empty) chain.insertContent({ type: "text", text: url, marks: [{ type: "link", attrs: { href } }] }).run();
+            else chain.setLink({ href }).run();
+          }}
+        />
+      </Show>
+
+      <div
+        ref={host}
+        class="rich-text-body"
+        onClick={(e) => {
+          // Cmd/Ctrl+click opens a link in the browser; a normal click just places the cursor
+          if ((e.metaKey || e.ctrlKey) && (e.target as HTMLElement).closest("a")) handleLinkClick(e);
+        }}
+        onKeyDown={(e) => {
+          if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === "k") {
+            e.preventDefault();
+            if (editor?.isActive("link")) editor.chain().focus().unsetLink().run();
+            else setLinkOpen(true);
+          }
+        }}
+      />
+    </div>
+  );
+}
+
+/** Empty paragraphs come out as "&nbsp;"; drop them and squash runs of blank lines. */
+function cleanMarkdown(md: string): string {
+  return md
+    .replace(/^(&nbsp;|\u00a0)\s*$/gm, "")
+    .replace(/\n{3,}/g, "\n\n")
+    .trim();
+}
+
+function LinkInput(p: { onDone: (url: string | null) => void }) {
+  let ref!: HTMLInputElement;
+  onMount(() => ref.focus());
+  return (
+    <div class="rich-text-link">
+      <input
+        ref={ref}
+        class="kd-input"
+        placeholder="Paste a link and press Enter…"
+        onKeyDown={(e) => {
+          if (e.key === "Enter") {
+            e.preventDefault();
+            p.onDone(ref.value.trim() || null);
+          }
+          if (e.key === "Escape") {
+            e.stopPropagation();
+            p.onDone(null);
+          }
+        }}
+        onBlur={() => p.onDone(null)}
+      />
+    </div>
+  );
+}

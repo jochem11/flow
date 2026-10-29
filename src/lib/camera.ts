@@ -1,6 +1,6 @@
-// Twee ruimtes: scherm (pixels binnen de viewport) en wereld (waar nodes staan).
-//   scherm = wereld * zoom + camera
-//   wereld = (scherm - camera) / zoom
+// Two coordinate spaces: screen (pixels inside the viewport) and world (where nodes live).
+//   screen = world * zoom + camera
+//   world  = (screen - camera) / zoom
 
 import { board, setCamera } from "./store";
 
@@ -15,14 +15,14 @@ export function viewportRect(): DOMRect {
   return viewport?.getBoundingClientRect() ?? new DOMRect(0, 0, window.innerWidth, window.innerHeight);
 }
 
-/** clientX/clientY (van een PointerEvent) naar wereld-coördinaten */
+/** clientX/clientY (from a PointerEvent) to world coordinates */
 export function toWorld(clientX: number, clientY: number) {
   const r = viewportRect();
   const c = board.camera;
   return { x: (clientX - r.left - c.x) / c.zoom, y: (clientY - r.top - c.y) / c.zoom };
 }
 
-/** Wereld naar coördinaten binnen de viewport */
+/** World to viewport coordinates */
 export function toScreen(x: number, y: number) {
   const c = board.camera;
   return { x: x * c.zoom + c.x, y: y * c.zoom + c.y };
@@ -33,7 +33,7 @@ export function panBy(dx: number, dy: number) {
   setCamera({ x: c.x + dx, y: c.y + dy });
 }
 
-/** Zoom zo dat het wereldpunt onder de cursor op dezelfde plek blijft. */
+/** Zooms so the world point under the cursor stays in place. */
 export function zoomAt(clientX: number, clientY: number, factor: number) {
   const r = viewportRect();
   const c = board.camera;
@@ -51,6 +51,13 @@ export function zoomBy(factor: number) {
 
 export function resetZoom() {
   zoomBy(1 / board.camera.zoom);
+}
+
+/** Pans so the rectangle is in the middle of the screen, zoomed in if it was far away. */
+export function focusOn(r: { x: number; y: number; w: number; h: number }) {
+  const v = viewportRect();
+  const zoom = clampZoom(Math.min(Math.max(board.camera.zoom, 0.8), (v.width - 160) / r.w, (v.height - 160) / r.h));
+  setCamera({ zoom, x: v.width / 2 - (r.x + r.w / 2) * zoom, y: v.height / 2 - (r.y + r.h / 2) * zoom });
 }
 
 export function fitView(padding = 80) {

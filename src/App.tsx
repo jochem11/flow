@@ -1,11 +1,13 @@
-import { onCleanup, onMount } from "solid-js";
+import { Match, onCleanup, onMount, Switch } from "solid-js";
 import { fitView, resetZoom, zoomBy } from "./lib/camera";
-import { loadInitial, saveNow, startAutosave } from "./lib/persistence";
+import { initWorkspace, openDoc, ready, saveNow, view } from "./lib/workspace";
 import {
   clearSelection,
   deleteSelection,
   duplicateSelection,
   GRID,
+  hasText,
+  nodeById,
   nudgeSelection,
   redo,
   selectAll,
@@ -13,11 +15,12 @@ import {
   ui,
   undo,
 } from "./lib/store";
-import { Canvas } from "./components/Canvas";
-import { Toolbar } from "./components/Toolbar";
-import { TopBar } from "./components/TopBar";
-import { ZoomControls } from "./components/ZoomControls";
+import { DocumentEditor, ProjectView } from "./components/editors";
+import { deleteEerSelection, redoEer, setEerSelected, undoEer } from "./lib/eer";
+import { Sidebar } from "./components/Sidebar";
 import { Toasts } from "./components/Toasts";
+import { TopBar } from "./components/TopBar";
+import { TOOL_KEYS } from "./components/Toolbar";
 import "./styles.css";
 
 const isTyping = (t: EventTarget | null) =>
@@ -25,8 +28,32 @@ const isTyping = (t: EventTarget | null) =>
 
 export default function App() {
   const onKeyDown = (e: KeyboardEvent) => {
-    if (isTyping(e.target)) return;
     const mod = e.ctrlKey || e.metaKey;
+    // Ctrl/Cmd+S works everywhere, even while typing
+    if (mod && e.key.toLowerCase() === "s") {
+      e.preventDefault();
+      saveNow();
+      return;
+    }
+    if (isTyping(e.target)) return;
+    // EER diagram: undo/redo and delete
+    if (openDoc()?.kind === "eer") {
+      if (mod && e.key.toLowerCase() === "z") {
+        e.preventDefault();
+        if (e.shiftKey) redoEer();
+        else undoEer();
+      } else if (mod && e.key.toLowerCase() === "y") {
+        e.preventDefault();
+        redoEer();
+      } else if (e.key === "Delete" || e.key === "Backspace") {
+        deleteEerSelection();
+      } else if (e.key === "Escape") {
+        setEerSelected(null);
+      }
+      return;
+    }
+    // All other shortcuts belong to the flowchart editor
+    if (openDoc()?.kind !== "flow") return;
     const key = e.key.toLowerCase();
 
     if (e.key === " ") {
@@ -41,7 +68,6 @@ export default function App() {
         y: redo,
         a: selectAll,
         d: duplicateSelection,
-        s: saveNow,
       };
       if (actions[key]) {
         e.preventDefault();
@@ -67,7 +93,7 @@ export default function App() {
         break;
       case "Enter":
       case "F2":
-        if (ui.selected.length === 1) {
+        if (ui.selected.length === 1 && hasText(nodeById(ui.selected[0])?.kind ?? "box")) {
           e.preventDefault();
           setUi("editingNode", ui.selected[0]);
         } else if (ui.selectedEdge) {
@@ -102,8 +128,7 @@ export default function App() {
         resetZoom();
         break;
       default: {
-        const tools: Record<string, typeof ui.tool> = { v: "select", r: "box", d: "diamond", n: "note", p: "pill" };
-        if (tools[key]) setUi("tool", tools[key]);
+        if (TOOL_KEYS[key]) setUi("tool", TOOL_KEYS[key]);
       }
     }
   };
@@ -117,8 +142,7 @@ export default function App() {
     window.addEventListener("keydown", onKeyDown);
     window.addEventListener("keyup", onKeyUp);
     window.addEventListener("blur", onBlur);
-    startAutosave();
-    loadInitial();
+    initWorkspace();
   });
   onCleanup(() => {
     window.removeEventListener("keydown", onKeyDown);
@@ -128,10 +152,24 @@ export default function App() {
 
   return (
     <div class="app">
-      <Canvas />
-      <TopBar />
-      <Toolbar />
-      <ZoomControls />
+      <Sidebar />
+      <main class="main">
+        <Switch>
+          <Match when={!ready()}>
+            <div class="main-empty">Loading…</div>
+          </Match>
+          <Match when={view().type === "doc"}>
+            <TopBar />
+            <DocumentEditor />
+          </Match>
+          <Match when={(() => { const v = view(); return v.type === "project" ? v.projectId : null; })()}>
+            {(projectId) => <ProjectView projectId={projectId()} />}
+          </Match>
+          <Match when={true}>
+            <div class="main-empty">Choose or create a project in the sidebar.</div>
+          </Match>
+        </Switch>
+      </main>
       <Toasts />
     </div>
   );

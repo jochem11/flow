@@ -9,18 +9,28 @@
     "build": "vite build",
     "serve": "vite preview",
     "tauri": "tauri",
-    "bindings": "cd src-tauri && cargo test export_bindings"
+    "bindings": "cd src-tauri && cargo test export_bindings",
+    "test": "vitest run"
   },
   "license": "MIT",
   "dependencies": {
-    "solid-js": "^1.9.3",
     "@tauri-apps/api": "^2",
-    "@tauri-apps/plugin-opener": "^2"
+    "@tauri-apps/plugin-opener": "^2",
+    "@tiptap/core": "3.31.4",
+    "@tiptap/extension-list": "3.31.4",
+    "@tiptap/extensions": "3.31.4",
+    "@tiptap/markdown": "3.31.4",
+    "@tiptap/pm": "3.31.4",
+    "@tiptap/starter-kit": "3.31.4",
+    "markdown-it": "^14.3.3",
+    "solid-js": "^1.9.3"
   },
   "devDependencies": {
+    "@tauri-apps/cli": "^2",
+    "@types/markdown-it": "^14.2.0",
     "typescript": "~6.0.3",
     "vite": "^8.0.16",
     "vite-plugin-solid": "^2.11.12",
-    "@tauri-apps/cli": "^2"
+    "vitest": "^3.2.7"
   }
 }

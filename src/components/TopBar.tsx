@@ -1,65 +1,47 @@
-import { createSignal, For, onCleanup, onMount, Show, type JSX } from "solid-js";
+// Header above an open document: breadcrumb (project / folders / document),
+// editable name, save status, and actions for the document kind.
+
+import { createSignal, For, Show } from "solid-js";
+import { canRedoEer, canUndoEer, redoEer, undoEer } from "../lib/eer";
+import { DIALECTS, SqlDialog } from "./SqlDialog";
 import { inTauri } from "../lib/api";
+import { board, canRedo, canUndo, redo, undo } from "../lib/store";
+import { CodeDialog, LANGUAGES } from "./CodeDialog";
+import { MermaidDialog } from "./MermaidDialog";
+import { SqlImportDialog } from "./SqlImportDialog";
+import { CodeImportDialog } from "./CodeImportDialog";
+import { CardLinksMenu } from "./CardLinksMenu";
+import type { CodeLanguage, ExportFormat, Folder, SqlDialect } from "../lib/types";
 import {
-  boards,
-  newBoard,
-  openBoard,
-  refreshBoards,
-  removeBoard,
+  openDoc,
+  openProject,
+  projectById,
+  renameDocument,
   runAutoLayout,
   runExport,
   saveState,
-} from "../lib/persistence";
-import { board, canRedo, canUndo, redo, renameBoard, undo } from "../lib/store";
-import type { ExportFormat } from "../lib/types";
-import {
-  IconChevron,
-  IconExport,
-  IconLayout,
-  IconPlus,
-  IconRedo,
-  IconTrash,
-  IconUndo,
-} from "./icons";
+} from "../lib/workspace";
+import { IconExport, IconImport, IconLayout, IconRedo, IconUndo } from "./icons";
+import { KindIcon } from "./kinds";
+import { Menu } from "./Menu";
 
-/** Klein dropdown-menu dat sluit bij klikken buiten het menu. */
-function Menu(p: { button: (open: () => void) => JSX.Element; children: (close: () => void) => JSX.Element; align?: "left" | "right" }) {
-  const [open, setOpen] = createSignal(false);
-  let ref!: HTMLDivElement;
-  const onDoc = (e: PointerEvent) => {
-    if (!ref.contains(e.target as Node)) setOpen(false);
-  };
-  onMount(() => document.addEventListener("pointerdown", onDoc));
-  onCleanup(() => document.removeEventListener("pointerdown", onDoc));
-  return (
-    <div class="menu-wrap" ref={ref}>
-      {p.button(() => setOpen((o) => !o))}
-      <Show when={open()}>
-        <div class="menu panel" classList={{ right: p.align === "right" }}>
-          {p.children(() => setOpen(false))}
-        </div>
-      </Show>
-    </div>
-  );
-}
-
-function SaveIndicator() {
+export function SaveIndicator() {
   const label = () => {
     const s = saveState();
     switch (s.kind) {
       case "saved":
-        return "Opgeslagen";
+        return "Saved";
       case "dirty":
-        return "Wijzigingen…";
+        return "Unsaved changes";
       case "saving":
-        return "Opslaan…";
+        return "Saving…";
       case "error":
-        return "Niet opgeslagen";
+        return "Not saved";
     }
   };
   const title = () => {
     const s = saveState();
-    return s.kind === "error" ? s.message : inTauri ? "Opslag via Rust" : "Opslag in de browser (localStorage)";
+    return s.kind === "error" ? s.message : inTauri ? "Saved to disk" : "Saved in the browser (localStorage)";
   };
   return (
     <span class={`save-state ${saveState().kind}`} title={title()}>
@@ -69,130 +51,223 @@ function SaveIndicator() {
   );
 }
 
-const fmtDate = (ms: number) =>
-  ms ? new Date(ms).toLocaleString("nl-NL", { day: "numeric", month: "short", hour: "2-digit", minute: "2-digit" }) : "";
-
 const EXPORTS: { format: ExportFormat; label: string; hint: string }[] = [
-  { format: "svg", label: "SVG", hint: "Vectorafbeelding" },
-  { format: "png", label: "PNG", hint: "Afbeelding" },
-  { format: "mermaid", label: "Mermaid", hint: "Tekst voor README's" },
+  { format: "svg", label: "SVG", hint: "Vector image" },
+  { format: "png", label: "PNG", hint: "Image" },
+  { format: "mermaid", label: "Mermaid", hint: "Text for READMEs, per diagram" },
 ];
 
-export function TopBar() {
-  return (
-    <header class="topbar">
-      <div class="topbar-left panel">
-        <span class="logo" aria-hidden="true" />
-        <input
-          class="board-name"
-          value={board.name}
-          aria-label="Naam van het bord"
-          size={Math.max(8, board.name.length)}
-          onChange={(e) => renameBoard(e.currentTarget.value.trim() || "Naamloos bord")}
-          onKeyDown={(e) => {
-            e.stopPropagation();
-            if (e.key === "Enter" || e.key === "Escape") e.currentTarget.blur();
-          }}
-        />
-        <Menu
-          button={(toggle) => (
-            <button
-              class="icon-btn"
-              title="Borden"
-              onClick={() => {
-                refreshBoards();
-                toggle();
-              }}
-            >
-              <IconChevron />
-            </button>
-          )}
-        >
-          {(close) => (
-            <>
-              <div class="menu-title">Borden</div>
-              <For each={boards()} fallback={<div class="menu-empty">Nog geen opgeslagen borden</div>}>
-                {(b) => (
-                  <div class="menu-row" classList={{ current: b.id === board.id }}>
-                    <button
-                      class="menu-item"
-                      onClick={() => {
-                        openBoard(b.id);
-                        close();
-                      }}
-                    >
-                      <span>{b.name}</span>
-                      <small>{fmtDate(b.updatedAt)}</small>
-                    </button>
-                    <button
-                      class="icon-btn danger small"
-                      title="Bord verwijderen"
-                      onClick={() => {
-                        if (confirm(`"${b.name}" verwijderen?`)) removeBoard(b.id);
-                      }}
-                    >
-                      <IconTrash />
-                    </button>
-                  </div>
-                )}
-              </For>
-              <div class="menu-sep" />
-              <button
-                class="menu-item"
-                onClick={() => {
-                  newBoard();
-                  close();
-                }}
-              >
-                <span class="with-icon">
-                  <IconPlus /> Nieuw bord
-                </span>
-              </button>
-            </>
-          )}
-        </Menu>
-        <SaveIndicator />
-      </div>
+/** Folders from the root down to and including `folderId`. */
+function folderPath(folders: Folder[], folderId: string | null): Folder[] {
+  const path: Folder[] = [];
+  let current = folderId;
+  while (current) {
+    const f = folders.find((x) => x.id === current);
+    if (!f) break;
+    path.unshift(f);
+    current = f.parentId;
+  }
+  return path;
+}
 
-      <div class="topbar-right panel">
-        <button class="icon-btn" title="Ongedaan maken (Ctrl+Z)" disabled={!canUndo()} onClick={undo}>
-          <IconUndo />
-        </button>
-        <button class="icon-btn" title="Opnieuw (Ctrl+Shift+Z)" disabled={!canRedo()} onClick={redo}>
-          <IconRedo />
-        </button>
-        <span class="divider" />
-        <button class="text-btn" title="Automatisch ordenen (Rust)" onClick={runAutoLayout}>
-          <IconLayout />
-          <span>Ordenen</span>
-        </button>
-        <Menu
-          align="right"
-          button={(toggle) => (
-            <button class="text-btn primary" onClick={toggle}>
-              <IconExport />
-              <span>Exporteren</span>
-            </button>
-          )}
-        >
-          {(close) => (
-            <For each={EXPORTS}>
-              {(x) => (
+// The Mermaid preview, for a flowchart or an EER diagram
+const [mermaidOpen, setMermaidOpen] = createSignal(false);
+
+/** Undo/redo, SQL import and SQL export for an EER diagram. */
+function EerActions() {
+  const [preview, setPreview] = createSignal<SqlDialect | null>(null);
+  const [importing, setImporting] = createSignal(false);
+  return (
+    <div class="header-actions">
+      <button class="icon-btn" title="Undo (Ctrl+Z)" disabled={!canUndoEer()} onClick={undoEer}>
+        <IconUndo />
+      </button>
+      <button class="icon-btn" title="Redo (Ctrl+Shift+Z)" disabled={!canRedoEer()} onClick={redoEer}>
+        <IconRedo />
+      </button>
+      <span class="divider" />
+      <button class="text-btn" title="Add tables from a SQL script" onClick={() => setImporting(true)}>
+        <IconImport />
+        <span>Import SQL</span>
+      </button>
+      <Menu
+        align="right"
+        button={(toggle) => (
+          <button class="text-btn primary" onClick={toggle}>
+            <IconExport />
+            <span>Export</span>
+          </button>
+        )}
+      >
+        {(close) => (
+          <>
+            <div class="menu-title">SQL for</div>
+            <For each={DIALECTS}>
+              {(d) => (
                 <button
                   class="menu-item"
                   onClick={() => {
-                    runExport(x.format);
+                    setPreview(d.value);
                     close();
                   }}
                 >
-                  <span>{x.label}</span>
-                  <small>{x.hint}</small>
+                  <span>{d.label}</span>
+                  <small>.sql</small>
                 </button>
               )}
             </For>
-          )}
-        </Menu>
-      </div>
-    </header>
+            <div class="menu-sep" />
+            <button
+              class="menu-item"
+              onClick={() => {
+                setMermaidOpen(true);
+                close();
+              }}
+            >
+              <span>Mermaid</span>
+              <small>ER diagram as text</small>
+            </button>
+          </>
+        )}
+      </Menu>
+      <Show when={preview()}>{(d) => <SqlDialog initial={d()} onClose={() => setPreview(null)} />}</Show>
+      <Show when={mermaidOpen()}>
+        <MermaidDialog onClose={() => setMermaidOpen(false)} />
+      </Show>
+      <Show when={importing()}>
+        <SqlImportDialog onClose={() => setImporting(false)} />
+      </Show>
+    </div>
+  );
+}
+
+const [codePreview, setCodePreview] = createSignal<CodeLanguage | null>(null);
+const [codeImport, setCodeImport] = createSignal(false);
+
+export function TopBar() {
+  return (
+    <Show when={openDoc()}>
+      {(doc) => {
+        const project = () => projectById(doc().projectId);
+        return (
+          <header class="doc-header">
+            <div class="crumbs">
+              <button class="crumb" onClick={() => openProject(doc().projectId)}>
+                {project()?.name ?? "Project"}
+              </button>
+              <For each={folderPath(project()?.folders ?? [], doc().folderId)}>
+                {(f) => (
+                  <>
+                    <span class="crumb-sep">/</span>
+                    <span class="crumb muted">{f.name}</span>
+                  </>
+                )}
+              </For>
+              <span class="crumb-sep">/</span>
+              <KindIcon kind={doc().kind} />
+              <input
+                class="doc-name"
+                value={doc().name}
+                aria-label="Document name"
+                size={Math.max(6, doc().name.length)}
+                onChange={(e) => renameDocument(doc().projectId, doc().id, e.currentTarget.value)}
+                onKeyDown={(e) => {
+                  e.stopPropagation();
+                  if (e.key === "Enter" || e.key === "Escape") e.currentTarget.blur();
+                }}
+              />
+              <SaveIndicator />
+            </div>
+
+            {/* Cards about this whole document (a board links its own cards from the card dialog) */}
+            <Show when={doc().kind !== "kanban"}>
+              <div class="header-actions header-cards">
+                <CardLinksMenu nodeId={null} />
+              </div>
+            </Show>
+            <Show when={doc().kind === "eer"}>
+              <EerActions />
+            </Show>
+            <Show when={doc().kind === "flow"}>
+              <div class="header-actions">
+                <button class="icon-btn" title="Undo (Ctrl+Z)" disabled={!canUndo()} onClick={undo}>
+                  <IconUndo />
+                </button>
+                <button class="icon-btn" title="Redo (Ctrl+Shift+Z)" disabled={!canRedo()} onClick={redo}>
+                  <IconRedo />
+                </button>
+                <span class="divider" />
+                <button class="text-btn" title="Arrange automatically" onClick={runAutoLayout}>
+                  <IconLayout />
+                  <span>Arrange</span>
+                </button>
+                <button class="text-btn" title="Add UML classes from source code" onClick={() => setCodeImport(true)}>
+                  <IconImport />
+                  <span>Import code</span>
+                </button>
+                <Menu
+                  align="right"
+                  button={(toggle) => (
+                    <button class="text-btn primary" onClick={toggle}>
+                      <IconExport />
+                      <span>Export</span>
+                    </button>
+                  )}
+                >
+                  {(close) => (
+                    <>
+                      <For each={EXPORTS}>
+                        {(x) => (
+                          <button
+                            class="menu-item"
+                            onClick={() => {
+                              // Mermaid first shows a preview, with a tab per diagram
+                              if (x.format === "mermaid") setMermaidOpen(true);
+                              else runExport(x.format);
+                              close();
+                            }}
+                          >
+                            <span>{x.label}</span>
+                            <small>{x.hint}</small>
+                          </button>
+                        )}
+                      </For>
+                      {/* Code, when there are UML classes */}
+                      <Show when={board.nodes.some((n) => n.kind === "class")}>
+                        <div class="menu-sep" />
+                        <div class="menu-title">Class diagram as code</div>
+                        <For each={LANGUAGES}>
+                          {(l) => (
+                            <button
+                              class="menu-item"
+                              onClick={() => {
+                                setCodePreview(l.value);
+                                close();
+                              }}
+                            >
+                              <span>{l.label}</span>
+                              <small>{l.hint}</small>
+                            </button>
+                          )}
+                        </For>
+                      </Show>
+                    </>
+                  )}
+                </Menu>
+                <Show when={codePreview()}>
+                  {(l) => <CodeDialog initial={l()} onClose={() => setCodePreview(null)} />}
+                </Show>
+                <Show when={mermaidOpen()}>
+                  <MermaidDialog onClose={() => setMermaidOpen(false)} />
+                </Show>
+                <Show when={codeImport()}>
+                  <CodeImportDialog onClose={() => setCodeImport(false)} />
+                </Show>
+              </div>
+            </Show>
+          </header>
+        );
+      }}
+    </Show>
   );
 }

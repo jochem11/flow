@@ -1,84 +1,102 @@
 # Flow
 
-Een Whimsical-achtige flowchart-app. Frontend in SolidJS met een eigen canvas,
-backend in Rust via Tauri 2.
+A Whimsical-style app for project flows: flowcharts, text documents, kanban boards
+and (soon) EER diagrams, organised in projects and folders.
+The frontend is SolidJS with a custom canvas; the backend is Rust on Tauri 2.
 
-De frontend is af. De Rust-kant staat klaar als stubs: elk command geeft nu
-"nog niet geïmplementeerd" terug, en de app laat die melding netjes zien.
-
-## Starten
+## Getting started
 
 ```bash
 npm install
-npm run tauri dev     # desktop-app, praat met Rust
-npm run dev           # alleen frontend in de browser (opslag via localStorage)
+npm run tauri dev     # desktop app, talks to the Rust backend
+npm run dev           # frontend only, in the browser (stores data in localStorage)
 ```
 
-Rust-tests: `cd src-tauri && cargo test`
+Rust tests: `cd src-tauri && cargo test`
 
-## Types en commands (tauri-specta)
+Test data: close the app, run `bash scripts/seed-test-data.sh` (macOS), and start it again.
 
-Rust is de bron van waarheid. Uit `src-tauri/src/models.rs` en `commands.rs` wordt
-`src/bindings.ts` gegenereerd, met alle types en een getypte functie per command
-(`list_boards` → `commands.listBoards()`).
+## Types and commands (tauri-specta)
 
-- Genereren gebeurt automatisch bij `npm run tauri dev`, of los met `npm run bindings`.
-- Nieuw command? `#[specta::specta]` erboven en toevoegen aan `collect_commands!` in `lib.rs`.
-- Nieuw type? `#[derive(specta::Type)]` erop.
-- `src/bindings.ts` nooit met de hand aanpassen; commit hem wel, dan zie je in diffs wanneer het contract verandert.
+Rust is the source of truth. `src/bindings.ts` is generated from the models in
+`src-tauri/src/models/` and the commands in `src-tauri/src/commands/`, with every type
+and a typed function per command (`list_projects` → `commands.listProjects()`).
 
-## Wat jij in Rust bouwt
+- Generated automatically on `npm run tauri dev`, or on demand with `npm run bindings`.
+- New command? Add `#[specta::specta]` above it and register it in `collect_commands!` in `lib.rs`.
+- New type? Add `#[derive(specta::Type)]`.
+- Never edit `src/bindings.ts` by hand, but do commit it, so diffs show when the contract changes.
 
-Alles staat in `src-tauri/src/commands.rs`, met hints per command.
+## Structure
 
-| Command | Wanneer aangeroepen | Teruggeven |
-| --- | --- | --- |
-| `list_boards` | bij opstarten, menu "Borden" | `Vec<BoardMeta>` |
-| `load_board(id)` | bord openen | `Board` |
-| `save_board(board)` | autosave, ~800ms na elke wijziging, en Ctrl+S | `()` |
-| `delete_board(id)` | prullenbak in het menu | `()` |
-| `auto_layout(nodes, edges)` | knop "Ordenen" | `Vec<Position>` |
-| `export_board(board, format)` | menu "Exporteren" (svg / png / mermaid) | pad van het bestand |
+Projects contain folders (a tree via `parentId`) and documents. A document is a
+flowchart, text document, kanban board or EER diagram (`DocContent` in `models/document.rs`).
 
-Voorgestelde volgorde:
-
-1. `save_board` + `load_board` + `list_boards` met JSON-bestanden. Daarna onthoudt de app je werk.
-2. `export_board` Mermaid: alleen strings bouwen, goede opwarmer.
-3. `auto_layout`: echte algoritmes (grafen, cycli, lagen).
-4. `export_board` SVG en daarna PNG met de `resvg` crate.
-5. Later: SQLite, een eigen bestandsformaat, meerdere vensters, enz.
-
-De test in `models.rs` checkt dat de JSON van de frontend goed parst.
-
-## Frontend-structuur
+On disk, in the app data directory (see `storage.rs`):
 
 ```
-src/
-  bindings.ts        GEGENEREERD uit Rust (niet aanpassen)
-  lib/
-    types.ts         re-export van de gegenereerde types
-    api.ts           getypte commands naar Rust + browser-fallback
-    store.ts         Solid store, acties, undo/redo
-    camera.ts        scherm <-> wereld, pan, zoom, fit
-    geometry.ts      ankers en bezier-curves voor pijlen
-    interactions.ts  slepen, resizen, verbinden, selectie-rechthoek
-    persistence.ts   autosave, laden, layout en export aanroepen
-  components/        Canvas, NodeView, Edges, TopBar, Toolbar, ...
+projects/<project-id>/project.json      name, description, folders
+projects/<project-id>/docs/<doc-id>.json
 ```
 
-## Bediening
+### Rust (`src-tauri/src/`)
+
+```
+lib.rs               registers all commands, generates bindings.ts
+storage.rs           paths, id validation, generic read_json / write_json
+models/              project, document, flow, text, kanban, eer
+commands/
+  projects.rs        list, create, update, delete
+  folders.rs         create, rename, move (with cycle check), delete
+  documents.rs       list, load, save, create, rename, move, delete
+  flow.rs            auto-layout and export (Mermaid, SVG, PNG)
+```
+
+### Frontend (`src/`)
+
+```
+bindings.ts          GENERATED from Rust (do not edit)
+lib/
+  types.ts           re-exports of the generated types
+  api.ts             typed backend commands + browser fallback (localStorage)
+  workspace.ts       projects, folders, open document, autosave
+  store.ts           flowchart editor state, actions, undo/redo
+  kanban.ts          kanban state and actions (cards, subtasks, labels, hours, comments)
+  timer.ts           the running timer across documents (start/stop, sidebar indicator)
+  camera.ts          screen <-> world coordinates, pan, zoom, fit
+  geometry.ts        anchors and bezier curves for edges
+  interactions.ts    dragging, resizing, connecting, selection rectangle
+  markdown.ts        markdown rendering
+  mdFormat.ts        markdown shortcuts for plain textareas (comments, project description)
+components/
+  Sidebar.tsx        project / folder / document tree
+  TopBar.tsx         document header (breadcrumb, name, actions)
+  editors.tsx        flowchart and text editors, project page, placeholders
+  KanbanEditor.tsx   kanban board: columns, cards, drag and drop
+  KanbanCardDialog.tsx  card details: description, subtasks, discussion, labels, effort
+  ConfirmButton.tsx  "click twice to delete" button
+  TimerIndicator.tsx running timer at the bottom of the sidebar
+  Markdown.tsx       rendered markdown view + editing shortcuts
+  RichTextEditor.tsx WYSIWYG editor (Tiptap) that reads and writes markdown
+  Canvas.tsx, NodeView.tsx, Edges.tsx, ...   the flowchart canvas
+```
+
+## Controls
 
 | | |
 | --- | --- |
-| Dubbelklik op canvas | nieuw blok |
-| Dubbelklik op blok / pijl | tekst / label bewerken |
-| Sleep vanaf een bolletje | verbinden; loslaten op leeg = nieuw blok |
-| Sleep op leeg canvas | selectie-rechthoek (Shift = toevoegen) |
-| Scroll / Spatie+slepen / middelste knop | pannen |
-| Ctrl+scroll / pinch | zoomen |
-| V R D P N | selecteren, blok, beslissing, start/eind, notitie |
-| Ctrl+Z, Ctrl+Shift+Z | ongedaan maken, opnieuw |
-| Ctrl+D, Ctrl+A, Delete | dupliceren, alles selecteren, verwijderen |
-| Pijltjes (Shift = groter) | verschuiven |
-| Alt tijdens slepen | niet op grid snappen |
-| 0, Shift+1, + / - | 100%, alles in beeld, zoomen |
+| Double-click in the sidebar | rename |
+| Drag in the sidebar | move to another folder or position |
+| Double-click the canvas | new block |
+| Double-click a block / edge | edit text / label |
+| Drag from a dot | connect; release on empty space for a new block |
+| Drag on the empty canvas | selection rectangle (Shift adds) |
+| Scroll / Space+drag / middle button | pan |
+| Ctrl+scroll / pinch | zoom |
+| V R D P N | select, block, decision, start/end, note |
+| Ctrl+Z, Ctrl+Shift+Z | undo, redo |
+| Ctrl+D, Ctrl+A, Delete | duplicate, select all, delete |
+| Arrow keys (Shift = larger steps) | nudge |
+| Alt while dragging | don't snap to the grid |
+| 0, Shift+1, + / - | 100%, zoom to fit, zoom |
+| Cmd+B / I / E / K, Cmd+Shift+S | bold, italic, code, link, strikethrough (text editor) |

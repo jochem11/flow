@@ -1,50 +1,98 @@
-import { createMemo, For, Show } from "solid-js";
-import { toScreen } from "../lib/camera";
-import { bounds, edgeBetween } from "../lib/geometry";
-import type { NodeColor } from "../lib/types";
+import { createMemo, createSignal, For, Show } from "solid-js";
+import { bounds, type Rect } from "../lib/geometry";
+import type { CodeLanguage, FlowEdge, NodeColor } from "../lib/types";
 import {
+  addLane,
   board,
+  checkpoint,
   deleteSelection,
   duplicateSelection,
-  nodeById,
+  edgeLine,
   selectedNodes,
+  setBend,
+  setEdgeProps,
+  setNodeText,
   setSelectionColor,
   setUi,
   ui,
 } from "../lib/store";
-import { IconCopy, IconLabel, IconTrash } from "./icons";
+import { labelPoint } from "./Edges";
+import { Menu } from "./Menu";
+import { CodeDialog } from "./CodeDialog";
+import { classKind, classParts, ROW_NAMES, withClassKind, type ClassKind } from "../lib/umlClass";
+import { isLinkable } from "../lib/links";
+import { IconCode, IconCopy, IconLabelSide, IconUndo, IconPattern, IconLabel, IconPlus, IconTrash } from "./icons";
+import { FloatingBar, grow } from "./FloatingBar";
+import { CardLinksMenu } from "./CardLinksMenu";
+import { CapMenu, EndLabelsMenu, NEXT_PATTERN, NEXT_SIDE, PATTERN_NAMES, RELATIONS, SIDE_NAMES, STYLES } from "./EdgeMenus";
 
 const COLORS: NodeColor[] = ["white", "yellow", "green", "blue", "purple", "pink"];
 const COLOR_NAMES: Record<NodeColor, string> = {
-  white: "Wit",
-  yellow: "Geel",
-  green: "Groen",
-  blue: "Blauw",
-  purple: "Paars",
-  pink: "Roze",
+  white: "White",
+  yellow: "Yellow",
+  green: "Green",
+  blue: "Blue",
+  purple: "Purple",
+  pink: "Pink",
 };
 
-/** Zwevende balk boven de selectie: kleur, dupliceren, verwijderen. */
+const [codeFor, setCodeFor] = createSignal<CodeLanguage | null>(null);
+
+/** Floating bar above the selection: color, duplicate, delete; for an edge its style and arrowheads. */
 export function ContextBar() {
-  const hidden = () => ui.dragging || !!ui.marquee || !!ui.connecting || ui.panning || !!ui.editingNode;
+  const hidden = () =>
+    ui.dragging ||
+    !!ui.marquee ||
+    !!ui.connecting ||
+    ui.panning ||
+    !!ui.editingNode ||
+    !!ui.editingLane ||
+    !!ui.editingRow;
 
-  const nodeAnchor = createMemo(() => {
-    const b = bounds(selectedNodes());
-    if (!b) return null;
-    // toScreen leest de camera, dus dit beweegt mee bij pannen/zoomen
-    return toScreen(b.x + b.w / 2, b.y);
+  // What the bar must stay clear of, in world coordinates: the selected blocks with
+  // their connection handles and resize handle (and the tab of a package)
+  const nodeBox = createMemo(() => {
+    const sel = selectedNodes();
+    const b = bounds(sel.map((n) => (n.kind === "package" ? { ...n, y: n.y - 28, h: n.h + 28 } : n)));
+    return b && grow(b, 20);
   });
 
-  const edgeAnchor = createMemo(() => {
+  const selectedEdge = (): FlowEdge | undefined => {
     const id = ui.selectedEdge;
-    const e = id ? board.edges.find((x) => x.id === id) : undefined;
-    if (!e) return null;
-    const a = nodeById(e.from);
-    const b = nodeById(e.to);
-    if (!a || !b) return null;
-    const mid = edgeBetween(a, b).mid;
-    return toScreen(mid.x, mid.y - 18 / board.camera.zoom);
+    return id ? board.edges.find((x) => x.id === id) : undefined;
+  };
+
+  // The whole line with its end dots, end texts and label
+  const edgeBox = createMemo(() => {
+    const e = selectedEdge();
+    const g = e && edgeLine(e);
+    if (!e || !g) return null;
+    const rects: Rect[] = g.points.map((p) => ({ x: p.x, y: p.y, w: 0, h: 0 }));
+    if (e.label) {
+      const at = labelPoint(e, g.points);
+      const hw = (e.label.length * 7 + 16) / 2;
+      rects.push({ x: at.x - hw - 20, y: at.y - 34, w: hw * 2 + 40, h: 68 });
+    }
+    return grow(bounds(rects)!, 26);
   });
+
+  /** The selected group (section, swimlane, ...), if that is the only thing selected: cards can link to it. */
+  const group = () => {
+    const sel = selectedNodes();
+    return sel.length === 1 && isLinkable(sel[0]) ? sel[0] : null;
+  };
+
+  /** The selected UML class, if that is the only thing selected. */
+  const umlClass = () => {
+    const sel = selectedNodes();
+    return sel.length === 1 && sel[0].kind === "class" ? sel[0] : null;
+  };
+
+  /** The selected swimlane, if that is the only thing selected. */
+  const pool = () => {
+    const sel = selectedNodes();
+    return sel.length === 1 && sel[0].kind === "lanes" ? sel[0] : null;
+  };
 
   const currentColor = () => {
     const sel = selectedNodes();
@@ -53,14 +101,10 @@ export function ContextBar() {
 
   return (
     <>
-      <Show when={!hidden() && nodeAnchor()}>
-        {(pos) => (
-          <div
-            class="context-bar"
-            style={{ left: `${pos().x}px`, top: `${pos().y - 14}px` }}
-            onPointerDown={(e) => e.stopPropagation()}
-            onDblClick={(e) => e.stopPropagation()}
-          >
+      <Show when={codeFor()}>{(l) => <CodeDialog initial={l()} onClose={() => setCodeFor(null)} />}</Show>
+      <Show when={!hidden() && nodeBox()}>
+        {(box) => (
+          <FloatingBar box={box()}>
             <For each={COLORS}>
               {(c) => (
                 <button
@@ -72,32 +116,174 @@ export function ContextBar() {
               )}
             </For>
             <span class="divider" />
-            <button class="icon-btn" title="Dupliceren (Ctrl+D)" onClick={duplicateSelection}>
+            <Show when={group()}>
+              {(n) => (
+                <>
+                  <CardLinksMenu nodeId={n().id} />
+                  <span class="divider" />
+                </>
+              )}
+            </Show>
+            <Show when={umlClass()}>
+              {(n) => (
+                <>
+                  {/* The kind sets the right «stereotype» above the name */}
+                  <select
+                    class="bar-select"
+                    title="Kind of class"
+                    value={classKind(n().text)}
+                    onChange={(e) => setNodeText(n().id, withClassKind(n().text, e.currentTarget.value as ClassKind))}
+                  >
+                    <option value="class">Class</option>
+                    <option value="abstract">Abstract class</option>
+                    <option value="interface">Interface</option>
+                    <option value="enum">Enum</option>
+                  </select>
+                  <For each={classKind(n().text) === "enum" ? [1] : [1, 2]}>
+                    {(part) => (
+                      <button
+                        class="icon-btn"
+                        title={`Add ${ROW_NAMES[part]}`}
+                        onClick={() =>
+                          setUi("editingRow", {
+                            node: n().id,
+                            part,
+                            index: classParts(n().text)[part].length,
+                            insert: true,
+                          })
+                        }
+                      >
+                        <IconPlus />
+                        <span>{part === 2 ? "Operation" : classKind(n().text) === "enum" ? "Value" : "Attribute"}</span>
+                      </button>
+                    )}
+                  </For>
+                  <span class="divider" />
+                </>
+              )}
+            </Show>
+            <Show when={pool()}>
+              {(n) => (
+                <>
+                  <button class="icon-btn" title="Add a lane on the right" onClick={() => addLane(n().id)}>
+                    <IconPlus />
+                    <span>Lane</span>
+                  </button>
+                  <span class="divider" />
+                </>
+              )}
+            </Show>
+            <Show when={selectedNodes().some((n) => n.kind === "class")}>
+              <button
+                class="icon-btn"
+                title="Code for the selected classes"
+                onClick={() => setCodeFor("typescript")}
+              >
+                <IconCode />
+                <span>Code</span>
+              </button>
+              <span class="divider" />
+            </Show>
+            <button class="icon-btn" title="Duplicate (Ctrl+D)" onClick={duplicateSelection}>
               <IconCopy />
             </button>
-            <button class="icon-btn danger" title="Verwijderen (Delete)" onClick={deleteSelection}>
+            <button class="icon-btn danger" title="Delete (Delete)" onClick={deleteSelection}>
               <IconTrash />
             </button>
-          </div>
+          </FloatingBar>
         )}
       </Show>
 
-      <Show when={!hidden() && !ui.editingEdge && edgeAnchor()}>
-        {(pos) => (
-          <div
-            class="context-bar"
-            style={{ left: `${pos().x}px`, top: `${pos().y}px` }}
-            onPointerDown={(e) => e.stopPropagation()}
-            onDblClick={(e) => e.stopPropagation()}
-          >
-            <button class="icon-btn" title="Label bewerken" onClick={() => setUi("editingEdge", ui.selectedEdge)}>
+      <Show when={!hidden() && !ui.editingEdge && edgeBox()}>
+        {(box) => (
+          <FloatingBar box={box()}>
+            <For each={STYLES}>
+              {(s) => (
+                <button
+                  class="icon-btn"
+                  classList={{ pressed: (selectedEdge()?.style ?? "curved") === s.style }}
+                  title={s.title}
+                  onClick={() => setEdgeProps(ui.selectedEdge!, { style: s.style })}
+                >
+                  {s.icon()}
+                </button>
+              )}
+            </For>
+            <Show when={selectedEdge()?.bend}>
+              <button
+                class="icon-btn"
+                title="Back to the normal route"
+                onClick={() => {
+                  checkpoint();
+                  setBend(ui.selectedEdge!, undefined);
+                }}
+              >
+                <IconUndo />
+                <span>Reset route</span>
+              </button>
+            </Show>
+            <button
+              class="icon-btn"
+              title={`Line: ${PATTERN_NAMES[selectedEdge()?.pattern ?? "solid"]} (click to change)`}
+              onClick={() => setEdgeProps(ui.selectedEdge!, { pattern: NEXT_PATTERN[selectedEdge()?.pattern ?? "solid"] })}
+            >
+              <IconPattern pattern={selectedEdge()?.pattern ?? "solid"} />
+            </button>
+            <span class="divider" />
+            <CapMenu side="start" edge={selectedEdge()!} />
+            <CapMenu side="end" edge={selectedEdge()!} />
+            <EndLabelsMenu edge={selectedEdge()!} />
+            <Menu
+              button={(toggle, open) => (
+                <button class="icon-btn" classList={{ pressed: open() }} title="UML relationship" onClick={toggle}>
+                  <span>UML</span>
+                </button>
+              )}
+            >
+              {(close) => (
+                <For each={RELATIONS}>
+                  {(group, i) => (
+                    <>
+                      {i() > 0 && <div class="menu-sep" />}
+                      <For each={group}>
+                        {(r) => (
+                          <button
+                            class="menu-item"
+                            onClick={() => {
+                              setEdgeProps(ui.selectedEdge!, r.props);
+                              close();
+                            }}
+                          >
+                            <span>{r.name}</span>
+                            <small>{r.hint}</small>
+                          </button>
+                        )}
+                      </For>
+                    </>
+                  )}
+                </For>
+              )}
+            </Menu>
+            <span class="divider" />
+            <Show when={selectedEdge()?.label}>
+              <button
+                class="icon-btn"
+                title={`Label ${SIDE_NAMES[selectedEdge()!.labelSide ?? "on"]} (click to change)`}
+                onClick={() =>
+                  setEdgeProps(ui.selectedEdge!, { labelSide: NEXT_SIDE[selectedEdge()!.labelSide ?? "on"] })
+                }
+              >
+                <IconLabelSide side={selectedEdge()!.labelSide ?? "on"} />
+              </button>
+            </Show>
+            <button class="icon-btn" title="Edit label" onClick={() => setUi("editingEdge", ui.selectedEdge)}>
               <IconLabel />
               <span>Label</span>
             </button>
-            <button class="icon-btn danger" title="Verwijderen (Delete)" onClick={deleteSelection}>
+            <button class="icon-btn danger" title="Delete (Delete)" onClick={deleteSelection}>
               <IconTrash />
             </button>
-          </div>
+          </FloatingBar>
         )}
       </Show>
     </>

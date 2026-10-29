@@ -1,8 +1,8 @@
-import { For, onCleanup, onMount } from "solid-js";
+import { createMemo, For, onCleanup, onMount } from "solid-js";
 import { panBy, setViewport, toWorld, zoomAt } from "../lib/camera";
-import { beginMarquee, beginPan, blurActive } from "../lib/interactions";
-import { addNode, board, createNode, setUi, ui } from "../lib/store";
-import { EdgeLabels, EdgesLayer } from "./Edges";
+import { beginLine, beginMarquee, beginPan, blurActive } from "../lib/interactions";
+import { addNode, board, createNode, isContainer, setUi, ui } from "../lib/store";
+import { EdgeEnds, EdgeLabels, EdgesLayer } from "./Edges";
 import { NodeView } from "./NodeView";
 import { ContextBar } from "./ContextBar";
 
@@ -11,12 +11,12 @@ export function Canvas() {
 
   onMount(() => {
     setViewport(el);
-    // wheel moet non-passive zijn om browser-zoom/scroll te voorkomen
+    // The wheel listener must be non-passive to prevent browser zoom/scroll
     const onWheel = (e: WheelEvent) => {
       e.preventDefault();
       const unit = e.deltaMode === 1 ? 16 : 1;
       if (e.ctrlKey || e.metaKey) {
-        // trackpad-pinch komt binnen als ctrl+wheel
+        // A trackpad pinch arrives as ctrl+wheel
         const dy = Math.max(-25, Math.min(25, e.deltaY * unit));
         zoomAt(e.clientX, e.clientY, Math.exp(-dy * 0.01));
       } else if (e.shiftKey && !e.deltaX) {
@@ -37,6 +37,10 @@ export function Canvas() {
       return;
     }
     if (e.button !== 0) return;
+    if (ui.tool === "line") {
+      beginLine(e);
+      return;
+    }
     if (ui.tool !== "select") {
       const w = toWorld(e.clientX, e.clientY);
       const node = createNode(ui.tool, w.x, w.y);
@@ -53,6 +57,15 @@ export function Canvas() {
     addNode(node);
     setUi("editingNode", node.id);
   };
+
+  // Sections and swimlanes go in a layer below the edges, the largest at the back
+  const containers = createMemo(() =>
+    board.nodes.filter((n) => isContainer(n.kind)).sort((a, b) => b.w * b.h - a.w * a.h),
+  );
+  const blocks = createMemo(() => board.nodes.filter((n) => !isContainer(n.kind)));
+
+  const worldTransform = () =>
+    `translate(${board.camera.x}px, ${board.camera.y}px) scale(${board.camera.zoom})`;
 
   const grid = () => {
     const c = board.camera;
@@ -78,15 +91,14 @@ export function Canvas() {
       onDblClick={onDblClick}
       onContextMenu={(e) => e.preventDefault()}
     >
+      <div class="world" style={{ transform: worldTransform() }}>
+        <For each={containers()}>{(n) => <NodeView node={n} />}</For>
+      </div>
       <EdgesLayer />
-      <div
-        class="world"
-        style={{
-          transform: `translate(${board.camera.x}px, ${board.camera.y}px) scale(${board.camera.zoom})`,
-        }}
-      >
+      <div class="world" style={{ transform: worldTransform() }}>
         <EdgeLabels />
-        <For each={board.nodes}>{(n) => <NodeView node={n} />}</For>
+        <For each={blocks()}>{(n) => <NodeView node={n} />}</For>
+        <EdgeEnds />
       </div>
       <ContextBar />
     </div>

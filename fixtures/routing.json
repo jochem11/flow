@@ -1,0 +1,266 @@
+{
+  "about": "Right-angle routes: start point and direction, end point and direction, and blocks to go around. Checked by src/lib/geometry.test.ts (elbow) and by flow_svg.rs (elbow). Keep both in step.",
+  "cases": [
+    {
+      "name": "facing sides: a Z",
+      "p1": {
+        "x": 0,
+        "y": 0
+      },
+      "n1": {
+        "x": 1,
+        "y": 0
+      },
+      "p2": {
+        "x": 200,
+        "y": 100
+      },
+      "n2": {
+        "x": -1,
+        "y": 0
+      },
+      "obstacles": [],
+      "points": [
+        {
+          "x": 0,
+          "y": 0
+        },
+        {
+          "x": 100,
+          "y": 0
+        },
+        {
+          "x": 100,
+          "y": 100
+        },
+        {
+          "x": 200,
+          "y": 100
+        }
+      ]
+    },
+    {
+      "name": "side into top: an L",
+      "p1": {
+        "x": 0,
+        "y": 0
+      },
+      "n1": {
+        "x": 1,
+        "y": 0
+      },
+      "p2": {
+        "x": 200,
+        "y": 100
+      },
+      "n2": {
+        "x": 0,
+        "y": -1
+      },
+      "obstacles": [],
+      "points": [
+        {
+          "x": 0,
+          "y": 0
+        },
+        {
+          "x": 200,
+          "y": 0
+        },
+        {
+          "x": 200,
+          "y": 100
+        }
+      ]
+    },
+    {
+      "name": "both out of the right side",
+      "p1": {
+        "x": 0,
+        "y": 0
+      },
+      "n1": {
+        "x": 1,
+        "y": 0
+      },
+      "p2": {
+        "x": 50,
+        "y": 100
+      },
+      "n2": {
+        "x": 1,
+        "y": 0
+      },
+      "obstacles": [],
+      "points": [
+        {
+          "x": 0,
+          "y": 0
+        },
+        {
+          "x": 70,
+          "y": 0
+        },
+        {
+          "x": 70,
+          "y": 100
+        },
+        {
+          "x": 50,
+          "y": 100
+        }
+      ]
+    },
+    {
+      "name": "a block in the middle of a Z: the middle moves past it",
+      "p1": {
+        "x": 0,
+        "y": 0
+      },
+      "n1": {
+        "x": 1,
+        "y": 0
+      },
+      "p2": {
+        "x": 300,
+        "y": 100
+      },
+      "n2": {
+        "x": -1,
+        "y": 0
+      },
+      "obstacles": [
+        {
+          "x": 120,
+          "y": -40,
+          "w": 60,
+          "h": 180
+        }
+      ],
+      "points": [
+        {
+          "x": 0,
+          "y": 0
+        },
+        {
+          "x": 100,
+          "y": 0
+        },
+        {
+          "x": 100,
+          "y": -60
+        },
+        {
+          "x": 200,
+          "y": -60
+        },
+        {
+          "x": 200,
+          "y": 100
+        },
+        {
+          "x": 300,
+          "y": 100
+        }
+      ]
+    },
+    {
+      "name": "a block on a straight horizontal run: around it",
+      "p1": {
+        "x": 0,
+        "y": 50
+      },
+      "n1": {
+        "x": 1,
+        "y": 0
+      },
+      "p2": {
+        "x": 400,
+        "y": 50
+      },
+      "n2": {
+        "x": -1,
+        "y": 0
+      },
+      "obstacles": [
+        {
+          "x": 150,
+          "y": 20,
+          "w": 100,
+          "h": 60
+        }
+      ],
+      "points": [
+        {
+          "x": 0,
+          "y": 50
+        },
+        {
+          "x": 130,
+          "y": 50
+        },
+        {
+          "x": 130,
+          "y": 0
+        },
+        {
+          "x": 270,
+          "y": 0
+        },
+        {
+          "x": 270,
+          "y": 50
+        },
+        {
+          "x": 400,
+          "y": 50
+        }
+      ]
+    },
+    {
+      "name": "a block that is not in the way changes nothing",
+      "p1": {
+        "x": 0,
+        "y": 0
+      },
+      "n1": {
+        "x": 1,
+        "y": 0
+      },
+      "p2": {
+        "x": 200,
+        "y": 100
+      },
+      "n2": {
+        "x": -1,
+        "y": 0
+      },
+      "obstacles": [
+        {
+          "x": 500,
+          "y": 500,
+          "w": 50,
+          "h": 50
+        }
+      ],
+      "points": [
+        {
+          "x": 0,
+          "y": 0
+        },
+        {
+          "x": 100,
+          "y": 0
+        },
+        {
+          "x": 100,
+          "y": 100
+        },
+        {
+          "x": 200,
+          "y": 100
+        }
+      ]
+    }
+  ]
+}
