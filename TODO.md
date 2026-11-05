@@ -12,6 +12,13 @@
       5 databases, pg_dump and mysqldump; many-to-many tables become relations
 - [x] Import code into a class diagram for all 7 export languages (`commands/code_import/`),
       checked by a round trip through the code export
+- [x] Accounts on a server (`server/`): email + password (confirmation and reset by mail), Google
+- [x] Projects shared with view / comment / edit rights, invites by mail, per-board roles (also No access)
+- [x] Public links per board (only people with access, or anyone: view / comment), guests without an account
+- [x] Comments: on the board, a block, a table, a card or a spot; replies, resolve; guests too
+- [x] Editing together in real time (Yjs ↔ yrs): flowcharts, EER, kanban, text; presence; undo of your own changes
+- [x] The web version (served by the server), links into the desktop app (`flowapp://`), Docker
+- [x] The pure logic in `crates/flow-core`, shared by the desktop app and the server
 - [x] Auto-layout: layered layout with cycle breaking, dummy nodes for long edges and barycenter ordering
 - [x] Text documents and card descriptions: WYSIWYG editor (Tiptap) that still stores markdown
 - [x] Project page with a rendered markdown description
@@ -37,6 +44,18 @@
 → TypeScript points out what to update in the frontend.
 **Tests:** `npm test` (frontend) and `cd src-tauri && cargo test` (backend). A rule that exists in
 both (routing, activation bars, UML rows) gets a case in `fixtures/`, checked by both.
+
+## Accounts and sharing
+- [ ] Desktop app: try `flowapp://` links and Google sign-in in a bundled build (`npm run tauri build`);
+      deep links do not work in `tauri dev` on macOS
+- [ ] Editing together: the text of one block is one value, so two people typing in the same block
+      at the same moment keep one of the two (whole documents merge per character)
+- [ ] Editing together: "X is typing" on kanban cards; presence on kanban boards
+- [ ] Viewers: in a card dialog the subtask and link buttons are off too (only editing should be)
+- [ ] Comments on text documents can only be on the whole document, not on a passage
+- [ ] Rate limits are kept in memory: with more than one server process, move them to the database
+- [ ] Delete an account (and what happens to its projects); change email or password when logged in
+- [ ] Transfer a project to another owner
 
 ## Backend
 - [ ] Custom error enum with `thiserror` instead of `String`: `NotFound`, `InvalidId`, `Cycle`, ...

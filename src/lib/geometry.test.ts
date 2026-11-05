@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import fixture from "../../fixtures/routing.json";
-import { angleAt, elbow, nearestT, pointAlong, portAt } from "./geometry";
+import { alignRects, angleAt, distributeRects, elbow, nearestT, pointAlong, portAt, resizeRect } from "./geometry";
 
 describe("right-angle routes (shared with flow_svg.rs)", () => {
   for (const c of fixture.cases) {
@@ -35,5 +35,48 @@ describe("along a line", () => {
   it("finds points by fraction and back", () => {
     expect(pointAlong(line, 0.5)).toMatchObject({ x: 100, y: 0 });
     expect(nearestT(line, { x: 100, y: 50 })).toBeCloseTo(0.75);
+  });
+});
+
+describe("resizing by a side or corner", () => {
+  const r = { x: 100, y: 100, w: 200, h: 100 };
+  const min = { w: 50, h: 40 };
+  const grid = (v: number) => Math.round(v / 10) * 10;
+
+  it("moves only the dragged sides", () => {
+    expect(resizeRect(r, "e", 30, 99, min)).toEqual({ x: 100, y: 100, w: 230, h: 100 });
+    expect(resizeRect(r, "n", 99, -20, min)).toEqual({ x: 100, y: 80, w: 200, h: 120 });
+    expect(resizeRect(r, "sw", -40, 15, min)).toEqual({ x: 60, y: 100, w: 240, h: 115 });
+    expect(resizeRect(r, "nw", 20, 20, min)).toEqual({ x: 120, y: 120, w: 180, h: 80 });
+  });
+
+  it("keeps the opposite side in place at the smallest size", () => {
+    expect(resizeRect(r, "w", 500, 0, min)).toEqual({ x: 250, y: 100, w: 50, h: 100 });
+    expect(resizeRect(r, "s", 0, -500, min)).toEqual({ x: 100, y: 100, w: 200, h: 40 });
+  });
+
+  it("puts the moved side on the grid", () => {
+    expect(resizeRect(r, "ne", 13, -7, min, grid)).toEqual({ x: 100, y: 90, w: 210, h: 110 });
+  });
+});
+
+describe("align and distribute", () => {
+  const a = { id: "a", x: 0, y: 0, w: 100, h: 40 };
+  const b = { id: "b", x: 200, y: 50, w: 60, h: 20 };
+  const c = { id: "c", x: 500, y: 10, w: 100, h: 40 };
+
+  it("lines up on the outer edge or the middle", () => {
+    expect(alignRects([a, b], "left").get("b")).toEqual({ x: 0, y: 50 });
+    expect(alignRects([a, b], "right").get("a")).toEqual({ x: 160, y: 0 });
+    expect(alignRects([a, b], "middle").get("b")).toEqual({ x: 200, y: 25 });
+  });
+
+  it("makes the gaps equal, the outer ones staying", () => {
+    const d = distributeRects([c, a, b], "x");
+    expect(d.get("a")).toEqual({ x: 0, y: 0 });
+    expect(d.get("c")).toEqual({ x: 500, y: 10 });
+    // 600 wide, 260 of items: two gaps of 170
+    expect(d.get("b")).toEqual({ x: 270, y: 50 });
+    expect(distributeRects([a, b], "x").size).toBe(0);
   });
 });

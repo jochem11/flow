@@ -4,11 +4,47 @@
 // Drag a table by its header; drag the dot beside a column's row onto another
 // table (or one of its rows) to join them: the foreign key columns are added for
 // you (see `connectRows`). Double-click the canvas to add a table.
+//
+// Selecting works as in a flowchart: drag a rectangle on the canvas, Shift-click,
+// Ctrl+A; Ctrl+G wraps the selection in a section, which moves what lies in it.
 
-import { createMemo, createSignal, For, onCleanup, onMount, Show } from "solid-js";
+import { EerPresence, trackPointer as trackPresence } from "./Presence";
+import { EerCommentPins, PlacingOverlay } from "./Comments";
+import { canEdit } from "../lib/access";
+import { batch, createMemo, createSignal, For, on, onCleanup, onMount, Show, createEffect } from "solid-js";
 import {
   addAttribute,
   addEntity,
+  addIndex,
+  removeIndex,
+  toggleIndexColumn,
+  updateIndex,
+  addSection,
+  editingSection,
+  eerSelectedIds,
+  eerWithContents,
+  growEerSections,
+  isEerSelected,
+  restoreEerSections,
+  sectionsAround,
+  sectionSizes,
+  setEerPointer,
+  setEerViewport,
+  moveEerItems,
+  setSectionRect,
+  SECTION_MIN,
+  SECTION_HEADER,
+  sectionById,
+  selectEer,
+  setEditingSection,
+  setEerSelectionColor,
+  setSectionTitle,
+  setSectionTitleLive,
+  toggleEerSelected,
+  wrapEerSelection,
+  deleteEerSelection,
+  alignEerSelection,
+  distributeEerSelection,
   CARDINALITIES,
   connectRows,
   DATA_TYPES,
@@ -28,7 +64,6 @@ import {
   isKey,
   isManyToMany,
   moveAttribute,
-  moveEntity,
   removeAttribute,
   ROW_H,
   rowY,
@@ -39,13 +74,34 @@ import {
   updateEntity,
   updateRelation,
 } from "../lib/eer";
-import { crossings, edgeBetween, elbow, lineEnd, ownBlock, routeLength, type EdgeGeom, type Pt } from "../lib/geometry";
+import {
+  bounds,
+  containsRect,
+  crossings,
+  edgeBetween,
+  elbow,
+  intersects,
+  lineEnd,
+  normRect,
+  ownBlock,
+  RESIZE_DIRS,
+  resizeRect,
+  type ResizeDir,
+  routeLength,
+  type EdgeGeom,
+  type Pt,
+} from "../lib/geometry";
 import { trackPointer } from "../lib/interactions";
-import { snap } from "../lib/store";
-import type { Attribute, Cardinality, Entity, NodeColor, RefAction, Relation } from "../lib/types";
-import { IconClose, IconPlus, IconTrash } from "./icons";
+import { snap, ui } from "../lib/store";
+import type { Attribute, Cardinality, EerSection, Entity, NodeColor, RefAction, Relation } from "../lib/types";
+import { IconClose, IconPlus, IconRename, IconSection, IconTrash } from "./icons";
 import { cardsLinkedTo } from "../lib/links";
-import { LinkedCardsBadge } from "./NodeView";
+import { LinkedCardsBadge, renameOnClick, TextEditor } from "./NodeView";
+import { FloatingBar, grow } from "./FloatingBar";
+import { SnapGuides } from "./Edges";
+import { checkSchema, type Problem } from "../lib/eerChecks";
+import { AlignMenu } from "./AlignMenu";
+import { guidesFor, nearestLine, snapBox, snapLines, SNAP_REACH, type Guide } from "../lib/snapping";
 import { CardLinksMenu } from "./CardLinksMenu";
 
 const COLORS: NodeColor[] = ["white", "yellow", "green", "blue", "purple", "pink"];
@@ -67,6 +123,17 @@ export function EerEditor() {
     at: Pt;
     target: { entity: string; attr: string | null } | null;
   } | null>(null);
+  /** The selection rectangle being dragged (world coordinates) */
+  const [marquee, setMarquee] = createSignal<{ x0: number; y0: number; x1: number; y1: number } | null>(null);
+  const [dragging, setDragging] = createSignal(false);
+  const [panning, setPanning] = createSignal(false);
+  /** While moving or resizing: what lines up (see snapping.ts) */
+  const [guides, setGuides] = createSignal<Guide[]>([]);
+  /** Tables and sections, as rectangles */
+  const itemRects = (keep: (id: string) => boolean) => [
+    ...eer.entities.filter((e) => keep(e.id)).map(entityRect),
+    ...eer.sections.filter((s) => keep(s.id)).map((s) => ({ x: s.x, y: s.y, w: s.w, h: s.h })),
+  ];
 
   const cam = () => eer.camera;
   const toWorld = (cx: number, cy: number): Pt => {
@@ -89,22 +156,203 @@ export function EerEditor() {
       else setEerCamera({ x: cam().x - e.deltaX, y: cam().y - e.deltaY });
     };
     el.addEventListener("wheel", onWheel, { passive: false });
-    onCleanup(() => el.removeEventListener("wheel", onWheel));
+    trackPresence(el, toWorld);
+    setEerViewport(el);
+    onCleanup(() => {
+      el.removeEventListener("wheel", onWheel);
+      setEerViewport(null);
+      setEerPointer(null);
+    });
     // A new diagram: start with the origin a bit in from the corner
     if (!eer.entities.length && cam().x === 0 && cam().y === 0) setEerCamera({ x: 80, y: 80 });
   });
 
-  /** Empty canvas: deselect, and drag to pan. */
+  const beginPan = (e: PointerEvent) => {
+    let last = { x: e.clientX, y: e.clientY };
+    setPanning(true);
+    trackPointer(
+      e,
+      (ev) => {
+        setEerCamera({ x: cam().x + ev.clientX - last.x, y: cam().y + ev.clientY - last.y });
+        last = { x: ev.clientX, y: ev.clientY };
+      },
+      () => setPanning(false),
+    );
+  };
+
+  /**
+   * Empty canvas: a selection rectangle (Shift adds to the selection). The middle
+   * button, or Space held, pans; so does any drag when viewing only.
+   */
   const onCanvasDown = (e: PointerEvent) => {
     if (e.button !== 0 && e.button !== 1) return;
     (document.activeElement as HTMLElement | null)?.blur?.();
-    setEerSelected(null);
-    let last = { x: e.clientX, y: e.clientY };
-    trackPointer(e, (ev) => {
-      setEerCamera({ x: cam().x + ev.clientX - last.x, y: cam().y + ev.clientY - last.y });
-      last = { x: ev.clientX, y: ev.clientY };
-    });
+    if (e.button === 1 || ui.spaceDown || !canEdit()) {
+      e.preventDefault();
+      if (!canEdit() && e.button === 0) setEerSelected(null);
+      beginPan(e);
+      return;
+    }
+    const additive = e.shiftKey;
+    const base = additive ? eerSelectedIds() : [];
+    if (!additive) setEerSelected(null);
+    const w0 = toWorld(e.clientX, e.clientY);
+    let started = false;
+    trackPointer(
+      e,
+      (ev) => {
+        if (!started && Math.hypot(ev.clientX - e.clientX, ev.clientY - e.clientY) < 3) return;
+        started = true;
+        const w = toWorld(ev.clientX, ev.clientY);
+        setMarquee({ x0: w0.x, y0: w0.y, x1: w.x, y1: w.y });
+        const r = normRect(w0.x, w0.y, w.x, w.y);
+        // A section only when it is completely inside, otherwise every selection inside one would take it too
+        const hits = [
+          ...eer.sections.filter((s) => containsRect(r, s)).map((s) => s.id),
+          ...eer.entities.filter((t) => intersects(entityRect(t), r)).map((t) => t.id),
+        ];
+        selectEer([...new Set([...base, ...hits])]);
+      },
+      () => setMarquee(null),
+    );
   };
+
+  /**
+   * A table (by its header) or a section (by its title): Shift-click adds it to the
+   * selection or takes it out; dragging moves the whole selection, and what lies in
+   * the sections in it. Snaps to the grid (hold Alt to move freely).
+   */
+  const beginItemsDrag = (e: PointerEvent, id: string) => {
+    if (e.button !== 0 || ui.spaceDown) return;
+    e.stopPropagation();
+    (document.activeElement as HTMLElement | null)?.blur?.();
+    if (e.shiftKey) {
+      toggleEerSelected(id);
+      return;
+    }
+    if (!isEerSelected(id)) selectEer([id]);
+    if (!canEdit()) return;
+    const moving = eerWithContents(eerSelectedIds());
+    const origin = new Map([...eer.entities, ...eer.sections].filter((x) => moving.has(x.id)).map((x) => [x.id, { x: x.x, y: x.y }]));
+    const grabbed = origin.get(id);
+    if (!grabbed) return;
+    // The sections the moved sections are in: they stay in them while their center is
+    const was = sectionsAround(eerSelectedIds(), moving);
+    // The sections as they were: they grow while a table is dragged to their edge, and shrink back when it goes on, out
+    const sizes = sectionSizes(moving);
+    // Smart guides: the edges and centers of what stays put
+    const others = itemRects((x) => !moving.has(x));
+    const lines = snapLines(others);
+    const box0 = bounds(itemRects((x) => moving.has(x)))!;
+    const start = toWorld(e.clientX, e.clientY);
+    let started = false;
+    trackPointer(
+      e,
+      (ev) => {
+        if (!started) {
+          if (Math.hypot(ev.clientX - e.clientX, ev.clientY - e.clientY) < 3) return;
+          started = true;
+          eerCheckpoint();
+          setDragging(true);
+        }
+        const w = toWorld(ev.clientX, ev.clientY);
+        let dx = w.x - start.x;
+        let dy = w.y - start.y;
+        if (!ev.altKey) {
+          // Lined up with something close by, else on the grid
+          const s = snapBox({ ...box0, x: box0.x + dx, y: box0.y + dy }, lines, SNAP_REACH / cam().zoom);
+          dx = s.dx !== null ? dx + s.dx : snap(grabbed.x + dx) - grabbed.x;
+          dy = s.dy !== null ? dy + s.dy : snap(grabbed.y + dy) - grabbed.y;
+        }
+        setGuides(ev.altKey ? [] : guidesFor({ ...box0, x: box0.x + dx, y: box0.y + dy }, others));
+        const pos = new Map<string, Pt>();
+        for (const [k, o] of origin) pos.set(k, { x: o.x + dx, y: o.y + dy });
+        batch(() => {
+          restoreEerSections(sizes);
+          moveEerItems(pos);
+          // In a section (or partly out of one): it grows to fit
+          growEerSections(eerSelectedIds(), was);
+        });
+      },
+      () => {
+        setDragging(false);
+        setGuides([]);
+      },
+    );
+  };
+
+  /** A side or corner of a section: its size (by the left or top side, also where it is). */
+  const beginSectionResize = (e: PointerEvent, s: EerSection, dir: ResizeDir) => {
+    if (e.button !== 0 || !canEdit()) return;
+    e.stopPropagation();
+    const start = toWorld(e.clientX, e.clientY);
+    const r0 = { x: s.x, y: s.y, w: s.w, h: s.h };
+    const was = sectionsAround([s.id], new Set([s.id]));
+    const sizes = sectionSizes(new Set([s.id]));
+    const others = itemRects((x) => x !== s.id);
+    const lines = snapLines(others);
+    let started = false;
+    trackPointer(
+      e,
+      (ev) => {
+        if (!started) {
+          started = true;
+          eerCheckpoint();
+          setDragging(true);
+        }
+        const w = toWorld(ev.clientX, ev.clientY);
+        const reach = SNAP_REACH / cam().zoom;
+        // A side lines up with an edge or center close by, else goes on the grid
+        const roundX = (v: number) => (ev.altKey ? v : (nearestLine(v, lines.xs, reach) ?? snap(v)));
+        const roundY = (v: number) => (ev.altKey ? v : (nearestLine(v, lines.ys, reach) ?? snap(v)));
+        const r = resizeRect(r0, dir, w.x - start.x, w.y - start.y, SECTION_MIN, roundX, roundY);
+        setGuides(ev.altKey ? [] : guidesFor(r, others));
+        batch(() => {
+          restoreEerSections(sizes);
+          setSectionRect(s.id, r);
+          // Made larger than the section it is in: that one grows too
+          growEerSections([s.id], was);
+        });
+      },
+      () => {
+        setDragging(false);
+        setGuides([]);
+      },
+    );
+  };
+
+  /** Double-click: in the strip at the top of a section, rename it; anywhere else, a new table. */
+  const onCanvasDblClick = (e: MouseEvent) => {
+    if (!canEdit()) return;
+    const w = toWorld(e.clientX, e.clientY);
+    const section = eer.sections
+      .filter((s) => w.x >= s.x && w.x <= s.x + s.w && w.y >= s.y && w.y <= s.y + SECTION_HEADER)
+      .sort((a, b) => a.w * a.h - b.w * b.h)[0];
+    if (section) {
+      selectEer([section.id]);
+      setEditingSection(section.id);
+      return;
+    }
+    addEntity(w.x - ENTITY_W / 2, w.y - 20);
+  };
+
+  // Schema checks (see eerChecks.ts): a list in the toolbar, a mark on the tables
+  const problems = createMemo(() => checkSchema(eer.entities, eer.relations));
+  const warningsOn = (id: string) => problems().filter((x) => x.entityId === id && x.level === "warning");
+  const [checksOpen, setChecksOpen] = createSignal(false);
+  const showProblem = (x: Problem) => {
+    setChecksOpen(false);
+    if (x.relationId) setEerSelected({ kind: "relation", id: x.relationId });
+    else if (x.entityId) setEerSelected({ kind: "entity", id: x.entityId });
+    const e = x.entityId ? entityById(x.entityId) : undefined;
+    if (!e) return;
+    const r = el.getBoundingClientRect();
+    const box = entityRect(e);
+    setEerCamera({ x: r.width / 2 - (box.x + box.w / 2) * cam().zoom, y: r.height / 2 - (box.y + box.h / 2) * cam().zoom });
+  };
+
+  // Sections behind the lines and tables, the largest at the back
+  const sections = createMemo(() => [...eer.sections].sort((a, b) => b.w * b.h - a.w * a.h));
 
   /** The table under the pointer, and the column row if it is on one */
   const targetAt = (cx: number, cy: number) => {
@@ -114,27 +362,8 @@ export function EerEditor() {
     return { entity, attr: el?.closest<HTMLElement>("[data-attr-id]")?.dataset.attrId ?? null };
   };
 
-  const beginTableDrag = (e: PointerEvent, ent: Entity) => {
-    if (e.button !== 0) return;
-    e.stopPropagation();
-    setEerSelected({ kind: "entity", id: ent.id });
-    const start = toWorld(e.clientX, e.clientY);
-    const origin = { x: ent.x, y: ent.y };
-    let started = false;
-    trackPointer(e, (ev) => {
-      const w = toWorld(ev.clientX, ev.clientY);
-      if (!started) {
-        if (Math.hypot(w.x - start.x, w.y - start.y) * cam().zoom < 3) return;
-        started = true;
-        eerCheckpoint();
-      }
-      const round = ev.altKey ? (v: number) => v : snap;
-      moveEntity(ent.id, round(origin.x + w.x - start.x), round(origin.y + w.y - start.y));
-    });
-  };
-
   const beginConnect = (e: PointerEvent, from: string, attr: string) => {
-    if (e.button !== 0) return;
+    if (e.button !== 0 || !canEdit()) return;
     e.stopPropagation();
     trackPointer(
       e,
@@ -162,23 +391,41 @@ export function EerEditor() {
   };
 
   return (
-    <div class="eer-editor">
+    <div class="eer-editor" classList={{ "read-only": !canEdit() }}>
       <div
         ref={el}
         class="viewport eer-viewport"
+        classList={{ "can-pan": ui.spaceDown, panning: panning() }}
         style={{
           "background-size": `${20 * cam().zoom}px ${20 * cam().zoom}px`,
           "background-position": `${cam().x}px ${cam().y}px`,
         }}
         onPointerDown={onCanvasDown}
-        onDblClick={(e) => {
-          const w = toWorld(e.clientX, e.clientY);
-          addEntity(w.x - ENTITY_W / 2, w.y - 20);
-        }}
+        onPointerMove={(e) => setEerPointer(toWorld(e.clientX, e.clientY))}
+        onPointerLeave={() => setEerPointer(null)}
+        onDblClick={onCanvasDblClick}
       >
+        <div class="world" style={{ transform: `translate(${cam().x}px, ${cam().y}px) scale(${cam().zoom})` }}>
+          <For each={sections()}>
+            {(s) => (
+              <SectionView
+                section={s}
+                onTitleDown={(e) => beginItemsDrag(e, s.id)}
+                onResizeDown={(e, dir) => beginSectionResize(e, s, dir)}
+              />
+            )}
+          </For>
+        </div>
         <svg class="edges-layer">
           <g transform={`translate(${cam().x} ${cam().y}) scale(${cam().zoom})`}>
             <For each={eer.relations}>{(r) => <RelationLine relation={r} />}</For>
+            <Show when={marquee()}>
+              {(m) => {
+                const r = () => normRect(m().x0, m().y0, m().x1, m().y1);
+                return <rect class="marquee" x={r().x} y={r().y} width={r().w} height={r().h} rx={2} />;
+              }}
+            </Show>
+            <SnapGuides guides={guides()} />
             <Show when={connecting()}>
               {(c) => {
                 // From the side of the row that faces the pointer
@@ -201,14 +448,21 @@ export function EerEditor() {
               <EntityView
                 entity={ent}
                 target={connecting()?.target?.entity === ent.id ? (connecting()?.target?.attr ?? "table") : null}
-                onHeaderDown={(e) => beginTableDrag(e, ent)}
+                onHeaderDown={(e) => beginItemsDrag(e, ent.id)}
+                warnings={warningsOn(ent.id).map((x) => x.message)}
                 onConnect={(e, attr) => beginConnect(e, ent.id, attr)}
               />
             )}
           </For>
+          <EerCommentPins />
+          <EerPresence />
         </div>
+        <PlacingOverlay kind="eer" toWorldPoint={toWorld} />
+        <Show when={canEdit() && !dragging() && !marquee() && !connecting() && !editingSection()}>
+          <EerBar view={() => el.getBoundingClientRect()} />
+        </Show>
 
-        <div class="eer-toolbar panel" onPointerDown={(e) => e.stopPropagation()} onDblClick={(e) => e.stopPropagation()}>
+        <div class="eer-toolbar panel" hidden={!canEdit()} onPointerDown={(e) => e.stopPropagation()} onDblClick={(e) => e.stopPropagation()}>
           <button
             class="text-btn"
             title="Add a table (or double-click the canvas)"
@@ -221,14 +475,53 @@ export function EerEditor() {
             <IconPlus />
             <span>Table</span>
           </button>
+          <button
+            class="text-btn"
+            title="Add a section to group tables in (or select tables and press Ctrl+G)"
+            onClick={() => {
+              const r = el.getBoundingClientRect();
+              const w = toWorld(r.left + r.width / 2, r.top + r.height / 2);
+              addSection(w.x, w.y);
+            }}
+          >
+            <IconSection />
+            <span>Section</span>
+          </button>
           <span class="eer-hint">Drag the dot beside a column onto another table to join them</span>
+          <Show when={problems().length}>
+            <span class="uml-wrap">
+              <button
+                class="text-btn eer-checks-btn"
+                classList={{ warn: problems().some((x) => x.level === "warning"), pressed: checksOpen() }}
+                onClick={() => setChecksOpen(!checksOpen())}
+                title="What may be wrong with the schema"
+              >
+                Checks <span class="eer-checks-count">{problems().length}</span>
+              </button>
+              <Show when={checksOpen()}>
+                <div class="eer-checks panel">
+                  <For each={problems()}>
+                    {(x) => (
+                      <button class="eer-check" classList={{ warning: x.level === "warning" }} onClick={() => showProblem(x)}>
+                        <span class="eer-check-mark">{x.level === "warning" ? "!" : "i"}</span>
+                        {x.message}
+                      </button>
+                    )}
+                  </For>
+                </div>
+              </Show>
+            </span>
+          </Show>
         </div>
       </div>
 
       <Show when={selectedEntity() || selectedRelation()}>
         <aside class="eer-inspector">
-          <Show when={selectedEntity()}>{(e) => <EntityInspector entity={e()} />}</Show>
-          <Show when={selectedRelation()}>{(r) => <RelationInspector relation={r()} />}</Show>
+          {/* Viewing only: every field and button in it is off */}
+          <fieldset class="eer-inspector-fields" disabled={!canEdit()}>
+            <Show when={selectedEntity()}>{(e) => <EntityInspector entity={e()} />}</Show>
+            <Show when={selectedRelation()}>{(r) => <RelationInspector relation={r()} />}</Show>
+          </fieldset>
         </aside>
       </Show>
     </div>
@@ -243,9 +536,11 @@ function EntityView(p: {
   target: string | null;
   onHeaderDown: (e: PointerEvent) => void;
   onConnect: (e: PointerEvent, attr: string) => void;
+  /** What the schema checks found wrong with this table */
+  warnings: string[];
 }) {
   const e = p.entity;
-  const selected = () => eerSelected()?.kind === "entity" && eerSelected()?.id === e.id;
+  const selected = () => isEerSelected(e.id);
   return (
     <div
       class={`eer-entity color-${e.color ?? "white"}`}
@@ -253,13 +548,21 @@ function EntityView(p: {
       data-entity-id={e.id}
       style={{ transform: `translate(${e.x}px, ${e.y}px)`, width: `${ENTITY_W}px`, height: `${entityHeight(e)}px` }}
       onPointerDown={(ev) => {
+        if (ev.button !== 0 || ui.spaceDown) return;
         ev.stopPropagation();
-        setEerSelected({ kind: "entity", id: e.id });
+        (document.activeElement as HTMLElement | null)?.blur?.();
+        if (ev.shiftKey) toggleEerSelected(e.id);
+        else selectEer([e.id]);
       }}
       onDblClick={(ev) => ev.stopPropagation()}
     >
       <div class="eer-header" style={{ height: `${HEADER_H}px` }} onPointerDown={p.onHeaderDown}>
         {e.name}
+        <Show when={p.warnings.length}>
+          <span class="eer-warning" title={p.warnings.join("\n")}>
+            !
+          </span>
+        </Show>
       </div>
       <Show when={cardsLinkedTo(e.id).length}>
         <LinkedCardsBadge nodeId={e.id} />
@@ -305,6 +608,129 @@ function EntityView(p: {
         )}
       </For>
     </div>
+  );
+}
+
+/**
+ * A section: a titled frame behind the tables. Only its title catches the pointer
+ * (drag it to move the section with what is in it); its inside lets clicks through.
+ */
+function SectionView(p: {
+  section: EerSection;
+  onTitleDown: (e: PointerEvent) => void;
+  onResizeDown: (e: PointerEvent, dir: ResizeDir) => void;
+}) {
+  const s = p.section;
+  const selected = () => isEerSelected(s.id);
+  const only = () => selected() && eerSelectedIds().length === 1;
+  const editing = () => editingSection() === s.id;
+  /** The title before this edit: Escape goes back to it */
+  let before = s.title;
+  createEffect(on(editing, (ed) => ed && (before = s.title)));
+  const rename = renameOnClick(only, () => setEditingSection(s.id));
+  return (
+    <div
+      class={`node node-section color-${s.color ?? "white"}`}
+      classList={{ selected: selected(), editing: editing() }}
+      data-section-id={s.id}
+      style={{ transform: `translate(${s.x}px, ${s.y}px)`, width: `${s.w}px`, height: `${s.h}px` }}
+    >
+      <div class="node-body" />
+      <div
+        class="frame-title"
+        title={editing() ? undefined : "Click again or double-click to rename"}
+        onPointerDown={(e) => {
+          rename.onPointerDown(e);
+          if (!editing()) p.onTitleDown(e);
+          else e.stopPropagation();
+        }}
+        onClick={rename.onClick}
+        onDblClick={(e) => {
+          e.stopPropagation();
+          selectEer([s.id]);
+          if (canEdit()) setEditingSection(s.id);
+        }}
+      >
+        <Show
+          when={editing()}
+          fallback={
+            <div class="node-text" classList={{ placeholder: !s.title }}>
+              {s.title || "Section"}
+            </div>
+          }
+        >
+          <TextEditor
+            class="node-text editor"
+            value={s.title}
+            onInput={(t) => setSectionTitleLive(s.id, t.replace(/\n/g, " "))}
+            onDone={(t, key) => {
+              setSectionTitle(s.id, key === "Escape" ? before : t.replace(/\n/g, " ").trim());
+              if (editingSection() === s.id) setEditingSection(null);
+            }}
+          />
+        </Show>
+      </div>
+      <Show when={only() && !editing() && canEdit()}>
+        <For each={RESIZE_DIRS}>{(dir) => <div class={`resize-handle ${dir}`} onPointerDown={(e) => p.onResizeDown(e, dir)} />}</For>
+      </Show>
+    </div>
+  );
+}
+
+/** The bar above the selected tables and sections: color, rename, wrap in a section, delete. */
+function EerBar(p: { view: () => DOMRect }) {
+  const box = createMemo(() => {
+    const ids = new Set(eerSelectedIds());
+    const b = bounds([...eer.entities.filter((e) => ids.has(e.id)).map(entityRect), ...eer.sections.filter((s) => ids.has(s.id))]);
+    return b && grow(b, 20);
+  });
+  const items = () => {
+    const ids = new Set(eerSelectedIds());
+    return [...eer.entities.filter((e) => ids.has(e.id)), ...eer.sections.filter((s) => ids.has(s.id))];
+  };
+  const currentColor = () => {
+    const c = items().map((x) => x.color ?? "white");
+    return c.length && c.every((x) => x === c[0]) ? c[0] : null;
+  };
+  const section = () => {
+    const ids = eerSelectedIds();
+    return ids.length === 1 ? sectionById(ids[0]) : undefined;
+  };
+  return (
+    <Show when={box()}>
+      {(b) => (
+        <FloatingBar box={b()} camera={eer.camera} view={p.view}>
+          <For each={COLORS}>
+            {(c) => (
+              <button
+                class={`swatch color-${c}`}
+                classList={{ active: currentColor() === c }}
+                title={c[0].toUpperCase() + c.slice(1)}
+                onClick={() => setEerSelectionColor(c)}
+              />
+            )}
+          </For>
+          <span class="divider" />
+          <Show when={section()}>
+            {(s) => (
+              <button class="icon-btn" title="Rename (Enter)" onClick={() => setEditingSection(s().id)}>
+                <IconRename />
+                <span>Rename</span>
+              </button>
+            )}
+          </Show>
+          <Show when={eerSelectedIds().length > 1}>
+            <AlignMenu count={eerSelectedIds().length} onAlign={alignEerSelection} onDistribute={distributeEerSelection} />
+          </Show>
+          <button class="icon-btn" title="Wrap in a section (Ctrl+G)" onClick={wrapEerSelection}>
+            <IconSection />
+          </button>
+          <button class="icon-btn danger" title="Delete (Delete)" onClick={deleteEerSelection}>
+            <IconTrash />
+          </button>
+        </FloatingBar>
+      )}
+    </Show>
   );
 }
 
@@ -447,6 +873,8 @@ function EntityInspector(p: { entity: Entity }) {
         {(a, i) => <AttributeEditor entity={p.entity} attr={a} first={i() === 0} last={i() === p.entity.attributes.length - 1} />}
       </For>
 
+      <IndexEditor entity={p.entity} />
+
       <div class="eer-section-title">Comment</div>
       <textarea
         class="eer-input eer-textarea"
@@ -468,6 +896,60 @@ function EntityInspector(p: { entity: Entity }) {
           )}
         </For>
       </Show>
+    </>
+  );
+}
+
+/** The table's indexes: which columns, in which order, unique or not, and a name if wanted */
+function IndexEditor(p: { entity: Entity }) {
+  const name = (id: string) => p.entity.attributes.find((a) => a.id === id)?.name ?? "?";
+  return (
+    <>
+      <div class="eer-section-title">
+        Indexes
+        <button class="kd-link" onClick={() => addIndex(p.entity.id)}>
+          + Index
+        </button>
+      </div>
+      <For each={p.entity.indexes ?? []} fallback={<p class="eer-note">None. Primary keys and unique columns have their own.</p>}>
+        {(ix) => (
+          <div class="eer-attr">
+            <div class="eer-attr-row">
+              <input
+                class="eer-input eer-attr-name"
+                placeholder={`idx_${p.entity.name}_${ix.columns.map(name).join("_")}`}
+                value={ix.name}
+                onChange={(e) => updateIndex(p.entity.id, ix.id, { name: e.currentTarget.value.trim() })}
+              />
+              <label class="eer-flag" classList={{ on: ix.unique }} title="Unique: no two rows with the same values">
+                <input type="checkbox" checked={ix.unique} onChange={(e) => updateIndex(p.entity.id, ix.id, { unique: e.currentTarget.checked })} />
+                UQ
+              </label>
+              <span class="eer-attr-actions">
+                <button class="icon-btn small danger" title="Remove index" onClick={() => removeIndex(p.entity.id, ix.id)}>
+                  <IconClose />
+                </button>
+              </span>
+            </div>
+            {/* In index order; click a column to take it in or out */}
+            <div class="eer-index-columns">
+              <For each={ix.columns}>{(id) => <span class="eer-index-col on">{name(id)}</span>}</For>
+              <For each={p.entity.attributes.filter((a) => !ix.columns.includes(a.id))}>
+                {(a) => (
+                  <button class="eer-index-col" title="Add to the index" onClick={() => toggleIndexColumn(p.entity.id, ix.id, a.id)}>
+                    + {a.name}
+                  </button>
+                )}
+              </For>
+              <Show when={ix.columns.length > 1}>
+                <button class="kd-link" title="Take the last column out" onClick={() => toggleIndexColumn(p.entity.id, ix.id, ix.columns[ix.columns.length - 1])}>
+                  − last
+                </button>
+              </Show>
+            </div>
+          </div>
+        )}
+      </For>
     </>
   );
 }

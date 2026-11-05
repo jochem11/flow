@@ -3,12 +3,16 @@
 
 import { batch, createEffect, createRoot, createSignal, on } from "solid-js";
 import { api, errMsg } from "./api";
+import { showPath, type Route } from "./route";
+import { get, ServerError, useShareToken } from "./server";
+import { ROLE_LABEL, roleCanEdit } from "./roles";
 import { fitView } from "./camera";
 import { kanbanRev, kanbanSnapshot, replaceKanban } from "./kanban";
 import { eerRev, eerSnapshot, replaceEer } from "./eer";
-import { applyLayout, board, boardSnapshot, replaceBoard, rev, starterFlow } from "./store";
+import { loadPersonal, loadTrash, noteOpened } from "./personal";
+import { applyLayout, board, boardSnapshot, replaceBoard, rev, setDiagram, starterFlow } from "./store";
 import { toast } from "./toast";
-import type { DocContent, Document, DocumentKind, DocumentMeta, ExportFormat, FlowDoc, Project } from "./types";
+import type { DiagramType, DocContent, Document, DocumentKind, DocumentMeta, ExportFormat, FlowDoc, Project, Role, SharedBoard } from "./types";
 
 // ---------- state ----------
 
@@ -18,8 +22,11 @@ export type View =
   | { type: "project"; projectId: string }
   | { type: "doc"; projectId: string; docId: string };
 
-/** The open document without its content; the content lives in a per-kind store. */
-export type OpenDoc = Omit<Document, "content"> & { kind: DocumentKind };
+/**
+ * The open document without its content (that lives in a per-kind store), with
+ * what the user may do with it, and the share link it was opened through.
+ */
+export type OpenDoc = Omit<Document, "content"> & { kind: DocumentKind; role: Role; share?: string };
 
 const [projects, setProjects] = createSignal<Project[]>([]);
 const [docsByProject, setDocsByProject] = createSignal<Record<string, DocumentMeta[]>>({});
@@ -56,7 +63,9 @@ const AUTOSAVE_MS = 800;
 let timer: ReturnType<typeof setTimeout> | undefined;
 
 function markDirty() {
-  if (!openDoc()) return;
+  const doc = openDoc();
+  if (!doc) return;
+  if (!roleCanEdit(doc.role)) return;
   setSaveState({ kind: "dirty" });
   clearTimeout(timer);
   timer = setTimeout(saveNow, AUTOSAVE_MS);
@@ -121,11 +130,21 @@ const LAST_VIEW_KEY = "flowapp:lastView";
 
 function rememberView(v: View) {
   setView(v);
+  // The address bar (web): a link to what is open (a share link stays as it is)
+  if (v.type === "doc" && !openDoc()?.share) showPath(`/d/${v.docId}`);
+  else if (v.type === "project") showPath(`/p/${v.projectId}`);
+  else if (v.type === "empty") showPath("/");
   try {
     localStorage.setItem(LAST_VIEW_KEY, JSON.stringify(v));
   } catch {
     /* storage unavailable: not important */
   }
+}
+
+/** Loads the projects and their boards again (after uploading projects, accepting an invite). */
+export async function reloadProjects() {
+  await refreshProjects();
+  await Promise.all([...projects().map((p) => refreshDocs(p.id)), loadPersonal()]);
 }
 
 async function refreshProjects() {
@@ -137,13 +156,18 @@ async function refreshDocs(projectId: string) {
   setDocsByProject((all) => ({ ...all, [projectId]: docs }));
 }
 
-/** On startup: load everything and reopen the last viewed document or project. */
-export async function initWorkspace() {
+/**
+ * After logging in: load the user's projects, then open what the start path
+ * asks for (a board, a project), else the last viewed one.
+ */
+export async function initWorkspace(route: Route = { kind: "home" }) {
   try {
     await refreshProjects();
     if (!projects().length) await createStarterProject();
-    await Promise.all(projects().map((p) => refreshDocs(p.id)));
-    await restoreView();
+    await Promise.all([...projects().map((p) => refreshDocs(p.id)), loadPersonal()]);
+    if (route.kind === "doc") await openDocumentById(route.id);
+    else if (route.kind === "project" && projectById(route.id)) await openProject(route.id);
+    else await restoreView();
   } catch (e) {
     toast(`Loading failed: ${errMsg(e)}`, "error");
   } finally {
@@ -181,10 +205,28 @@ export async function openProject(projectId: string) {
   rememberView({ type: "project", projectId });
 }
 
-export async function openDocument(projectId: string, docId: string) {
+/** Opens a board by its id alone (a link), wherever it is. */
+export async function openDocumentById(docId: string) {
+  const known = Object.values(docsByProject()).flat().find((d) => d.id === docId);
+  if (known) return openDocument(known.projectId, docId);
+  try {
+    const doc = await api.loadDocument("", docId);
+    await openDocument(doc.projectId, docId);
+  } catch (e) {
+    toast(`Could not open the board: ${errMsg(e)}`, "error");
+    await restoreView();
+  }
+}
+
+/**
+ * Opens a board. Through a share link, `shared` gives its token and what the
+ * link lets this person do; else their role comes with the project's boards.
+ */
+export async function openDocument(projectId: string, docId: string, shared?: { token: string; role: Role }) {
   const v = view();
-  if (v.type === "doc" && v.docId === docId) return;
+  if (v.type === "doc" && v.docId === docId && openDoc()?.share === shared?.token) return;
   await flushIfDirty();
+  useShareToken(shared?.token ?? null);
   try {
     const doc = await api.loadDocument(projectId, docId);
     const { content, ...rest } = doc;
@@ -195,9 +237,13 @@ export async function openDocument(projectId: string, docId: string) {
       else if (content.kind === "kanban") replaceKanban(content.data);
       else if (content.kind === "eer") replaceEer(content.data);
       else otherContent = content;
-      setOpenDoc({ ...rest, kind: content.kind });
+      // From the server's list of this project's boards; boards of the desktop app's own files are the user's own
+      const role = shared?.role ?? docsOf(projectId).find((d) => d.id === docId)?.role ?? "owner";
+      setOpenDoc({ ...rest, kind: content.kind, role, share: shared?.token });
       rememberView({ type: "doc", projectId, docId });
     });
+    // "Recent" in the sidebar (not for a board seen through its link only)
+    if (!shared) noteOpened({ documentId: docId, projectId, name: rest.name, kind: content.kind, diagram: content.kind === "flow" ? content.data.diagram : undefined });
     if (content.kind === "flow") requestAnimationFrame(() => fitIfNeeded());
   } catch (e) {
     toast(`Could not open document: ${errMsg(e)}`, "error");
@@ -251,7 +297,8 @@ export async function deleteProject(id: string) {
     await refreshProjects();
     setDocsByProject(({ [id]: _, ...rest }) => rest);
     if (view().type === "empty" && projects()[0]) await openProject(projects()[0].id);
-    toast("Project deleted");
+    await loadTrash();
+    toast("Project moved to the trash (restore it from Trash in the sidebar)");
   } catch (e) {
     toast(errMsg(e), "error");
   }
@@ -315,13 +362,15 @@ const DEFAULT_NAMES: Record<DocumentKind, string> = {
   eer: "New EER diagram",
 };
 
+/** A new board, empty or with what `start` gives it (a template: its name and content). */
 export async function createDocument(
   projectId: string,
   folderId: string | null,
   kind: DocumentKind,
+  start?: { name: string; content: DocContent },
 ): Promise<string | null> {
   try {
-    const doc = await api.createDocument(projectId, folderId, DEFAULT_NAMES[kind], kind);
+    const doc = await api.createDocument(projectId, folderId, start?.name ?? DEFAULT_NAMES[kind], kind, start?.content);
     await refreshDocs(projectId);
     await openDocument(projectId, doc.id);
     return doc.id;
@@ -329,6 +378,15 @@ export async function createDocument(
     toast(errMsg(e), "error");
     return null;
   }
+}
+
+/** Changes the open flow board's type: its tools and actions change with it, its blocks stay. */
+export async function changeBoardType(diagram: DiagramType) {
+  const d = openDoc();
+  if (!d || d.kind !== "flow" || board.diagram === diagram) return;
+  setDiagram(diagram);
+  await saveNow();
+  await refreshDocs(d.projectId);
 }
 
 export async function renameDocument(projectId: string, id: string, name: string) {
@@ -363,8 +421,8 @@ export async function deleteDocument(projectId: string, id: string) {
   }
   try {
     await api.deleteDocument(projectId, id);
-    await refreshDocs(projectId);
-    toast("Document deleted");
+    await Promise.all([refreshDocs(projectId), loadTrash()]);
+    toast("Moved to the trash (restore it from Trash in the sidebar)");
   } catch (e) {
     toast(errMsg(e), "error");
   }
@@ -405,3 +463,84 @@ export async function runExport(format: ExportFormat) {
     toast(errMsg(e), "error");
   }
 }
+
+/**
+ * A guest (not logged in) opening a board through its share link: only that
+ * board, without projects or a sidebar.
+ */
+export async function openAsGuest(board: SharedBoard, token: string) {
+  setReady(true);
+  await openDocument(board.projectId, board.documentId, { token, role: board.role });
+}
+
+// ---------- when others change things ----------
+
+/** Set when the open board was taken away while open (Gate shows it to guests). */
+const [accessLost, setAccessLost] = createSignal<string | null>(null);
+export { accessLost };
+
+/**
+ * Checks the open board against the server right now (after someone changed
+ * access): closed when it is gone, read-only (or more) when the role changed.
+ * The live connection then reconnects with the new role (collab/).
+ */
+export async function checkOpenAccess() {
+  const doc = openDoc();
+  // The desktop app's own files have no role: nothing to check
+  if (!doc?.role) return;
+  let role: Role | null = null;
+  try {
+    if (doc.share) role = (await get<SharedBoard>(`/share/${doc.share}`)).role;
+    else role = (await api.listDocuments(doc.projectId)).find((d) => d.id === doc.id)?.role ?? null;
+  } catch (e) {
+    if (!(e instanceof ServerError) || e.status === 0) return; // offline: decide when back
+    role = null;
+  }
+  if (openDoc()?.id !== doc.id) return;
+  if (!role || role === "none") {
+    const name = doc.name;
+    batch(() => {
+      dropOpenDoc();
+      setAccessLost(name);
+      const project = projectById(doc.projectId);
+      rememberView(project ? { type: "project", projectId: project.id } : { type: "empty" });
+    });
+    toast(`You no longer have access to \u201c${name}\u201d`, "error");
+    return;
+  }
+  if (role !== doc.role) {
+    setOpenDoc({ ...doc, role });
+    toast(`Your access to \u201c${doc.name}\u201d changed: ${ROLE_LABEL[role].toLowerCase()}`);
+  }
+}
+
+let reloadTimer: ReturnType<typeof setTimeout> | undefined;
+
+/**
+ * A project changed (someone added, moved or renamed a board or folder, or
+ * people changed): load the sidebar again, shortly (several notices come at once).
+ */
+export function projectsChanged(alsoCheckAccess = false) {
+  clearTimeout(reloadTimer);
+  reloadTimer = setTimeout(async () => {
+    try {
+      await reloadProjects();
+    } catch {
+      return;
+    }
+    // A project that is open but no longer there
+    const v = view();
+    if (v.type === "project" && !projectById(v.projectId)) rememberView({ type: "empty" });
+    const doc = openDoc();
+    // People may have joined or left: who can be assigned on a kanban board
+    if (doc?.kind === "kanban") void import("./people").then((m) => m.loadPeople());
+    if (doc && (alsoCheckAccess || !docsOf(doc.projectId).some((d) => d.id === doc.id))) await checkOpenAccess();
+    else if (doc) {
+      // Renamed or moved by someone else
+      const meta = docsOf(doc.projectId).find((d) => d.id === doc.id);
+      if (meta && (meta.name !== doc.name || meta.folderId !== doc.folderId)) setOpenDoc({ ...doc, name: meta.name, folderId: meta.folderId });
+      if (meta?.role && meta.role !== doc.role) await checkOpenAccess();
+    }
+  }, 150);
+}
+

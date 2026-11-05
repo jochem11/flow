@@ -1,0 +1,27 @@
+{
+  "$schema": "https://schema.tauri.app/config/2",
+  "productName": "Flow Dev",
+  "identifier": "nl.jochem.flowapp.dev",
+  "build": {
+    "beforeBuildCommand": "npm run build:dev"
+  },
+  "app": {
+    "windows": [
+      {
+        "title": "Flow Dev",
+        "width": 1280,
+        "height": 820,
+        "minWidth": 640,
+        "minHeight": 480,
+        "dragDropEnabled": false
+      }
+    ]
+  },
+  "plugins": {
+    "deep-link": {
+      "desktop": {
+        "schemes": ["flowapp-dev"]
+      }
+    }
+  }
+}

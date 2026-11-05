@@ -3,6 +3,24 @@
 // To change a type, change the Rust model, not this file.
 
 export type {
+  // accounts and sharing (the server's API)
+  Me,
+  User,
+  Role,
+  Member,
+  BoardMember,
+  BoardAccess,
+  Invite,
+  ShareLink,
+  LinkAccess,
+  SharedBoard,
+  Comment,
+  Version,
+  VersionMeta,
+  Template,
+  TemplateMeta,
+  CommentAnchor,
+  CommentAuthor,
   // workspace
   Project,
   Folder,
@@ -10,8 +28,14 @@ export type {
   DocumentMeta,
   DocumentKind,
   DocContent,
+  // the sidebar: stars, recent boards, trash
+  ItemKind,
+  Star,
+  RecentBoard,
+  TrashItem,
   // flowchart
   FlowDoc,
+  DiagramType,
   Camera,
   Point,
   ExportFormat,
@@ -21,6 +45,7 @@ export type {
   NodeColor,
   NodeKind,
   Position,
+  Arranged,
   // `Node` clashes with the DOM's `Node` type, so the frontend calls them FlowNode/FlowEdge
   Node as FlowNode,
   Edge as FlowEdge,
@@ -39,8 +64,11 @@ export type {
   KanbanComment,
   KanbanTimeEntry,
   KanbanIcon,
+  Priority,
   EerDoc,
+  EerSection,
   Entity,
+  TableIndex,
   Attribute,
   Relation,
   Cardinality,

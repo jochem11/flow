@@ -2,7 +2,7 @@
 
 use tauri::AppHandle;
 
-use super::folders::ensure_folder_exists;
+use flow_core::folders::ensure_folder_exists;
 use super::projects::load_project;
 use crate::CmdResult;
 use crate::models::{DocContent, Document, DocumentKind, DocumentMeta};

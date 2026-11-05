@@ -1,0 +1,51 @@
+# Flow for development, with its database:
+#   npm run server:dev   (= docker compose up --build)   then open http://localhost:8080
+# For production see docker-compose.prod.yml.
+#
+# Your own PostgreSQL instead of the one in here: set DATABASE_URL in .env and
+# start only Flow:  docker compose up -d --build --no-deps flow
+#
+# Mail goes to ./outbox (as files) until SMTP_HOST is set. For Google sign-in set
+# GOOGLE_CLIENT_ID and GOOGLE_CLIENT_SECRET (see the README). Links into the
+# desktop app open Flow Dev (flowapp-dev://), not the normal Flow.
+services:
+  db:
+    image: postgres:16
+    environment:
+      POSTGRES_USER: flow
+      POSTGRES_PASSWORD: flow
+      POSTGRES_DB: flow
+    volumes:
+      - db:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U flow"]
+      interval: 2s
+      retries: 30
+
+  flow:
+    build:
+      context: .
+      args:
+        MODE: development
+    depends_on:
+      db:
+        condition: service_healthy
+    ports:
+      - "8080:8080"
+    environment:
+      DATABASE_URL: ${DATABASE_URL:-postgres://flow:flow@db/flow}
+      PUBLIC_URL: ${PUBLIC_URL:-http://localhost:8080}
+      MAIL_OUTBOX: /outbox
+      GOOGLE_CLIENT_ID: ${GOOGLE_CLIENT_ID:-}
+      GOOGLE_CLIENT_SECRET: ${GOOGLE_CLIENT_SECRET:-}
+      SMTP_HOST: ${SMTP_HOST:-}
+      SMTP_PORT: ${SMTP_PORT:-587}
+      SMTP_USER: ${SMTP_USER:-}
+      SMTP_PASSWORD: ${SMTP_PASSWORD:-}
+      MAIL_FROM: ${MAIL_FROM:-Flow <no-reply@localhost>}
+      DESKTOP_SCHEME: flowapp-dev
+    volumes:
+      - ./outbox:/outbox
+
+volumes:
+  db:

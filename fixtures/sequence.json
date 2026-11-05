@@ -1,32 +1,272 @@
 {
-  "about": "Activation bars that follow from messages. Checked by src/lib/sequence.test.ts (analyze) and by flow_svg.rs (activations). Keep both in step.",
+  "about": "Activation bars and call numbers (for colors) that follow from messages. Checked by src/lib/sequence.test.ts (analyze) and by flow_svg.rs (analyze). Keep both in step.",
   "cases": [
     {
       "name": "calls and returns, solid or dashed",
       "nodes": [
-        { "id": "a", "kind": "lifeline", "x": 0, "y": 0, "w": 140, "h": 500, "text": "", "color": "white" },
-        { "id": "b", "kind": "lifeline", "x": 300, "y": 0, "w": 140, "h": 500, "text": "", "color": "white" },
-        { "id": "c", "kind": "lifeline", "x": 600, "y": 0, "w": 140, "h": 500, "text": "", "color": "white" }
+        {
+          "id": "a",
+          "kind": "lifeline",
+          "x": 0,
+          "y": 0,
+          "w": 140,
+          "h": 500,
+          "text": "",
+          "color": "white"
+        },
+        {
+          "id": "b",
+          "kind": "lifeline",
+          "x": 300,
+          "y": 0,
+          "w": 140,
+          "h": 500,
+          "text": "",
+          "color": "white"
+        },
+        {
+          "id": "c",
+          "kind": "lifeline",
+          "x": 600,
+          "y": 0,
+          "w": 140,
+          "h": 500,
+          "text": "",
+          "color": "white"
+        }
       ],
       "edges": [
-        { "id": "m1", "from": "a", "to": "b", "messageY": 100 },
-        { "id": "m2", "from": "b", "to": "c", "messageY": 140 },
-        { "id": "m3", "from": "c", "to": "b", "messageY": 200 },
-        { "id": "m4", "from": "b", "to": "a", "messageY": 260, "pattern": "dashed" }
+        {
+          "id": "m1",
+          "from": "a",
+          "to": "b",
+          "messageY": 100
+        },
+        {
+          "id": "m2",
+          "from": "b",
+          "to": "c",
+          "messageY": 140
+        },
+        {
+          "id": "m3",
+          "from": "c",
+          "to": "b",
+          "messageY": 200
+        },
+        {
+          "id": "m4",
+          "from": "b",
+          "to": "a",
+          "messageY": 260,
+          "pattern": "dashed"
+        }
       ],
-      "bars": { "a": [[90, 484]], "b": [[100, 260]], "c": [[140, 200]] }
+      "bars": {
+        "a": [
+          [
+            90,
+            484,
+            0,
+            null
+          ]
+        ],
+        "b": [
+          [
+            100,
+            260,
+            0,
+            "m1"
+          ]
+        ],
+        "c": [
+          [
+            140,
+            200,
+            0,
+            "m2"
+          ]
+        ]
+      },
+      "colors": {
+        "m1": 0,
+        "m2": 1,
+        "m3": 1,
+        "m4": 0
+      }
     },
     {
       "name": "a call without a return, and a self-message",
       "nodes": [
-        { "id": "a", "kind": "lifeline", "x": 0, "y": 0, "w": 140, "h": 400, "text": "", "color": "white" },
-        { "id": "b", "kind": "lifeline", "x": 300, "y": 0, "w": 140, "h": 400, "text": "", "color": "white" }
+        {
+          "id": "a",
+          "kind": "lifeline",
+          "x": 0,
+          "y": 0,
+          "w": 140,
+          "h": 400,
+          "text": "",
+          "color": "white"
+        },
+        {
+          "id": "b",
+          "kind": "lifeline",
+          "x": 300,
+          "y": 0,
+          "w": 140,
+          "h": 400,
+          "text": "",
+          "color": "white"
+        }
       ],
       "edges": [
-        { "id": "m1", "from": "a", "to": "b", "messageY": 80 },
-        { "id": "m2", "from": "b", "to": "b", "messageY": 120 }
+        {
+          "id": "m1",
+          "from": "a",
+          "to": "b",
+          "messageY": 80
+        },
+        {
+          "id": "m2",
+          "from": "b",
+          "to": "b",
+          "messageY": 120
+        }
       ],
-      "bars": { "a": [[70, 384]], "b": [[80, 166]] }
+      "bars": {
+        "a": [
+          [
+            70,
+            384,
+            0,
+            null
+          ]
+        ],
+        "b": [
+          [
+            80,
+            166,
+            0,
+            "m1"
+          ]
+        ]
+      },
+      "colors": {
+        "m1": 0
+      }
+    },
+    {
+      "name": "a call inside a call, and a callback to the lifeline that started it",
+      "nodes": [
+        {
+          "id": "a",
+          "kind": "lifeline",
+          "x": 0,
+          "y": 0,
+          "w": 140,
+          "h": 600,
+          "text": "",
+          "color": "white"
+        },
+        {
+          "id": "b",
+          "kind": "lifeline",
+          "x": 300,
+          "y": 0,
+          "w": 140,
+          "h": 600,
+          "text": "",
+          "color": "white"
+        },
+        {
+          "id": "c",
+          "kind": "lifeline",
+          "x": 600,
+          "y": 0,
+          "w": 140,
+          "h": 600,
+          "text": "",
+          "color": "white"
+        }
+      ],
+      "edges": [
+        {
+          "id": "m1",
+          "from": "a",
+          "to": "b",
+          "messageY": 100
+        },
+        {
+          "id": "m2",
+          "from": "b",
+          "to": "c",
+          "messageY": 140
+        },
+        {
+          "id": "m3",
+          "from": "c",
+          "to": "a",
+          "messageY": 220
+        },
+        {
+          "id": "m4",
+          "from": "a",
+          "to": "b",
+          "messageY": 260
+        },
+        {
+          "id": "m5",
+          "from": "b",
+          "to": "a",
+          "messageY": 340,
+          "pattern": "dashed"
+        }
+      ],
+      "bars": {
+        "a": [
+          [
+            90,
+            584,
+            0,
+            null
+          ],
+          [
+            220,
+            356,
+            1,
+            "m3"
+          ]
+        ],
+        "b": [
+          [
+            100,
+            356,
+            0,
+            "m1"
+          ],
+          [
+            260,
+            340,
+            1,
+            "m4"
+          ]
+        ],
+        "c": [
+          [
+            140,
+            236,
+            0,
+            "m2"
+          ]
+        ]
+      },
+      "colors": {
+        "m1": 0,
+        "m2": 1,
+        "m3": 2,
+        "m4": 3,
+        "m5": 3
+      }
     }
   ]
 }

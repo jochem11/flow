@@ -5,11 +5,16 @@
 // Markdown shortcuts still work while typing: "## " for a heading, "- " for a
 // list, "[ ] " for a checkbox, **bold**, and so on.
 
+import { setTextReplacer } from "../lib/history";
 import { Editor } from "@tiptap/core";
 import { TaskItem, TaskList } from "@tiptap/extension-list";
 import { Placeholder } from "@tiptap/extensions";
 import { Markdown } from "@tiptap/markdown";
 import StarterKit from "@tiptap/starter-kit";
+import Collaboration from "@tiptap/extension-collaboration";
+import CollaborationCaret from "@tiptap/extension-collaboration-caret";
+import type { WebsocketProvider } from "y-websocket";
+import type * as Y from "yjs";
 import { createEffect, createSignal, For, on, onCleanup, onMount, Show } from "solid-js";
 import { handleLinkClick } from "../lib/markdown";
 
@@ -52,6 +57,14 @@ export function RichTextEditor(p: {
   class?: string;
   /** "page" fills the whole editor area, for text documents */
   variant?: "inline" | "page";
+  /** Only to read (no formatting bar, no typing) */
+  readOnly?: boolean;
+  /**
+   * Editing together (a text document from the server): the content lives in
+   * this shared document; `value` only fills it when it is new and `seed()` says
+   * we are the one to do so (see collab/).
+   */
+  collab?: { doc: Y.Doc; provider: WebsocketProvider; seed: () => boolean; user: { name: string; color: string } };
 }) {
   let host!: HTMLDivElement;
   let editor: Editor | undefined;
@@ -65,14 +78,22 @@ export function RichTextEditor(p: {
     editor = new Editor({
       element: host,
       extensions: [
-        StarterKit.configure({ link: { openOnClick: false, autolink: true } }),
+        // Editing together brings its own undo (only your own changes)
+        StarterKit.configure({ link: { openOnClick: false, autolink: true }, ...(p.collab ? { undoRedo: false } : {}) }),
+        ...(p.collab
+          ? [
+              Collaboration.configure({ document: p.collab.doc, field: "text" }),
+              CollaborationCaret.configure({ provider: p.collab.provider, user: p.collab.user }),
+            ]
+          : []),
         TaskList,
         TaskItem.configure({ nested: true }),
         Placeholder.configure({ placeholder: p.placeholder ?? "" }),
         Markdown,
       ],
-      content: p.value,
+      content: p.collab ? undefined : p.value,
       contentType: "markdown",
+      editable: !p.readOnly,
       editorProps: { attributes: { class: "markdown rich-text-content" } },
       onUpdate: ({ editor }) => {
         lastValue = cleanMarkdown(editor.getMarkdown());
@@ -82,18 +103,46 @@ export function RichTextEditor(p: {
     });
   });
 
+  // A text document: the version history can put old text in it
+  onMount(() => {
+    if (p.variant !== "page") return;
+    setTextReplacer((markdown) => editor?.commands.setContent(markdown, { contentType: "markdown" }));
+    onCleanup(() => setTextReplacer(null));
+  });
+
+  // Editing together: a new shared text is filled from the saved one, by one person
+  onMount(() => {
+    const c = p.collab;
+    if (!c) return;
+    const fill = () => {
+      if (!editor || !c.seed() || c.doc.getXmlFragment("text").length > 0) return;
+      editor.commands.setContent(p.value, { contentType: "markdown" });
+    };
+    const onSync = (synced: boolean) => synced && setTimeout(fill, 50);
+    c.provider.on("sync", onSync);
+    if (c.provider.synced) setTimeout(fill, 50);
+    // The server's "you fill it" may come just after the sync
+    const late = setTimeout(fill, 600);
+    onCleanup(() => {
+      clearTimeout(late);
+      c.provider.off("sync", onSync);
+    });
+  });
+
   // Load new content when it changes from outside (e.g. another card is opened).
   createEffect(
     on(
       () => p.value,
       (value) => {
-        if (!editor || value === lastValue) return;
+        if (!editor || value === lastValue || p.collab) return;
         lastValue = value;
         editor.commands.setContent(value, { contentType: "markdown", emitUpdate: false });
       },
       { defer: true },
     ),
   );
+
+  createEffect(on(() => p.readOnly, (ro) => editor?.setEditable(!ro), { defer: true }));
 
   onCleanup(() => editor?.destroy());
 
@@ -104,7 +153,7 @@ export function RichTextEditor(p: {
 
   return (
     <div class={`rich-text ${p.variant ?? "inline"} ${p.class ?? ""}`}>
-      <div class="format-bar rich-text-toolbar" role="toolbar" aria-label="Formatting">
+      <div class="format-bar rich-text-toolbar" role="toolbar" aria-label="Formatting" hidden={p.readOnly}>
         <For each={ACTIONS}>
           {(group, i) => (
             <>

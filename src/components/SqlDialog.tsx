@@ -16,22 +16,29 @@ export const DIALECTS: { value: SqlDialect; label: string }[] = [
   { value: "oracle", label: "Oracle" },
 ];
 
-export function SqlDialog(p: { initial: SqlDialect; onClose: () => void }) {
-  const [dialect, setDialect] = createSignal<SqlDialect>(p.initial);
-  const [sql] = createResource(dialect, (d) => api.eerSql(eerSnapshot(), d).catch((e) => `-- ${errMsg(e)}`));
+/** The SQL of a database, or DBML (dbdiagram.io and other tools) */
+export type SchemaFormat = SqlDialect | "dbml";
+const FORMATS: { value: SchemaFormat; label: string }[] = [...DIALECTS, { value: "dbml", label: "DBML" }];
+
+export function SqlDialog(p: { initial: SchemaFormat; onClose: () => void }) {
+  const [format, setFormat] = createSignal<SchemaFormat>(p.initial);
+  const [code] = createResource(format, (f) =>
+    (f === "dbml" ? api.eerDbml(eerSnapshot()) : api.eerSql(eerSnapshot(), f)).catch((e) => `-- ${errMsg(e)}`),
+  );
 
   return (
     <PreviewDialog
-      title="SQL"
-      tabs={DIALECTS}
-      tab={dialect()}
-      onTab={setDialect}
-      code={sql.loading ? undefined : sql() ?? ""}
+      title={format() === "dbml" ? "DBML" : "SQL"}
+      tabs={FORMATS}
+      tab={format()}
+      onTab={setFormat}
+      code={code.loading ? undefined : (code() ?? "")}
       lang="sql"
-      copyName="SQL"
+      copyName={format() === "dbml" ? "DBML" : "SQL"}
       downloadTitle="Saves a .sql file to your Downloads folder"
-      canDownload
-      onDownload={() => runExport(dialect())}
+      // DBML: copy it (to paste in dbdiagram.io and the like)
+      canDownload={format() !== "dbml"}
+      onDownload={() => format() !== "dbml" && runExport(format() as SqlDialect)}
       onClose={p.onClose}
     />
   );

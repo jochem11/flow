@@ -6,8 +6,10 @@
 
 import { createSignal } from "solid-js";
 import { createStore, produce, reconcile, unwrap } from "solid-js/store";
+import { me } from "./auth";
 import { uid } from "./store";
-import type { KanbanCard, KanbanColumn, KanbanDoc, KanbanIcon, KanbanLabel, KanbanTimeEntry, NodeColor } from "./types";
+import type { KanbanCard, KanbanColumn, KanbanDoc, KanbanIcon, KanbanLabel, KanbanTimeEntry, NodeColor, Priority } from "./types";
+import { makesLoop, openBlockers } from "./planning";
 
 export const [kanban, setKanban] = createStore<KanbanDoc>({ columns: [], labels: [] });
 
@@ -240,18 +242,60 @@ export function updateCard(cardId: string, changes: Partial<Omit<KanbanCard, "id
   touch();
 }
 
-/** Deletes a card. Its subtasks stay, but no longer have a parent. */
+/** Deletes a card. Its subtasks stay, but no longer have a parent; cards it blocked no longer wait for it. */
 export function deleteCard(cardId: string) {
   setKanban(
     produce((board) => {
       for (const col of board.columns) {
         col.cards = col.cards.filter((c) => c.id !== cardId);
-        for (const c of col.cards) if (c.parentId === cardId) c.parentId = undefined;
+        for (const c of col.cards) {
+          if (c.parentId === cardId) c.parentId = undefined;
+          if (c.blockedBy?.includes(cardId)) c.blockedBy = c.blockedBy.filter((id) => id !== cardId);
+        }
       }
     }),
   );
   touch();
 }
+
+// ---------- planning ----------
+
+/** Start and due date (`YYYY-MM-DD`; null clears it). A start after the due date moves the due date along. */
+export function setCardDates(cardId: string, dates: { startDate?: string | null; dueDate?: string | null }) {
+  mutateCard(cardId, (card) => {
+    if (dates.startDate !== undefined) card.startDate = dates.startDate ?? undefined;
+    if (dates.dueDate !== undefined) card.dueDate = dates.dueDate ?? undefined;
+    if (card.startDate && card.dueDate && card.startDate > card.dueDate) {
+      if (dates.startDate !== undefined) card.dueDate = card.startDate;
+      else card.startDate = card.dueDate;
+    }
+  });
+}
+
+export function setPriority(cardId: string, priority: Priority | null) {
+  mutateCard(cardId, (card) => (card.priority = priority ?? undefined));
+}
+
+/** `blockerId` must be done before `cardId` can be (or no longer). False when that would make a loop. */
+export function toggleBlocker(cardId: string, blockerId: string): boolean {
+  const card = cardById(cardId);
+  if (!card) return false;
+  const has = (card.blockedBy ?? []).includes(blockerId);
+  if (!has && makesLoop(cardId, blockerId, cardById)) return false;
+  mutateCard(cardId, (c) => {
+    const ids = c.blockedBy ?? [];
+    c.blockedBy = has ? ids.filter((id) => id !== blockerId) : [...ids, blockerId];
+  });
+  return true;
+}
+
+/** The cards that block this one and are not done yet */
+export const blockersOf = (cardId: string) => {
+  const card = cardById(cardId);
+  return card ? openBlockers(card, cardById, isDone) : [];
+};
+/** The cards waiting for this one */
+export const blockingOf = (cardId: string) => allCards().filter((c) => (c.blockedBy ?? []).includes(cardId));
 
 /**
  * Moves a card into `toColumnId`, before the card currently at `toIndex`
@@ -364,6 +408,11 @@ export function deleteComment(cardId: string, commentId: string) {
 // running timer; storing the start time (instead of a counter) keeps it correct
 // when the app is closed in between. When a session ends, its duration is
 // added to `spentHours`, which stays the card's total and can still be edited by hand.
+//
+// Every session says who spent the time (`userId`, `userName`). Each person has
+// their own timer: several people can track time on one card at once, and
+// "the running session" is always yours. (The desktop app's own files have no
+// users; sessions there have no owner and are all yours.)
 
 const HOUR = 3_600_000;
 
@@ -372,13 +421,35 @@ export const timeEntries = (card: KanbanCard): KanbanTimeEntry[] => card.timeEnt
 /** Duration of a session in ms; a running one counts until `now`. */
 export const entryMs = (e: KanbanTimeEntry, now = Date.now()) => (e.endedAt ?? now) - e.startedAt;
 
-/** The running session on this board, if any. */
+/** The logged-in user, as a session's owner (none in the desktop app's own files) */
+const owner = () => {
+  const u = me()?.user;
+  return u ? { userId: u.id, userName: u.name } : {};
+};
+
+/** Is this session yours? (Sessions without an owner are from before accounts.) */
+export const isMine = (e: KanbanTimeEntry, userId = me()?.user.id) => !e.userId || e.userId === userId;
+
+/** Your running session on this board, if any. */
 export function runningEntry(): { card: KanbanCard; entry: KanbanTimeEntry } | undefined {
   for (const card of allCards()) {
-    const entry = timeEntries(card).find((e) => e.endedAt == null);
+    const entry = timeEntries(card).find((e) => e.endedAt == null && isMine(e));
     if (entry) return { card, entry };
   }
   return undefined;
+}
+
+/** Time spent on a card per person (running sessions count until `now`), most first. */
+export function timeByPerson(card: KanbanCard, now = Date.now()): { userId: string | null; name: string; ms: number }[] {
+  const by = new Map<string, { userId: string | null; name: string; ms: number }>();
+  for (const e of timeEntries(card)) {
+    const key = e.userId ?? "";
+    const row = by.get(key) ?? { userId: e.userId ?? null, name: e.userName ?? "Unknown", ms: 0 };
+    row.ms += entryMs(e, now);
+    if (e.userName) row.name = e.userName;
+    by.set(key, row);
+  }
+  return [...by.values()].sort((a, b) => b.ms - a.ms);
 }
 
 /** Adds (or with a negative value, removes) hours from a card's total. */
@@ -392,8 +463,8 @@ function addSpent(card: KanbanCard, hours: number) {
  * Works on a plain card or a store draft; returns whether anything changed.
  * Also used by timer.ts to stop a timer in a board that is not open.
  */
-export function closeRunningEntry(card: KanbanCard, at: number): boolean {
-  const entry = (card.timeEntries ?? []).find((e) => e.endedAt == null);
+export function closeRunningEntry(card: KanbanCard, at: number, userId = me()?.user.id): boolean {
+  const entry = (card.timeEntries ?? []).find((e) => e.endedAt == null && isMine(e, userId));
   if (!entry) return false;
   entry.endedAt = Math.max(at, entry.startedAt);
   addSpent(card, (entry.endedAt - entry.startedAt) / HOUR);
@@ -408,12 +479,17 @@ function mutateCard(cardId: string, fn: (card: KanbanCard) => void) {
   touch();
 }
 
-/** Stops whatever runs on this board, then starts a session on `cardId`. Returns the start time. */
+/**
+ * Stops your timer on this board, then starts a session of yours on `cardId`
+ * (and assigns you to the card if you were not). Returns the start time.
+ */
 export function startEntry(cardId: string): number {
   stopRunningEntry();
   const startedAt = Date.now();
+  const who = owner();
   mutateCard(cardId, (card) => {
-    card.timeEntries = [...(card.timeEntries ?? []), { id: uid(), startedAt, note: "" }];
+    card.timeEntries = [...(card.timeEntries ?? []), { id: uid(), startedAt, note: "", ...who }];
+    if (who.userId && !(card.assigneeIds ?? []).includes(who.userId)) card.assigneeIds = [...(card.assigneeIds ?? []), who.userId];
   });
   return startedAt;
 }
@@ -427,7 +503,7 @@ export function stopRunningEntry() {
 export function addTimeEntry(cardId: string, startedAt: number, endedAt: number, note = "") {
   if (endedAt <= startedAt) return;
   mutateCard(cardId, (card) => {
-    card.timeEntries = [...(card.timeEntries ?? []), { id: uid(), startedAt, endedAt, note }];
+    card.timeEntries = [...(card.timeEntries ?? []), { id: uid(), startedAt, endedAt, note, ...owner() }];
     card.timeEntries.sort((a, b) => a.startedAt - b.startedAt);
     addSpent(card, (endedAt - startedAt) / HOUR);
   });
@@ -459,3 +535,25 @@ export function deleteTimeEntry(cardId: string, entryId: string) {
     card.timeEntries = card.timeEntries!.filter((e) => e.id !== entryId);
   });
 }
+
+/** An older state of the board (version history), as a change that everyone gets. */
+export function restoreKanban(doc: KanbanDoc) {
+  setKanban(reconcile(normalize(doc)));
+  touch();
+}
+
+/** Changes from someone else (editing together): the board as it is now. */
+export function applyRemoteKanban(doc: KanbanDoc) {
+  setKanban(reconcile(normalize(doc)));
+}
+
+// ---------- people ----------
+
+/** Assigns someone to a card, or takes them off it. */
+export function toggleAssignee(cardId: string, userId: string) {
+  mutateCard(cardId, (card) => {
+    const ids = card.assigneeIds ?? [];
+    card.assigneeIds = ids.includes(userId) ? ids.filter((id) => id !== userId) : [...ids, userId];
+  });
+}
+

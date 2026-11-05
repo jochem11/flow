@@ -1,7 +1,15 @@
 // Kanban editor: columns with cards. Cards and columns can be dragged around;
 // clicking a card opens it in a dialog (KanbanCardDialog.tsx).
 
-import { createEffect, createSignal, For, on, onCleanup, onMount, Show } from "solid-js";
+import { personById } from "../lib/people";
+import { Avatar } from "./AccountMenu";
+import { threadsOn } from "../lib/comments";
+import { canEdit } from "../lib/access";
+import { createEffect, createSignal, For, Match, on, onCleanup, onMount, Show, Switch } from "solid-js";
+import { filter, loadView, setFilter, view, visible } from "../lib/kanbanView";
+import { isFiltering, NO_FILTER } from "../lib/planning";
+import { KanbanList, KanbanToolbar } from "./KanbanViews";
+import { KanbanTimeline } from "./KanbanTimeline";
 import {
   addCard,
   addColumn,
@@ -45,6 +53,7 @@ import {
   KANBAN_ICONS,
 } from "./icons";
 import { CardDialog, IconPicker, LabelContent } from "./KanbanCardDialog";
+import { BlockedChip, DueChip, PriorityIcon } from "./Planning";
 import { Menu } from "./Menu";
 
 const COLORS: NodeColor[] = ["white", "yellow", "green", "blue", "purple", "pink"];
@@ -86,7 +95,7 @@ function performDrop() {
   const d = drag;
   const at = dropAt();
   endDrag();
-  if (!d || !at) return;
+  if (!d || !at || !canEdit()) return;
   if (d.type === "card" && at.type === "card") moveCard(d.id, at.column, at.index);
   if (d.type === "column" && at.type === "column") moveColumn(d.id, at.index);
 }
@@ -124,15 +133,39 @@ export function KanbanEditor() {
     setRenamingColumn(null);
   });
 
+  // Another board: its own view (remembered per board), and no filter
+  createEffect(
+    on(
+      () => openDoc()?.id,
+      (id) => {
+        if (id) loadView(id);
+        setFilter(NO_FILTER);
+      },
+    ),
+  );
+
   return (
     <div class="kanban">
       <Show when={kanban.columns.length} fallback={<EmptyBoard />}>
-        <div class="kanban-board" onDragEnd={endDrag}>
-          <For each={kanban.columns}>{(col, i) => <Column column={col} index={i()} />}</For>
-          <button class="kanban-add-column" onClick={() => setRenamingColumn(addColumn())}>
-            <IconPlus /> Add column
-          </button>
-        </div>
+        <KanbanToolbar />
+        <Switch>
+          <Match when={view() === "list"}>
+            <KanbanList />
+          </Match>
+          <Match when={view() === "timeline"}>
+            <KanbanTimeline />
+          </Match>
+          <Match when={view() === "board"}>
+            <div class="kanban-board" onDragEnd={endDrag}>
+              <For each={kanban.columns}>{(col, i) => <Column column={col} index={i()} />}</For>
+              <Show when={canEdit()}>
+                <button class="kanban-add-column" onClick={() => setRenamingColumn(addColumn())}>
+                  <IconPlus /> Add column
+                </button>
+              </Show>
+            </div>
+          </Match>
+        </Switch>
       </Show>
       <Show when={openCardId()}>
         {(id) => <CardDialog cardId={id()} onOpen={setOpenCardId} onClose={() => setOpenCardId(null)} />}
@@ -148,7 +181,7 @@ function EmptyBoard() {
         <IconKanban />
         <h2>This board has no columns yet</h2>
         <p>Start with the usual three, or add your own.</p>
-        <div class="kanban-empty-actions">
+        <div class="kanban-empty-actions" hidden={!canEdit()}>
           <button class="text-btn primary" onClick={addDefaultColumns}>
             {DEFAULT_COLUMNS.join(" · ")}
           </button>
@@ -201,7 +234,7 @@ function Column(p: { column: KanbanColumn; index: number }) {
     >
       <header
         class="kanban-column-head"
-        draggable={renamingColumn() !== id()}
+        draggable={canEdit() && renamingColumn() !== id()}
         onDragStart={(e) => {
           drag = { type: "column", id: id() };
           setDragging(id());
@@ -213,7 +246,7 @@ function Column(p: { column: KanbanColumn; index: number }) {
         <Show
           when={renamingColumn() === id()}
           fallback={
-            <button class="kanban-column-title" title="Rename" onClick={() => setRenamingColumn(id())}>
+            <button class="kanban-column-title" title="Rename" disabled={!canEdit()} onClick={() => setRenamingColumn(id())}>
               {p.column.title}
             </button>
           }
@@ -227,7 +260,9 @@ function Column(p: { column: KanbanColumn; index: number }) {
             }}
           />
         </Show>
-        <span class="kanban-count">{p.column.cards.length}</span>
+        <span class="kanban-count">
+          {isFiltering(filter()) ? `${p.column.cards.filter(visible).length}/${p.column.cards.length}` : p.column.cards.length}
+        </span>
         <Show when={p.column.done}>
           <span class="kanban-done-mark" title="Cards in this column count as done">
             <IconCheck />
@@ -243,19 +278,24 @@ function Column(p: { column: KanbanColumn; index: number }) {
           <button class="icon-btn small" title="Add card" onClick={() => setComposing(id())}>
             <IconPlus />
           </button>
-          <ColumnMenu column={p.column} />
+          <Show when={canEdit()}>
+            <ColumnMenu column={p.column} />
+          </Show>
         </span>
       </header>
 
       <div class="kanban-cards">
         <For each={p.column.cards}>
           {(card, i) => (
-            <Card
-              card={card}
-              columnId={id()}
-              index={i()}
-              indicator={cardDropIndex() === null ? null : indicator(cardDropIndex()!, i(), p.column.cards.length)}
-            />
+            // Filtered out: not shown, but the others keep their place for dragging
+            <Show when={visible(card)}>
+              <Card
+                card={card}
+                columnId={id()}
+                index={i()}
+                indicator={cardDropIndex() === null ? null : indicator(cardDropIndex()!, i(), p.column.cards.length)}
+              />
+            </Show>
           )}
         </For>
         <Show
@@ -266,7 +306,9 @@ function Column(p: { column: KanbanColumn; index: number }) {
             </button>
           }
         >
-          <CardComposer columnId={id()} />
+          <Show when={canEdit()}>
+            <CardComposer columnId={id()} />
+          </Show>
         </Show>
       </div>
     </div>
@@ -342,7 +384,8 @@ function Card(p: { card: KanbanCard; columnId: string; index: number; indicator:
   const cardLabels = () => (p.card.labelIds ?? []).map(labelById).filter((l) => l !== undefined);
   const subtasks = () => subtaskProgress(p.card.id);
   const checklist = () => taskProgress(p.card.description);
-  const comments = () => p.card.comments?.length ?? 0;
+  // The card's own discussion, and comment threads on it
+  const comments = () => (p.card.comments?.length ?? 0) + threadsOn("card", p.card.id).length;
   const hasHours = () => p.card.expectedHours != null || p.card.spentHours != null;
   const overEstimate = () =>
     p.card.expectedHours != null && (p.card.spentHours ?? 0) > p.card.expectedHours;
@@ -363,7 +406,7 @@ function Card(p: { card: KanbanCard; columnId: string; index: number; indicator:
         dragging: dragging() === p.card.id,
       }}
       tabIndex={0}
-      draggable={true}
+      draggable={canEdit()}
       onClick={() => setOpenCardId(p.card.id)}
       onKeyDown={(e) => e.key === "Enter" && setOpenCardId(p.card.id)}
       onDragStart={(e) => {
@@ -402,13 +445,31 @@ function Card(p: { card: KanbanCard; columnId: string; index: number; indicator:
           </div>
         )}
       </Show>
-      <div class="kanban-card-title">{p.card.title}</div>
-      <TimerButton cardId={p.card.id} />
+      <div class="kanban-card-title">
+        <Show when={p.card.priority}>{(pr) => <PriorityIcon priority={pr()} />}</Show>
+        {p.card.title}
+      </div>
+      <Show when={canEdit()}>
+        <TimerButton cardId={p.card.id} />
+      </Show>
       <Show when={snippet()}>
         <div class="kanban-card-snippet">{snippet()}</div>
       </Show>
-      <Show when={subtasks().total || checklist().total || comments() || hasHours() || p.card.links?.length}>
+      <Show
+        when={
+          subtasks().total ||
+          checklist().total ||
+          comments() ||
+          hasHours() ||
+          p.card.links?.length ||
+          p.card.assigneeIds?.length ||
+          p.card.dueDate ||
+          p.card.blockedBy?.length
+        }
+      >
         <div class="kanban-card-badges">
+          <BlockedChip card={p.card} />
+          <DueChip card={p.card} />
           <Show when={subtasks().total}>
             <span class="badge" classList={{ complete: subtasks().done === subtasks().total }} title="Subtasks done">
               <IconSubtasks /> {subtasks().done}/{subtasks().total}
@@ -433,6 +494,17 @@ function Card(p: { card: KanbanCard; columnId: string; index: number; indicator:
           <Show when={p.card.links?.length}>
             <span class="badge" title="Linked flowchart blocks">
               <IconFlow /> {p.card.links!.length}
+            </span>
+          </Show>
+          {/* Who works on it */}
+          <Show when={p.card.assigneeIds?.length}>
+            <span class="kanban-card-assignees" title={(p.card.assigneeIds ?? []).map((id) => personById(id)?.name ?? "Former member").join(", ")}>
+              <For each={(p.card.assigneeIds ?? []).slice(0, 3)}>
+                {(id) => <Avatar name={personById(id)?.name ?? "?"} url={personById(id)?.avatarUrl} size={20} />}
+              </For>
+              <Show when={(p.card.assigneeIds ?? []).length > 3}>
+                <span class="kanban-card-more">+{(p.card.assigneeIds ?? []).length - 3}</span>
+              </Show>
             </span>
           </Show>
         </div>

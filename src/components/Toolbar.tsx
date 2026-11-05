@@ -1,8 +1,16 @@
 import { createSignal, For, onCleanup, Show, type JSX } from "solid-js";
+import { IconPanel } from "./IconPanel";
+import { addImages } from "../lib/files";
+import { pastePoint } from "../lib/camera";
+import { openDoc } from "../lib/workspace";
 import type { NodeKind } from "../lib/types";
-import { setUi, ui, type Tool } from "../lib/store";
+import { board, setUi, ui, type Tool } from "../lib/store";
+import { boardTypeOf, offersTool, type BoardType } from "../lib/boardTypes";
 import {
   IconUml,
+  IconTopic,
+  IconImage,
+  IconStar,
   UML_ICONS,
   IconBox,
   IconDiamond,
@@ -32,6 +40,7 @@ const GROUPS: ToolDef[][] = [
   [
     { tool: "label", label: "Label", key: "T", icon: IconLabel },
     { tool: "note", label: "Note", key: "N", icon: IconNote },
+    { tool: "topic", label: "Mind map topic (then Tab: subtopic, Enter: next topic)", key: "M", icon: IconTopic },
   ],
   [
     { tool: "line", label: "Line (free, or attached to blocks)", key: "L", icon: IconLine },
@@ -145,10 +154,72 @@ export const TOOL_KEYS: Record<string, Tool> = Object.fromEntries(
   GROUPS.flat().map((t) => [t.key.toLowerCase(), t.tool]),
 );
 
+/** The open flow board's type (the toolbar is only on flow boards). */
+export const currentFlowType = () => boardTypeOf("flow", board.diagram);
+/** Whether the open board offers this tool (its key does nothing otherwise). */
+export const toolOffered = (tool: Tool) => offersTool(currentFlowType(), tool);
+
+/** Every tool with its icon, name and key: the basic ones and the UML shapes. */
+const ALL_TOOLS = new Map<Tool, ToolDef>([
+  ...GROUPS.flat().map((t): [Tool, ToolDef] => [t.tool, t]),
+  ...UML.flatMap((g) => g.items).map((i): [Tool, ToolDef] => [i.kind, { tool: i.kind, label: i.label, key: "", icon: () => UML_ICONS[i.kind]!() }]),
+]);
+
+/** A typed board's toolbar: select, then the type's own groups, with their names on that board. */
+function typedGroups(type: BoardType): ToolDef[][] {
+  return [
+    [ALL_TOOLS.get("select")!],
+    ...type.tools!.map((g) => g.flatMap((t) => {
+      const def = ALL_TOOLS.get(t.tool);
+      return def ? [{ ...def, label: t.label ?? def.label }] : [];
+    })),
+  ];
+}
+
+/** Pictures and icons: an image from the computer, or one from the icon set */
+function ContentButtons() {
+  const [icons, setIcons] = createSignal(false);
+  let input!: HTMLInputElement;
+  let wrap!: HTMLDivElement;
+  const onDoc = (e: PointerEvent) => icons() && !wrap.contains(e.target as Node) && setIcons(false);
+  document.addEventListener("pointerdown", onDoc);
+  onCleanup(() => document.removeEventListener("pointerdown", onDoc));
+  return (
+    <div class="uml-wrap content-tools" ref={wrap}>
+      <button class="tool-btn" title="Image (or paste or drop one on the board)" onClick={() => input.click()}>
+        <IconImage />
+      </button>
+      <input
+        ref={input}
+        type="file"
+        accept="image/png,image/jpeg,image/gif,image/webp"
+        multiple
+        hidden
+        onChange={(e) => {
+          const files = [...(e.currentTarget.files ?? [])];
+          e.currentTarget.value = "";
+          if (files.length) addImages(files, pastePoint());
+        }}
+      />
+      <button class="tool-btn" classList={{ active: icons() }} title="Icon" onClick={() => setIcons(!icons())}>
+        <IconStar />
+      </button>
+      <Show when={icons()}>
+        <IconPanel onClose={() => setIcons(false)} />
+      </Show>
+    </div>
+  );
+}
+
 export function Toolbar() {
+  // A whiteboard has every tool (UML under its button); a typed board only its own
+  const groups = () => {
+    const type = currentFlowType();
+    return type.tools ? typedGroups(type) : GROUPS;
+  };
   return (
     <nav class="toolbar panel" aria-label="Tools">
-      <For each={GROUPS}>
+      <For each={groups()}>
         {(group, i) => (
           <>
             {i() > 0 && <span class="tool-sep" />}
@@ -157,20 +228,27 @@ export function Toolbar() {
                 <button
                   class="tool-btn"
                   classList={{ active: ui.tool === t.tool }}
-                  title={`${t.label} (${t.key})`}
+                  title={t.key ? `${t.label} (${t.key})` : t.label}
                   aria-pressed={ui.tool === t.tool}
                   onClick={() => setUi("tool", t.tool)}
                 >
                   {t.icon()}
-                  <kbd>{t.key}</kbd>
+                  <Show when={t.key}>
+                    <kbd>{t.key}</kbd>
+                  </Show>
                 </button>
               )}
             </For>
           </>
         )}
       </For>
-      <span class="tool-sep" />
-      <UmlPanel />
+      <Show when={!currentFlowType().tools}>
+        <span class="tool-sep" />
+        <UmlPanel />
+      </Show>
+      <Show when={openDoc()?.role}>
+        <ContentButtons />
+      </Show>
     </nav>
   );
 }

@@ -42,6 +42,7 @@ pub fn create_project(app: AppHandle, name: String) -> CmdResult<Project> {
         folders: vec![],
         order,
         updated_at: None,
+        role: None,
     };
     save_project(&app, &mut project)?;
     Ok(project)

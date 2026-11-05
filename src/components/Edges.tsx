@@ -1,21 +1,10 @@
 import { createEffect, createMemo, createRoot, For, onMount, Show, type Accessor } from "solid-js";
+import type { Guide } from "../lib/snapping";
 import type { EdgeCap, FlowEdge, LabelSide } from "../lib/types";
 import { edgeBetween, edgeToPoint, endLabelPoint, lineEnd, normRect, pointAlong, type EdgeGeom, type Pt } from "../lib/geometry";
 import { SEQUENCE_KINDS } from "../lib/sequence";
 import { beginEdgeMove, beginEndDrag, beginLabelDrag, blurActive } from "../lib/interactions";
-import {
-  board,
-  checkpoint,
-  DEFAULT_CAPS,
-  edgeLine,
-  isFreeEnd,
-  nodeById,
-  selectEdge,
-  setEdgeEnd,
-  setEdgeLabel,
-  setUi,
-  ui,
-} from "../lib/store";
+import { board, callColorOf, checkpoint, DEFAULT_CAPS, edgeLine, isFreeEnd, nodeById, selectEdge, setEdgeEnd, setEdgeLabel, setUi, ui, setEdgeLabelLive } from "../lib/store";
 
 /**
  * The line of an edge, computed once and shared by everything that draws it (the
@@ -107,10 +96,13 @@ export function EdgesLayer() {
     return m ? normRect(m.x0, m.y0, m.x1, m.y1) : null;
   });
 
+  // Messages are drawn above the lifelines instead (see MessagesLayer)
+  const lines = createMemo(() => board.edges.filter((e) => e.messageY == null));
+
   return (
     <svg class="edges-layer">
       <g transform={`translate(${board.camera.x} ${board.camera.y}) scale(${board.camera.zoom})`}>
-        <For each={board.edges}>{(e) => <EdgeView edge={e} />}</For>
+        <For each={lines()}>{(e) => <EdgeView edge={e} />}</For>
 
         <Show when={connectingPath()}>
           {(g) => (
@@ -124,8 +116,40 @@ export function EdgesLayer() {
         <Show when={marquee()}>
           {(r) => <rect class="marquee" x={r().x} y={r().y} width={r().w} height={r().h} rx={2} />}
         </Show>
+        <SnapGuides guides={ui.guides} />
       </g>
     </svg>
+  );
+}
+
+/**
+ * The messages of sequence diagrams, above the lifelines: their ends sit on the
+ * activation bars, and with bars stacked (calls inside calls) the lower bars would
+ * hide the end of a message and its arrowhead. Below the labels (see Canvas.tsx).
+ */
+export function MessagesLayer() {
+  const messages = createMemo(() => board.edges.filter((e) => e.messageY != null));
+  return (
+    <svg class="edges-layer messages-layer">
+      <g transform={`translate(${board.camera.x} ${board.camera.y}) scale(${board.camera.zoom})`}>
+        <For each={messages()}>{(e) => <EdgeView edge={e} />}</For>
+      </g>
+    </svg>
+  );
+}
+
+/** The lines that show what a dragged item lines up with */
+export function SnapGuides(p: { guides: Guide[] }) {
+  return (
+    <For each={p.guides}>
+      {(g) =>
+        g.axis === "x" ? (
+          <line class="snap-guide" x1={g.at} x2={g.at} y1={g.from - 8} y2={g.to + 8} />
+        ) : (
+          <line class="snap-guide" x1={g.from - 8} x2={g.to + 8} y1={g.at} y2={g.at} />
+        )
+      }
+    </For>
   );
 }
 
@@ -136,7 +160,12 @@ function EdgeView(p: { edge: FlowEdge }) {
   return (
     <Show when={geom()}>
       {(g) => (
-        <g class="edge" classList={{ selected: active() }}>
+        <g
+          class="edge"
+          classList={{ selected: active() }}
+          // A call and its return in the call's color (line and arrowheads use --edge)
+          style={callColorOf(p.edge.id) ? { "--edge": `var(--${callColorOf(p.edge.id)}-stroke)` } : undefined}
+        >
           <path
             class="edge-hit"
             d={g().d}
@@ -306,22 +335,27 @@ function sideOffset(side: LabelSide, horizontal: boolean): string {
 function LabelInput(p: { edge: FlowEdge }) {
   let ref!: HTMLInputElement;
   let cancelled = false;
+  // Escape puts this back (the label is on the board while typing)
+  const before = p.edge.label ?? "";
   onMount(() => {
     ref.focus();
     ref.select();
   });
   const finish = () => {
-    if (!cancelled) setEdgeLabel(p.edge.id, ref.value);
+    setEdgeLabel(p.edge.id, cancelled ? before : ref.value);
     if (ui.editingEdge === p.edge.id) setUi("editingEdge", null);
   };
   return (
     <input
       ref={ref}
       class="label-input"
-      value={p.edge.label ?? ""}
+      value={before}
       placeholder="Label"
       size={Math.max(4, (p.edge.label ?? "").length + 1)}
-      onInput={(e) => (e.currentTarget.size = Math.max(4, e.currentTarget.value.length + 1))}
+      onInput={(e) => {
+        e.currentTarget.size = Math.max(4, e.currentTarget.value.length + 1);
+        setEdgeLabelLive(p.edge.id, e.currentTarget.value);
+      }}
       onBlur={finish}
       onKeyDown={(e) => {
         e.stopPropagation();

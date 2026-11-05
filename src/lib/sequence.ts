@@ -16,6 +16,8 @@ export const SEQUENCE_KINDS = new Set<NodeKind>(["lifeline", "activation"]);
 export const LIFELINE_HEAD = 44;
 /** Width of an automatic activation bar */
 export const BAR_W = 14;
+/** How far a bar inside another bar (a call inside a call) moves to the right */
+export const NEST = BAR_W / 2;
 /** Where the bar of the lifeline that starts it all stops, above the end of its lifeline */
 const BASE_END = 16;
 /** How far a self-message goes out, and how much lower it comes back */
@@ -24,13 +26,31 @@ export const SELF_H = 30;
 
 /** A vertical span [top, bottom] in world coordinates. */
 export type Span = [number, number];
+/**
+ * An activation bar: [top, bottom, level, call]. Level 0 is on the lifeline, 1 on
+ * top of that, ...; `call` is the message that started it (null: the lifeline
+ * started something itself).
+ */
+export type Bar = [number, number, number, string | null];
+
+/** Colors for calls, in turn (see `colors` below and CALL_COLORS in flow_svg.rs) */
+export const CALL_COLORS = ["blue", "green", "purple", "pink", "yellow"] as const;
 
 interface Analysis {
-  /** Activation bars per lifeline */
-  bars: Map<string, Span[]>;
+  /** Activation bars per lifeline, top to bottom */
+  bars: Map<string, Bar[]>;
   /** Messages that answer an earlier call (drawn dashed with an open arrow in UML) */
   returns: Set<string>;
+  /**
+   * Per call and per return: the number of the call, top to bottom (a return has
+   * its call's). With the board's `callColors` on, each call, its bar and its
+   * return get CALL_COLORS[number % length].
+   */
+  colors: Map<string, number>;
 }
+
+/** A bar while it is worked out: [top, bottom, the call that started it] */
+type Own = [number, number, string | null];
 
 /**
  * Reads the messages top to bottom, the way you read a sequence diagram:
@@ -40,8 +60,10 @@ interface Analysis {
  * - a call activates the lifeline it arrives at, until its return. Without a
  *   return, the bar runs to just past that lifeline's last message.
  * - a lifeline that never receives a call (the one that starts it all) is active
- *   from its first message all the way down its lifeline.
- * Overlapping bars on one lifeline (calls inside calls) merge into one.
+ *   from its first message all the way down its lifeline. So is one that sends a
+ *   message while none of its bars is active: it started something itself.
+ * A bar that starts while another bar of the lifeline is still active (a call
+ * inside a call) lies on top of it, one level further: see `levels`.
  */
 export function analyze(nodes: FlowNode[], edges: FlowEdge[]): Analysis {
   const byId = new Map(nodes.map((n) => [n.id, n]));
@@ -52,8 +74,8 @@ export function analyze(nodes: FlowNode[], edges: FlowEdge[]): Analysis {
     })
     .sort((a, b) => a.y - b.y);
 
-  const spans = new Map<string, Span[]>();
-  const add = (id: string, span: Span) => spans.set(id, [...(spans.get(id) ?? []), span]);
+  const spans = new Map<string, Own[]>();
+  const add = (id: string, span: Own) => spans.set(id, [...(spans.get(id) ?? []), span]);
   /** First and last height at which each node sends or receives a message */
   const seen = new Map<string, Span>();
   const see = (id: string, y: number) => {
@@ -61,8 +83,12 @@ export function analyze(nodes: FlowNode[], edges: FlowEdge[]): Analysis {
     seen.set(id, s ? [Math.min(s[0], y), Math.max(s[1], y)] : [y, y]);
   };
   const called = new Set<string>();
+  /** Heights at which each node sends a message to another node */
+  const sends = new Map<string, number[]>();
   const returns = new Set<string>();
-  const open: { caller: string; callee: string; y: number }[] = [];
+  const colors = new Map<string, number>();
+  let calls = 0;
+  const open: { id: string; caller: string; callee: string; y: number }[] = [];
 
   for (const { e, y } of messages) {
     if (e.from === e.to) {
@@ -72,60 +98,82 @@ export function analyze(nodes: FlowNode[], edges: FlowEdge[]): Analysis {
     }
     see(e.from, y);
     see(e.to, y);
+    sends.set(e.from, [...(sends.get(e.from) ?? []), y]);
     // The latest open call this message answers
     let i = open.length - 1;
     while (i >= 0 && !(open[i].caller === e.to && open[i].callee === e.from)) i--;
     if (i >= 0) {
-      add(e.from, [open[i].y, y]);
+      const call = open[i];
+      add(e.from, [call.y, y, call.id]);
       open.splice(i, 1);
       returns.add(e.id);
+      colors.set(e.id, colors.get(call.id)!);
     } else if (e.pattern !== "dashed") {
-      open.push({ caller: e.from, callee: e.to, y });
+      open.push({ id: e.id, caller: e.from, callee: e.to, y });
       called.add(e.to);
+      colors.set(e.id, calls++);
     }
   }
-  for (const c of open) add(c.callee, [c.y, Math.max(c.y + 30, (seen.get(c.callee)?.[1] ?? c.y) + 16)]);
+  for (const c of open) add(c.callee, [c.y, Math.max(c.y + 30, (seen.get(c.callee)?.[1] ?? c.y) + 16), c.id]);
 
-  const bars = new Map<string, Span[]>();
+  const bars = new Map<string, Bar[]>();
   for (const l of nodes) {
     if (l.kind !== "lifeline") continue;
     const own = spans.get(l.id) ?? [];
     const range = seen.get(l.id);
-    if (range && !called.has(l.id)) own.push([range[0] - 10, Math.max(l.y + l.h - BASE_END, range[1] + 10)]);
-    // Within the lifeline, below its head; overlapping bars merged
+    // Active by itself: from its first message when nobody calls it, else from the
+    // first message it sends outside the bars of its calls
+    const start = !called.has(l.id) ? range?.[0] : (sends.get(l.id) ?? []).find((y) => !own.some(([a, b]) => y >= a && y <= b));
+    if (range && start != null) own.push([start - 10, Math.max(l.y + l.h - BASE_END, range[1] + 10), null]);
+    // Within the lifeline, below its head
     const top = l.y + LIFELINE_HEAD;
     const bottom = l.y + l.h;
-    const merged: Span[] = [];
-    for (const [a, b] of own
-      .map(([a, b]): Span => [Math.max(top, a), Math.min(bottom, b)])
-      .filter(([a, b]) => b > a)
-      .sort((p, q) => p[0] - q[0])) {
-      const last = merged[merged.length - 1];
-      if (last && a <= last[1]) last[1] = Math.max(last[1], b);
-      else merged.push([a, b]);
-    }
-    if (merged.length) bars.set(l.id, merged);
+    const clipped = own.map(([a, b, call]): Own => [Math.max(top, a), Math.min(bottom, b), call]).filter(([a, b]) => b > a);
+    if (clipped.length) bars.set(l.id, levels(clipped));
   }
-  return { bars, returns };
+  return { bars, returns, colors };
 }
+
+/**
+ * Top to bottom, each bar on the lowest level that is free where it starts: a bar
+ * that starts inside another lies on top of it. Of two that start together, the
+ * longer is underneath.
+ */
+function levels(spans: Own[]): Bar[] {
+  const out: Bar[] = [];
+  for (const [a, b, call] of [...spans].sort((p, q) => p[0] - q[0] || q[1] - p[1])) {
+    const taken = new Set(out.filter((bar) => bar[1] > a).map((bar) => bar[2]));
+    let level = 0;
+    while (taken.has(level)) level++;
+    out.push([a, b, level, call]);
+  }
+  return out;
+}
+
+/** The color of a call or return when the board's `callColors` is on, else undefined. */
+export const callColor = (colors: Map<string, number>, id: string | null) => {
+  const n = id == null ? undefined : colors.get(id);
+  return n == null ? undefined : CALL_COLORS[n % CALL_COLORS.length];
+};
 
 /** Activation bars per lifeline (see `analyze`). */
 export const activations = (nodes: FlowNode[], edges: FlowEdge[]) => analyze(nodes, edges).bars;
 
 /** Where a message meets node `n` at height `y`, coming from the side of `towardX`. */
-function attachX(n: FlowNode, bars: Span[], y: number, towardX: number): number {
+function attachX(n: FlowNode, bars: Bar[], y: number, towardX: number): number {
   const c = n.x + n.w / 2;
   const right = towardX >= c;
   if (n.kind === "lifeline") {
-    const active = bars.some(([a, b]) => y >= a && y <= b);
-    return active ? c + (right ? BAR_W / 2 : -BAR_W / 2) : c;
+    // The top bar that is active there
+    const level = Math.max(-1, ...bars.filter(([a, b]) => y >= a && y <= b).map((bar) => bar[2]));
+    return level < 0 ? c : c + level * NEST + (right ? BAR_W / 2 : -BAR_W / 2);
   }
   // An activation placed by hand, or any other block: its side
   return right ? n.x + n.w : n.x;
 }
 
 /** The line of a message: horizontal from `a` to `b`, or a small loop when a calls itself. */
-export function messageLine(edge: FlowEdge, a: FlowNode, b: FlowNode, bars: Map<string, Span[]>): EdgeGeom {
+export function messageLine(edge: FlowEdge, a: FlowNode, b: FlowNode, bars: Map<string, Bar[]>): EdgeGeom {
   const y = a.y + (edge.messageY ?? 0);
   const barsA = bars.get(a.id) ?? [];
   if (a.id === b.id) {

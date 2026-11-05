@@ -1,9 +1,10 @@
 // The editor for each document kind, plus the project page.
 
+import { roleCanEdit } from "../lib/roles";
+import { CommentsPanel } from "./Comments";
 import { createSignal, For, onCleanup, Show } from "solid-js";
 import type { DocumentKind } from "../lib/types";
 import {
-  createDocument,
   docsOf,
   openDocument,
   openDoc,
@@ -15,18 +16,30 @@ import {
 import { Canvas } from "./Canvas";
 import { EerEditor } from "./EerEditor";
 import { KanbanEditor } from "./KanbanEditor";
-import { KIND_LABEL, KINDS, KindIcon } from "./kinds";
+import { BoardIcon, KIND_LABEL, KindIcon, TypeIcon } from "./kinds";
+import { BOARD_TYPES, boardTypeOf, type BoardType, type BoardTypeId } from "../lib/boardTypes";
+import { NewBoardDialog } from "./BoardDialogs";
 import { MarkdownView, onMarkdownKeyDown } from "./Markdown";
 import { RichTextEditor } from "./RichTextEditor";
 import { Toolbar } from "./Toolbar";
+import { canEdit } from "../lib/access";
+import { me } from "../lib/auth";
+import { colorFor, textDoc } from "../lib/collab";
+import { guest } from "../lib/comments";
+import { MembersDialog } from "./ShareDialog";
 import { ZoomControls } from "./ZoomControls";
+import { FindBar, Minimap } from "./FindAndMap";
 
 export function FlowEditor() {
   return (
     <>
       <Canvas />
-      <Toolbar />
+      <Show when={canEdit()}>
+        <Toolbar />
+      </Show>
       <ZoomControls />
+      <Minimap />
+      <FindBar />
     </>
   );
 }
@@ -38,12 +51,20 @@ export function FlowEditor() {
 export function TextEditor() {
   return (
     <div class="text-editor">
-      <Show when={openDoc()?.id} keyed>
+      {/* Again for each document, and when editing together starts or stops */}
+      <Show when={`${openDoc()?.id}|${textDoc() ? "live" : "local"}`} keyed>
         <RichTextEditor
           variant="page"
           value={text()}
           placeholder="Start writing… Type # for a heading, - for a list or [ ] for a checklist."
           onChange={setText}
+          readOnly={!canEdit()}
+          collab={(() => {
+            const t = textDoc();
+            if (!t) return undefined;
+            const id = me()?.user.id ?? guest()?.id ?? "guest";
+            return { ...t, user: { name: me()?.user.name ?? guest()?.name ?? "Guest", color: colorFor(id) } };
+          })()}
         />
       </Show>
     </div>
@@ -79,32 +100,55 @@ export function ProjectView(p: { projectId: string }) {
   };
   onCleanup(flush);
 
+  /** Boards per type, for the "New in this project" cards */
   const counts = () => {
-    const c: Partial<Record<DocumentKind, number>> = {};
-    for (const d of docsOf(p.projectId)) c[d.kind] = (c[d.kind] ?? 0) + 1;
+    const c: Partial<Record<BoardTypeId, number>> = {};
+    for (const d of docsOf(p.projectId)) {
+      const t = boardTypeOf(d.kind, d.diagram).id;
+      c[t] = (c[t] ?? 0) + 1;
+    }
     return c;
   };
+  const [newType, setNewType] = createSignal<BoardType | null>(null);
+
+  // Viewers and commenters of the project only read its name and description
+  const editable = () => {
+    const role = project()?.role;
+    return roleCanEdit(role);
+  };
+  const [people, setPeople] = createSignal(false);
 
   return (
     <Show when={project()}>
       {(proj) => (
         <div class="project-view">
-          <input
-            class="project-title"
-            value={proj().name}
-            aria-label="Project name"
-            onChange={(e) => updateProject(p.projectId, { name: e.currentTarget.value })}
-            onKeyDown={(e) => e.key === "Enter" && e.currentTarget.blur()}
-          />
+          <div class="project-title-row">
+            <input
+              class="project-title"
+              value={proj().name}
+              aria-label="Project name"
+              readOnly={!editable()}
+              onChange={(e) => updateProject(p.projectId, { name: e.currentTarget.value })}
+              onKeyDown={(e) => e.key === "Enter" && e.currentTarget.blur()}
+            />
+            <Show when={proj().role}>
+              <button class="text-btn share-btn" onClick={() => setPeople(true)}>
+                People
+              </button>
+            </Show>
+          </div>
+          <Show when={people()}>
+            <MembersDialog projectId={p.projectId} onClose={() => setPeople(false)} />
+          </Show>
           {/* Shown rendered; click to edit. An empty description shows the textarea directly. */}
           <Show
-            when={editingDescription() || !(draft() ?? proj().description).trim()}
+            when={editable() && (editingDescription() || !(draft() ?? proj().description).trim())}
             fallback={
               <div
                 class="project-description rendered"
                 title="Click to edit"
                 onClick={(e) => {
-                  if ((e.target as HTMLElement).closest("a")) return;
+                  if ((e.target as HTMLElement).closest("a") || !editable()) return;
                   setEditingDescription(true);
                 }}
               >
@@ -133,16 +177,19 @@ export function ProjectView(p: { projectId: string }) {
 
           <h3 class="section-title">New in this project</h3>
           <div class="new-doc-grid">
-            <For each={KINDS}>
-              {(kind) => (
-                <button class="new-doc panel" onClick={() => createDocument(p.projectId, null, kind)}>
-                  <KindIcon kind={kind} />
-                  <span>{KIND_LABEL[kind]}</span>
-                  <small>{counts()[kind] ?? 0} in project</small>
+            <For each={BOARD_TYPES}>
+              {(t) => (
+                <button class="new-doc panel" title={t.description} onClick={() => setNewType(t)}>
+                  <TypeIcon type={t.id} />
+                  <span>{t.label}</span>
+                  <small>{counts()[t.id] ?? 0} in project</small>
                 </button>
               )}
             </For>
           </div>
+          <Show when={newType()}>
+            {(t) => <NewBoardDialog projectId={p.projectId} folderId={null} type={t()} onClose={() => setNewType(null)} />}
+          </Show>
 
           <Show when={docsOf(p.projectId).length}>
             <h3 class="section-title">Recently edited</h3>
@@ -150,7 +197,7 @@ export function ProjectView(p: { projectId: string }) {
               <For each={[...docsOf(p.projectId)].sort((a, b) => b.updatedAt - a.updatedAt).slice(0, 6)}>
                 {(d) => (
                   <button class="recent-item" onClick={() => openDocument(d.projectId, d.id)}>
-                    <KindIcon kind={d.kind} />
+                    <BoardIcon kind={d.kind} diagram={d.diagram} />
                     <span>{d.name}</span>
                     <small>{d.updatedAt ? new Date(d.updatedAt).toLocaleString("en-GB", { day: "numeric", month: "short", hour: "2-digit", minute: "2-digit" }) : ""}</small>
                   </button>
@@ -181,7 +228,10 @@ export function DocumentEditor() {
           </Show>
           <Show when={doc().kind === "eer"}>
             <EerEditor />
+            <Minimap />
+            <FindBar />
           </Show>
+          <CommentsPanel />
         </div>
       )}
     </Show>

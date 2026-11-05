@@ -1,9 +1,10 @@
 // The open flowchart (`board`), the editor UI state (`ui`), and what is derived from them.
 
+import type { Guide } from "../snapping";
 import { createMemo, createRoot, createSignal } from "solid-js";
 import { createStore, unwrap } from "solid-js/store";
-import { activations, type Span } from "../sequence";
-import type { Camera, EdgeStyle, FlowDoc, FlowNode, NodeKind } from "../types";
+import { analyze, callColor, type Bar } from "../sequence";
+import type { Camera, DiagramType, EdgeStyle, FlowDoc, FlowNode, NodeKind } from "../types";
 import { emptyFlow } from "./nodes";
 
 // ---------- state ----------
@@ -37,6 +38,8 @@ export interface UiState {
   connecting: { from: string; x: number; y: number; target: string | null } | null;
   /** Selection rectangle (world coordinates) */
   marquee: { x0: number; y0: number; x1: number; y1: number } | null;
+  /** While moving or resizing: what the dragged items line up with (see snapping.ts) */
+  guides: Guide[];
 }
 
 export const [ui, setUi] = createStore<UiState>({
@@ -54,18 +57,45 @@ export const [ui, setUi] = createStore<UiState>({
   dragging: false,
   connecting: null,
   marquee: null,
+  guides: [],
 });
 
 /** @internal Derived values, for the store files */
-export const derived = createRoot(() => ({
-  selectedSet: createMemo(() => new Set(ui.selected)),
-  nodeMap: createMemo(() => new Map(board.nodes.map((n) => [n.id, n]))),
-  /** Activation bars of every lifeline, from the messages (see sequence.ts) */
-  bars: createMemo(() => activations(board.nodes, board.edges)),
-}));
+export const derived = createRoot(() => {
+  /** What follows from the messages of a sequence diagram (see sequence.ts) */
+  const seq = createMemo(() => analyze(board.nodes, board.edges));
+  return {
+    selectedSet: createMemo(() => new Set(ui.selected)),
+    nodeMap: createMemo(() => new Map(board.nodes.map((n) => [n.id, n]))),
+    seq,
+    /** Activation bars of every lifeline */
+    bars: () => seq().bars,
+  };
+});
 
-const NO_BARS: Span[] = [];
+const NO_BARS: Bar[] = [];
 export const activationsOf = (id: string) => derived.bars().get(id) ?? NO_BARS;
+
+/** The color of a message, or of the bar a call started, when the board colors calls. */
+export const callColorOf = (id: string | null) => (board.callColors ? callColor(derived.seq().colors, id) : undefined);
+
+/** Each call, its bar and its return in a color of their own (sequence diagrams), or not. */
+export function setCallColors(on: boolean) {
+  setBoard("callColors", on || undefined);
+  touch();
+}
+
+/** The board's type (see boardTypes.ts): what the editor offers for it. */
+export function setDiagram(diagram: DiagramType) {
+  setBoard("diagram", diagram);
+  touch();
+}
+
+/** The board's settings that are shared with whoever edits it too (see collab/). */
+export interface FlowSettings {
+  callColors?: boolean;
+  diagram?: DiagramType;
+}
 
 export const isSelected = (id: string) => derived.selectedSet().has(id);
 export const nodeById = (id: string): FlowNode | undefined => derived.nodeMap().get(id);

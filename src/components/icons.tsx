@@ -286,6 +286,103 @@ export const IconTrash = () => (
     <path d="M4 7h16M10 11v6M14 11v6M6 7l1 13h10l1-13M9 7V4h6v3" />
   </Svg>
 );
+export const IconRename = () => (
+  <Svg size={16}>
+    <path d="M15 5l4 4M4 20l1-5L16 4l4 4L9 19l-5 1z" />
+  </Svg>
+);
+export const IconLock = () => (
+  <Svg size={16}>
+    <rect x="5" y="11" width="14" height="9" rx="2" />
+    <path d="M8 11V8a4 4 0 018 0v3" />
+  </Svg>
+);
+export const IconUnlock = () => (
+  <Svg size={16}>
+    <rect x="5" y="11" width="14" height="9" rx="2" />
+    <path d="M8 11V8a4 4 0 017.5-2" />
+  </Svg>
+);
+/** Lines up on a side or the middle; `to` sets which */
+export const IconAlign = (p: { to: "left" | "center" | "right" | "top" | "middle" | "bottom" }) => {
+  const d: Record<typeof p.to, string> = {
+    left: "M4 3v18M8 7h10M8 14h6",
+    center: "M12 3v18M6 7h12M9 14h6",
+    right: "M20 3v18M6 7h10M10 14h6",
+    top: "M3 4h18M7 8v10M14 8v6",
+    middle: "M3 12h18M7 6v12M14 9v6",
+    bottom: "M3 20h18M7 6v10M14 10v6",
+  };
+  return (
+    <Svg size={16}>
+      <path d={d[p.to]} />
+    </Svg>
+  );
+};
+export const IconDistribute = (p: { axis: "x" | "y" }) => (
+  <Svg size={16}>
+    <path d={p.axis === "x" ? "M4 4v16M20 4v16M10 8v8M14 8v8" : "M4 4h16M4 20h16M8 10h8M8 14h8"} />
+  </Svg>
+);
+export const IconCalendar = () => (
+  <Svg size={14}>
+    <rect x="4" y="5" width="16" height="15" rx="2" />
+    <path d="M4 10h16M9 3v4M15 3v4" />
+  </Svg>
+);
+export const IconBlocked = () => (
+  <Svg size={14}>
+    <circle cx="12" cy="12" r="8" />
+    <path d="M6.5 17.5l11-11" />
+  </Svg>
+);
+/** Priority as signal bars (urgent: an exclamation mark) */
+export const IconPriority = (p: { level: "urgent" | "high" | "medium" | "low" }) => (
+  <Svg size={14}>
+    {p.level === "urgent" ? (
+      <>
+        <rect x="4" y="4" width="16" height="16" rx="4" />
+        <path d="M12 8v5M12 16v.5" />
+      </>
+    ) : (
+      <>
+        <path d="M6 18v-3" opacity={1} />
+        <path d="M12 18v-7" opacity={p.level === "low" ? 0.3 : 1} />
+        <path d="M18 18V7" opacity={p.level === "high" ? 1 : 0.3} />
+      </>
+    )}
+  </Svg>
+);
+export const IconList = () => (
+  <Svg size={16}>
+    <path d="M9 6h11M9 12h11M9 18h11M4.5 6h.01M4.5 12h.01M4.5 18h.01" />
+  </Svg>
+);
+export const IconTimeline = () => (
+  <Svg size={16}>
+    <path d="M4 4v16M8 7h7M11 12h8M7 17h6" />
+  </Svg>
+);
+export const IconImage = () => (
+  <Svg>
+    <rect x="3.5" y="4.5" width="17" height="15" rx="2" />
+    <circle cx="9" cy="10" r="1.6" />
+    <path d="M20.5 16l-5-5-9 8.5" />
+  </Svg>
+);
+export const IconStar = () => (
+  <Svg>
+    <path d="M12 3.5l2.6 5.3 5.9.9-4.25 4.1 1 5.8L12 16.9l-5.25 2.7 1-5.8L3.5 9.7l5.9-.9z" />
+  </Svg>
+);
+export const IconTopic = () => (
+  <Svg>
+    <rect x="2.5" y="9.5" width="8" height="5" rx="2.5" />
+    <rect x="15.5" y="3.5" width="6" height="4" rx="2" />
+    <rect x="15.5" y="16.5" width="6" height="4" rx="2" />
+    <path d="M10.5 12c3 0 2-6.5 5-6.5M10.5 12c3 0 2 6.5 5 6.5" />
+  </Svg>
+);
 export const IconCopy = () => (
   <Svg size={16}>
     <rect x="8" y="8" width="12" height="12" rx="2" />

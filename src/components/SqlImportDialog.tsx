@@ -1,6 +1,6 @@
-// Import SQL into the open EER diagram: paste a script (or open / drop a .sql
-// file), see which tables it has, and add them as one undo step. Reading the SQL
-// happens in Rust (src-tauri/src/commands/sql_import.rs).
+// Import SQL or DBML into the open EER diagram: paste a script (or open / drop a
+// .sql or .dbml file), see which tables it has, and add them as one undo step.
+// Reading it happens in Rust (flow-core's sql_import.rs and dbml.rs).
 
 import { createResource, createSignal, For, onCleanup, Show } from "solid-js";
 import { Portal } from "solid-js/web";
@@ -22,6 +22,9 @@ function showTables(tables: Entity[]) {
   setEerCamera({ zoom, x: view.width / 2 - ((x0 + x1) / 2) * zoom, y: view.height / 2 - ((y0 + y1) / 2) * zoom });
 }
 
+/** DBML (`Table x {`, `Ref:`) rather than SQL (no CREATE TABLE) */
+const isDbml = (s: string) => /^\s*(Table|Ref|TableGroup|Enum)\b/im.test(s) && !/\bCREATE\s+TABLE\b/i.test(s);
+
 export function SqlImportDialog(p: { onClose: () => void }) {
   const [sql, setSql] = createSignal("");
   // Read while typing, but not on every key
@@ -36,7 +39,9 @@ export function SqlImportDialog(p: { onClose: () => void }) {
   onCleanup(() => clearTimeout(timer));
 
   const [result] = createResource(settled, (s) =>
-    s.trim() ? api.importSql(s).then((r) => ({ ok: r, error: null }), (e) => ({ ok: null, error: errMsg(e) })) : null,
+    s.trim()
+      ? (isDbml(s) ? api.importDbml(s) : api.importSql(s)).then((r) => ({ ok: r, error: null }), (e) => ({ ok: null, error: errMsg(e) }))
+      : null,
   );
   const imported = () => result()?.ok;
   const names = () => new Set(eer.entities.map((e) => e.name.toLowerCase()));
@@ -63,15 +68,17 @@ export function SqlImportDialog(p: { onClose: () => void }) {
       <div class="dialog-backdrop" onPointerDown={(e) => e.target === e.currentTarget && p.onClose()}>
         <div class="sql-dialog import-dialog panel" onKeyDown={(e) => e.key === "Escape" && p.onClose()}>
           <div class="sql-dialog-head">
-            <strong>Import SQL</strong>
-            <span class="import-hint">CREATE TABLE and ALTER TABLE from PostgreSQL, MySQL, SQLite, SQL Server or Oracle</span>
+            <strong>Import {isDbml(sql()) ? "DBML" : "SQL"}</strong>
+            <span class="import-hint">
+              SQL from PostgreSQL, MySQL, SQLite, SQL Server or Oracle, or DBML (dbdiagram.io): table groups become sections
+            </span>
             <button class="icon-btn" title="Close" onClick={p.onClose}>
               <IconClose />
             </button>
           </div>
           <textarea
             class="import-sql"
-            placeholder="Paste SQL here, or drop a .sql file"
+            placeholder="Paste SQL or DBML here, or drop a .sql or .dbml file"
             spellcheck={false}
             value={sql()}
             onInput={(e) => type(e.currentTarget.value)}
@@ -107,7 +114,7 @@ export function SqlImportDialog(p: { onClose: () => void }) {
             </Show>
           </div>
           <div class="sql-dialog-foot">
-            <input type="file" accept=".sql,.txt,text/plain" hidden ref={fileInput} onChange={(e) => void open(e.currentTarget.files?.[0])} />
+            <input type="file" accept=".sql,.dbml,.txt,text/plain" hidden ref={fileInput} onChange={(e) => void open(e.currentTarget.files?.[0])} />
             <button class="text-btn" onClick={() => fileInput.click()}>
               Open .sql file…
             </button>

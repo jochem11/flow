@@ -1,9 +1,12 @@
 import { createEffect, createMemo, createSignal, For, Index, Match, on, onCleanup, onMount, Show, Switch } from "solid-js";
 import { cardsLinkedTo, openLinkedCard } from "../lib/links";
-import { IconKanban } from "./icons";
+import { IconCheck, IconKanban, IconLock } from "./icons";
+import { IconDrawing, type IconParts } from "./IconPanel";
+import { imageUrl } from "../lib/files";
+import { addSiblingTopic, addSubtopic, parentOf } from "../lib/mindmap";
 import { Portal } from "solid-js/web";
 import type { FlowNode, Lane, NodeKind } from "../lib/types";
-import type { Side } from "../lib/geometry";
+import { RESIZE_DIRS, type ResizeDir, type Side } from "../lib/geometry";
 import {
   attributeNames,
   classKind,
@@ -15,9 +18,12 @@ import {
   rowProblem,
   type ClassContext,
 } from "../lib/umlClass";
+import { canEdit } from "../lib/access";
+import { NEST } from "../lib/sequence";
 import { beginConnect, beginLaneResize, beginLine, beginNodeDrag, beginResize, blurActive } from "../lib/interactions";
 import {
   activationsOf,
+  callColorOf,
   board,
   nodeById,
   hasText,
@@ -25,11 +31,13 @@ import {
   isResizable,
   isSelected,
   GRID,
+  growFrames,
   removeLane,
   resizeNode,
   select,
   setLaneTitle,
   setNodeText,
+  setNodeTextLive,
   setUi,
   toggleSelect,
   ui,
@@ -57,7 +65,7 @@ const PLACEHOLDER: Partial<Record<NodeKind, string>> = {
 };
 
 /** Frames whose title catches the pointer; the inside lets clicks through to the canvas. */
-const FRAMES: NodeKind[] = ["section", "boundary", "package", "fragment"];
+export const FRAMES: NodeKind[] = ["section", "boundary", "package", "fragment"];
 
 /**
  * Shapes drawn as a polygon stretched over the node (viewBox 0..100).
@@ -77,6 +85,11 @@ export function NodeView(p: { node: FlowNode }) {
   const selected = () => isSelected(n.id);
   const editing = () => ui.editingNode === n.id && hasText(n.kind);
   const onlySelected = () => selected() && ui.selected.length === 1;
+  const frame = FRAMES.includes(n.kind);
+  /** The text before this edit: Escape on a frame's title goes back to it */
+  let before = n.text;
+  createEffect(on(editing, (ed) => ed && (before = n.text)));
+  const rename = renameOnClick(() => onlySelected() && !n.locked, () => setUi("editingNode", n.id));
 
   // Sections and swimlanes only catch the pointer on their title (see styles.css),
   // but events from there still bubble up to these handlers.
@@ -110,9 +123,15 @@ export function NodeView(p: { node: FlowNode }) {
       <TextEditor
         class="node-text editor"
         value={n.text}
-        onDone={(t) => {
-          setNodeText(n.id, t);
+        tabDone={n.kind === "topic"}
+        // As it is typed: saved, and seen by others editing together
+        onInput={(t) => setNodeTextLive(n.id, t)}
+        onDone={(t, key) => {
+          setNodeText(n.id, frame && key === "Escape" ? before : t);
           if (ui.editingNode === n.id) setUi("editingNode", null);
+          // A mind map topic: Tab goes on with a subtopic, Enter with the next topic (Escape stops)
+          if (n.kind === "topic" && key === "Tab") addSubtopic();
+          else if (n.kind === "topic" && key === "Enter") addSiblingTopic();
         }}
       />
     </Show>
@@ -126,6 +145,10 @@ export function NodeView(p: { node: FlowNode }) {
         editing: editing(),
         target: ui.connecting?.target === n.id,
         "drop-target": ui.dropTarget === n.id,
+        // The topic a mind map starts from
+        "topic-root": n.kind === "topic" && !parentOf(n.id, board.nodes, board.edges),
+        // All its linked cards are done
+        "cards-done": cardsLinkedTo(n.id).length > 0 && cardsLinkedTo(n.id).every((c) => c.done),
       }}
       data-node-id={n.id}
       style={{
@@ -137,7 +160,7 @@ export function NodeView(p: { node: FlowNode }) {
       onDblClick={(e) => {
         e.stopPropagation();
         select([n.id]);
-        if (hasText(n.kind)) setUi("editingNode", n.id);
+        if (hasText(n.kind) && !n.locked) setUi("editingNode", n.id);
       }}
     >
       <Switch fallback={<div class="node-body">{hasText(n.kind) && text()}</div>}>
@@ -188,6 +211,16 @@ export function NodeView(p: { node: FlowNode }) {
         <Match when={n.kind === "class"}>
           <ClassBody node={n} />
         </Match>
+        <Match when={n.kind === "image"}>
+          <div class="image-body">
+            <Show when={n.image && imageUrl(n.image)} fallback={<span class="image-loading">{n.text || "Image"}</span>}>
+              {(src) => <img src={src()} alt={n.text} draggable={false} />}
+            </Show>
+          </div>
+        </Match>
+        <Match when={n.kind === "icon"}>
+          <IconDrawing class="icon-drawing" parts={(n.icon ?? []) as IconParts} />
+        </Match>
         <Match when={n.kind === "lifeline"}>
           <div class="node-body">{text()}</div>
           {/* Dragging from the dashed line draws a message at that height */}
@@ -203,14 +236,17 @@ export function NodeView(p: { node: FlowNode }) {
           />
           {/* Activation bars follow from the messages (see sequence.ts) */}
           <For each={activationsOf(n.id)}>
-            {([top, bottom]) => (
-              <div class="activation-bar" style={{ top: `${top - n.y}px`, height: `${bottom - top}px` }} />
+            {([top, bottom, level, call]) => (
+              <div
+                class={callColorOf(call) ? `activation-bar call color-${callColorOf(call)}` : "activation-bar"}
+                style={{ top: `${top - n.y}px`, height: `${bottom - top}px`, translate: `${level * NEST}px 0` }}
+              />
             )}
           </For>
         </Match>
         <Match when={FRAMES.includes(n.kind)}>
           <div class="node-body" />
-          <div class="frame-title">
+          <div class="frame-title" title={editing() ? undefined : "Click again or double-click to rename"} {...rename}>
             <Show when={n.kind === "fragment"}>
               <svg class="outline-shape" viewBox="0 0 100 100" preserveAspectRatio="none">
                 <polygon points="0,0 100,0 100,60 82,100 0,100" vector-effect="non-scaling-stroke" />
@@ -247,15 +283,26 @@ export function NodeView(p: { node: FlowNode }) {
         </For>
       </Show>
 
-      <Show when={onlySelected() && !editing() && isResizable(n.kind)}>
-        <div
-          class="resize-handle"
-          onPointerDown={(e) => {
-            if (e.button !== 0) return;
-            e.stopPropagation();
-            beginResize(e, n.id);
-          }}
-        />
+      <Show when={n.locked}>
+        <span class="lock-badge" title="Locked">
+          <IconLock />
+        </span>
+      </Show>
+
+      <Show when={onlySelected() && !editing() && isResizable(n.kind) && !n.locked}>
+        {/* A section by any side or corner; a block by its bottom-right corner */}
+        <For each={frame ? RESIZE_DIRS : (["se"] as ResizeDir[])}>
+          {(dir) => (
+            <div
+              class={`resize-handle ${dir}`}
+              onPointerDown={(e) => {
+                if (e.button !== 0) return;
+                e.stopPropagation();
+                beginResize(e, n.id, dir);
+              }}
+            />
+          )}
+        </For>
       </Show>
     </div>
   );
@@ -329,6 +376,7 @@ function ClassBody(p: { node: FlowNode }) {
       requestAnimationFrame(() => {
         if (body && body.scrollHeight > body.clientHeight + 1) {
           resizeNode(p.node.id, p.node.w, Math.ceil(body.scrollHeight / GRID) * GRID);
+          growFrames([p.node.id]);
         }
       }),
     ),
@@ -415,6 +463,7 @@ export function LinkedCardsBadge(p: { nodeId: string }) {
   /** Where the list goes (screen position under the badge), or null when closed */
   const [open, setOpen] = createSignal<{ x: number; y: number } | null>(null);
   const cards = () => cardsLinkedTo(p.nodeId);
+  const doneCount = () => cards().filter((c) => c.done).length;
   let el!: HTMLDivElement;
   let list: HTMLDivElement | undefined;
   const onDoc = (e: PointerEvent) => {
@@ -431,14 +480,17 @@ export function LinkedCardsBadge(p: { nodeId: string }) {
       <button
         class="link-badge"
         classList={{ done: cards().every((c) => c.done) }}
-        title={`${cards().length} linked card${cards().length === 1 ? "" : "s"}`}
+        title={`${cards().length} linked card${cards().length === 1 ? "" : "s"}, ${doneCount()} done`}
         onClick={(e) => {
           const r = e.currentTarget.getBoundingClientRect();
           setOpen(open() ? null : { x: r.right, y: r.bottom + 6 });
         }}
       >
-        <IconKanban />
-        {cards().length}
+        <Show when={cards().every((c) => c.done)} fallback={<IconKanban />}>
+          <IconCheck />
+        </Show>
+        {/* How far the work is: done of all, or just the count while none is done */}
+        {doneCount() && doneCount() < cards().length ? `${doneCount()}/${cards().length}` : cards().length}
       </button>
       {/* In <body>, so it is above every block, also for a section (drawn below the blocks) */}
       <Show when={open()}>
@@ -542,10 +594,37 @@ function LaneHeader(p: { node: FlowNode; lane: Lane }) {
 }
 
 /**
+ * A title renamed like a file: clicking it again when it is the only thing selected
+ * (without dragging) starts typing. Spread the result onto the title's element.
+ */
+export function renameOnClick(onlySelected: () => boolean, start: () => void) {
+  let armed = false;
+  let at = { x: 0, y: 0 };
+  return {
+    // Before the block's own pointerdown (which selects it) has run
+    onPointerDown: (e: PointerEvent) => {
+      armed = e.button === 0 && !e.shiftKey && onlySelected();
+      at = { x: e.clientX, y: e.clientY };
+    },
+    onClick: (e: MouseEvent) => {
+      if (armed && Math.hypot(e.clientX - at.x, e.clientY - at.y) < 3 && canEdit()) start();
+      armed = false;
+    },
+  };
+}
+
+/**
  * Plain-text editor that commits on blur. Enter finishes, Shift+Enter inserts a new line.
  * `onDone` gets the key that finished editing ("Enter" or "Escape"), if any.
  */
-function TextEditor(p: { value: string; class: string; onDone: (text: string, key?: string) => void }) {
+export function TextEditor(p: {
+  value: string;
+  class: string;
+  onDone: (text: string, key?: string) => void;
+  onInput?: (text: string) => void;
+  /** Tab finishes too (instead of moving the focus) */
+  tabDone?: boolean;
+}) {
   let ref!: HTMLDivElement;
   let key: string | undefined;
 
@@ -566,10 +645,11 @@ function TextEditor(p: { value: string; class: string; onDone: (text: string, ke
       contentEditable="plaintext-only"
       spellcheck={false}
       onBlur={() => p.onDone(ref.innerText.replace(/\n+$/, ""), key)}
+      onInput={() => p.onInput?.(ref.innerText.replace(/\n+$/, ""))}
       onPointerDown={(e) => e.stopPropagation()}
       onKeyDown={(e) => {
         e.stopPropagation();
-        if (e.key === "Escape" || (e.key === "Enter" && !e.shiftKey)) {
+        if (e.key === "Escape" || (e.key === "Enter" && !e.shiftKey) || (e.key === "Tab" && p.tabDone)) {
           e.preventDefault();
           key = e.key;
           ref.blur();

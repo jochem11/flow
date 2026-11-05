@@ -1,3 +1,13 @@
 node_modules
 dist
 .DS_Store
+.env
+server/outbox
+outbox
+/target
+
+# graphify output
+graphify-out/
+
+# production server settings (passwords)
+prod.env

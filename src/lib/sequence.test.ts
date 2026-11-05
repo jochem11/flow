@@ -6,8 +6,9 @@ import type { FlowEdge, FlowNode } from "./types";
 describe("activation bars (shared with flow_svg.rs)", () => {
   for (const c of fixture.cases) {
     it(c.name, () => {
-      const { bars } = analyze(c.nodes as FlowNode[], c.edges as FlowEdge[]);
+      const { bars, colors } = analyze(c.nodes as FlowNode[], c.edges as FlowEdge[]);
       expect(Object.fromEntries(bars)).toEqual(c.bars);
+      expect(Object.fromEntries(colors)).toEqual(c.colors);
     });
   }
 

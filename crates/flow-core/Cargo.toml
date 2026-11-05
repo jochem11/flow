@@ -1,0 +1,13 @@
+[package]
+name = "flow-core"
+version = "0.1.0"
+description = "Flow's documents and everything made from them: code, SQL, Mermaid, SVG/PNG, layout, imports"
+edition = "2024"
+
+[dependencies]
+serde = { workspace = true }
+serde_json = { workspace = true }
+specta = { workspace = true }
+uuid = { workspace = true }
+resvg = "0.49.0"
+sqlparser = "0.63.0"

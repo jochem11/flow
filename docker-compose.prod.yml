@@ -1,0 +1,66 @@
+# Flow in production, with its own database (apart from development's):
+#   cp prod.env.example prod.env      fill it in (passwords, mail, address)
+#   npm run server:prod               build and start, in the background
+#   npm run server:prod:logs          what the server says (mail and Google on or off)
+#   npm run server:prod:stop          stop it (the data stays)
+# The same on this Mac and on a server in the cloud. Settings: prod.env (not committed).
+
+name: flow-prod
+
+services:
+  db:
+    image: postgres:16
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: flow
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD in prod.env}
+      POSTGRES_DB: flow
+    volumes:
+      - db:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U flow"]
+      interval: 2s
+      retries: 30
+
+  flow:
+    build:
+      context: .
+      args:
+        MODE: production
+    restart: unless-stopped
+    depends_on:
+      db:
+        condition: service_healthy
+    # Only this computer by default (port 8090, next to development on 8080);
+    # FLOW_BIND=0.0.0.0 in prod.env opens it to your network
+    ports:
+      - "${FLOW_BIND:-127.0.0.1}:${FLOW_PORT:-8090}:8080"
+    environment:
+      DATABASE_URL: postgres://flow:${POSTGRES_PASSWORD}@db/flow
+      PUBLIC_URL: ${PUBLIC_URL:?set PUBLIC_URL in prod.env}
+      # The desktop app (not the Vite dev server)
+      ALLOWED_ORIGINS: tauri://localhost,http://tauri.localhost
+      DESKTOP_SCHEME: flowapp
+      GOOGLE_CLIENT_ID: ${GOOGLE_CLIENT_ID:-}
+      GOOGLE_CLIENT_SECRET: ${GOOGLE_CLIENT_SECRET:-}
+      SMTP_HOST: ${SMTP_HOST:?set SMTP_HOST in prod.env (without mail nobody can confirm an account)}
+      SMTP_PORT: ${SMTP_PORT:-587}
+      SMTP_USER: ${SMTP_USER:-}
+      SMTP_PASSWORD: ${SMTP_PASSWORD:-}
+      MAIL_FROM: ${MAIL_FROM:?set MAIL_FROM in prod.env}
+      RUST_LOG: info
+
+  # Optional: reachable from the internet through a Cloudflare Tunnel (https, no
+  # ports to open on your router). On with COMPOSE_PROFILES=tunnel in prod.env.
+  tunnel:
+    image: cloudflare/cloudflared:latest
+    profiles: [tunnel]
+    restart: unless-stopped
+    command: tunnel --no-autoupdate run
+    environment:
+      TUNNEL_TOKEN: ${TUNNEL_TOKEN:-}
+    depends_on:
+      - flow
+
+volumes:
+  db:

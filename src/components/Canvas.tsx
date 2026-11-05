@@ -1,10 +1,17 @@
-import { createMemo, For, onCleanup, onMount } from "solid-js";
-import { panBy, setViewport, toWorld, zoomAt } from "../lib/camera";
+import { FlowPresence, trackPointer as trackPresence } from "./Presence";
+import { FlowCommentPins, PlacingOverlay } from "./Comments";
+import { canEdit } from "../lib/access";
+import { createMemo, For, onCleanup, onMount, Show } from "solid-js";
+import { panBy, setPointer, setViewport, toWorld, zoomAt } from "../lib/camera";
 import { beginLine, beginMarquee, beginPan, blurActive } from "../lib/interactions";
-import { addNode, board, createNode, isContainer, setUi, ui } from "../lib/store";
-import { EdgeEnds, EdgeLabels, EdgesLayer } from "./Edges";
-import { NodeView } from "./NodeView";
+import { addNode, board, createNode, isContainer, select, setUi, ui } from "../lib/store";
+import { EdgeEnds, EdgeLabels, EdgesLayer, MessagesLayer } from "./Edges";
+import { FRAMES, NodeView } from "./NodeView";
+import { addImages } from "../lib/files";
 import { ContextBar } from "./ContextBar";
+
+/** The strip at the top of a section where a double-click renames it */
+const FRAME_HEADER = 48;
 
 export function Canvas() {
   let el!: HTMLDivElement;
@@ -26,6 +33,7 @@ export function Canvas() {
       }
     };
     el.addEventListener("wheel", onWheel, { passive: false });
+    trackPresence(el, toWorld);
     onCleanup(() => el.removeEventListener("wheel", onWheel));
   });
 
@@ -37,11 +45,18 @@ export function Canvas() {
       return;
     }
     if (e.button !== 0) return;
+    // Viewing only: dragging the canvas moves it
+    if (!canEdit()) {
+      beginPan(e);
+      return;
+    }
     if (ui.tool === "line") {
       beginLine(e);
       return;
     }
     if (ui.tool !== "select") {
+      // No focus change from the press itself: it would close the new block's text field at once
+      e.preventDefault();
       const w = toWorld(e.clientX, e.clientY);
       const node = createNode(ui.tool, w.x, w.y);
       addNode(node);
@@ -52,7 +67,17 @@ export function Canvas() {
   };
 
   const onDblClick = (e: MouseEvent) => {
+    if (!canEdit()) return;
     const w = toWorld(e.clientX, e.clientY);
+    // In the strip along the top of a section (beside its title): rename it
+    const frame = board.nodes
+      .filter((n) => FRAMES.includes(n.kind) && w.x >= n.x && w.x <= n.x + n.w && w.y >= n.y && w.y <= n.y + FRAME_HEADER)
+      .sort((a, b) => a.w * a.h - b.w * b.h)[0];
+    if (frame) {
+      select([frame.id]);
+      setUi("editingNode", frame.id);
+      return;
+    }
     const node = createNode("box", w.x, w.y);
     addNode(node);
     setUi("editingNode", node.id);
@@ -88,6 +113,18 @@ export function Canvas() {
       }}
       style={grid()}
       onPointerDown={onPointerDown}
+      onPointerMove={(e) => setPointer(toWorld(e.clientX, e.clientY))}
+      // Pictures dropped from the computer
+      onDragOver={(e) => {
+        if (canEdit() && e.dataTransfer?.types.includes("Files")) e.preventDefault();
+      }}
+      onDrop={(e) => {
+        const files = [...(e.dataTransfer?.files ?? [])];
+        if (!canEdit() || !files.length) return;
+        e.preventDefault();
+        void addImages(files, toWorld(e.clientX, e.clientY));
+      }}
+      onPointerLeave={() => setPointer(null)}
       onDblClick={onDblClick}
       onContextMenu={(e) => e.preventDefault()}
     >
@@ -96,11 +133,25 @@ export function Canvas() {
       </div>
       <EdgesLayer />
       <div class="world" style={{ transform: worldTransform() }}>
-        <EdgeLabels />
         <For each={blocks()}>{(n) => <NodeView node={n} />}</For>
-        <EdgeEnds />
       </div>
-      <ContextBar />
+      {/* Messages above the lifelines, so stacked activation bars never hide their ends */}
+      <MessagesLayer />
+      {/*
+        On top of everything: labels (never hidden), the ends of the selected line,
+        comments and the others' cursors. A layer of its own, because each layer
+        stacks by itself (its transform), so a z-index cannot lift things out of it.
+      */}
+      <div class="world" style={{ transform: worldTransform() }}>
+        <EdgeLabels />
+        <EdgeEnds />
+        <FlowCommentPins />
+        <FlowPresence />
+      </div>
+      <Show when={canEdit()}>
+        <ContextBar />
+      </Show>
+      <PlacingOverlay kind="flow" />
     </div>
   );
 }

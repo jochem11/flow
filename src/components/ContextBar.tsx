@@ -15,13 +15,22 @@ import {
   setSelectionColor,
   setUi,
   ui,
+  wrapSelectionInSection,
+  alignSelection,
+  distributeSelection,
+  setSelectionLocked,
+  setCallColors,
 } from "../lib/store";
+import { AlignMenu } from "./AlignMenu";
+import { deleteSelectionTidy } from "../lib/mindmap";
 import { labelPoint } from "./Edges";
 import { Menu } from "./Menu";
 import { CodeDialog } from "./CodeDialog";
 import { classKind, classParts, ROW_NAMES, withClassKind, type ClassKind } from "../lib/umlClass";
 import { isLinkable } from "../lib/links";
-import { IconCode, IconCopy, IconLabelSide, IconUndo, IconPattern, IconLabel, IconPlus, IconTrash } from "./icons";
+import { FRAMES } from "./NodeView";
+import { currentFlowType } from "./Toolbar";
+import { IconCode, IconCopy, IconLock, IconRename, IconUnlock, IconLabelSide, IconUndo, IconPattern, IconLabel, IconPlus, IconSection, IconTrash } from "./icons";
 import { FloatingBar, grow } from "./FloatingBar";
 import { CardLinksMenu } from "./CardLinksMenu";
 import { CapMenu, EndLabelsMenu, NEXT_PATTERN, NEXT_SIDE, PATTERN_NAMES, RELATIONS, SIDE_NAMES, STYLES } from "./EdgeMenus";
@@ -88,11 +97,32 @@ export function ContextBar() {
     return sel.length === 1 && sel[0].kind === "class" ? sel[0] : null;
   };
 
+  /** The selected section (or other frame), if that is the only thing selected. */
+  const frame = () => {
+    const sel = selectedNodes();
+    return sel.length === 1 && FRAMES.includes(sel[0].kind) ? sel[0] : null;
+  };
+
   /** The selected swimlane, if that is the only thing selected. */
   const pool = () => {
     const sel = selectedNodes();
     return sel.length === 1 && sel[0].kind === "lanes" ? sel[0] : null;
   };
+
+  /** Sequence diagrams: color each call, its bar and its return (for the whole board) */
+  const CallColorsButton = () => (
+    <>
+      <button
+        class="icon-btn"
+        classList={{ pressed: !!board.callColors }}
+        title="Give each call, its activation bar and its return a color of their own (for this board)"
+        onClick={() => setCallColors(!board.callColors)}
+      >
+        <span>Color calls</span>
+      </button>
+      <span class="divider" />
+    </>
+  );
 
   const currentColor = () => {
     const sel = selectedNodes();
@@ -116,6 +146,14 @@ export function ContextBar() {
               )}
             </For>
             <span class="divider" />
+            <Show when={frame()}>
+              {(n) => (
+                <button class="icon-btn" title="Rename (Enter)" onClick={() => setUi("editingNode", n().id)}>
+                  <IconRename />
+                  <span>Rename</span>
+                </button>
+              )}
+            </Show>
             <Show when={group()}>
               {(n) => (
                 <>
@@ -162,6 +200,9 @@ export function ContextBar() {
                 </>
               )}
             </Show>
+            <Show when={selectedNodes().some((n) => n.kind === "lifeline")}>
+              <CallColorsButton />
+            </Show>
             <Show when={pool()}>
               {(n) => (
                 <>
@@ -184,10 +225,28 @@ export function ContextBar() {
               </button>
               <span class="divider" />
             </Show>
+            <Show when={selectedNodes().length > 1}>
+              <AlignMenu count={selectedNodes().length} onAlign={alignSelection} onDistribute={distributeSelection} />
+            </Show>
+            <Show
+              when={selectedNodes().every((n) => n.locked)}
+              fallback={
+                <button class="icon-btn" title="Lock: it cannot be moved, changed or deleted" onClick={() => setSelectionLocked(true)}>
+                  <IconLock />
+                </button>
+              }
+            >
+              <button class="icon-btn pressed" title="Unlock" onClick={() => setSelectionLocked(false)}>
+                <IconUnlock />
+              </button>
+            </Show>
+            <button class="icon-btn" title="Wrap in a section (Ctrl+G)" onClick={wrapSelectionInSection}>
+              <IconSection />
+            </button>
             <button class="icon-btn" title="Duplicate (Ctrl+D)" onClick={duplicateSelection}>
               <IconCopy />
             </button>
-            <button class="icon-btn danger" title="Delete (Delete)" onClick={deleteSelection}>
+            <button class="icon-btn danger" title="Delete (Delete)" onClick={deleteSelectionTidy}>
               <IconTrash />
             </button>
           </FloatingBar>
@@ -233,38 +292,62 @@ export function ContextBar() {
             <CapMenu side="start" edge={selectedEdge()!} />
             <CapMenu side="end" edge={selectedEdge()!} />
             <EndLabelsMenu edge={selectedEdge()!} />
-            <Menu
-              button={(toggle, open) => (
-                <button class="icon-btn" classList={{ pressed: open() }} title="UML relationship" onClick={toggle}>
-                  <span>UML</span>
-                </button>
-              )}
-            >
-              {(close) => (
-                <For each={RELATIONS}>
-                  {(group, i) => (
-                    <>
-                      {i() > 0 && <div class="menu-sep" />}
-                      <For each={group}>
-                        {(r) => (
-                          <button
-                            class="menu-item"
-                            onClick={() => {
-                              setEdgeProps(ui.selectedEdge!, r.props);
-                              close();
-                            }}
-                          >
-                            <span>{r.name}</span>
-                            <small>{r.hint}</small>
-                          </button>
-                        )}
-                      </For>
-                    </>
-                  )}
-                </For>
-              )}
-            </Menu>
+            {/* UML arrow presets, on the board types that use them */}
+            <Show when={currentFlowType().umlLines}>
+              <Menu
+                button={(toggle, open) => (
+                  <button class="icon-btn" classList={{ pressed: open() }} title="UML relationship" onClick={toggle}>
+                    <span>UML</span>
+                  </button>
+                )}
+              >
+                {(close) => (
+                  <For each={RELATIONS}>
+                    {(group, i) => (
+                      <>
+                        {i() > 0 && <div class="menu-sep" />}
+                        <For each={group}>
+                          {(r) => (
+                            <button
+                              class="menu-item"
+                              onClick={() => {
+                                setEdgeProps(ui.selectedEdge!, r.props);
+                                close();
+                              }}
+                            >
+                              <span>{r.name}</span>
+                              <small>{r.hint}</small>
+                            </button>
+                          )}
+                        </For>
+                      </>
+                    )}
+                  </For>
+                )}
+              </Menu>
+            </Show>
             <span class="divider" />
+            <Show when={selectedEdge()?.messageY != null}>
+              {/* UML: a filled arrowhead waits for the answer, an open one does not */}
+              <button
+                class="icon-btn"
+                classList={{ pressed: (selectedEdge()?.endCap ?? "arrow") === "arrow" }}
+                title="Synchronous: the sender waits for the answer (filled arrowhead)"
+                onClick={() => setEdgeProps(ui.selectedEdge!, { endCap: "arrow" })}
+              >
+                <span>Sync</span>
+              </button>
+              <button
+                class="icon-btn"
+                classList={{ pressed: selectedEdge()?.endCap === "open" }}
+                title="Asynchronous: the sender goes on without waiting (open arrowhead)"
+                onClick={() => setEdgeProps(ui.selectedEdge!, { endCap: "open" })}
+              >
+                <span>Async</span>
+              </button>
+              <span class="divider" />
+              <CallColorsButton />
+            </Show>
             <Show when={selectedEdge()?.label}>
               <button
                 class="icon-btn"

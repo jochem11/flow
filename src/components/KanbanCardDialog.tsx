@@ -1,6 +1,9 @@
 // The card dialog, laid out like a work item in Azure Boards: description,
 // subtasks and discussion on the left; status, parent, labels and effort on the right.
 
+import { canComment, canEdit } from "../lib/access";
+import { startThread } from "../lib/comments";
+import { openDoc } from "../lib/workspace";
 import { createSignal, For, Show, type JSX } from "solid-js";
 import { Portal } from "solid-js/web";
 import {
@@ -31,7 +34,14 @@ import {
   updateLabel,
   updateTimeEntry,
   addTimeEntry,
+  isMine,
+  timeByPerson,
+  toggleAssignee,
 } from "../lib/kanban";
+import { me } from "../lib/auth";
+import { people, personById } from "../lib/people";
+import { Avatar } from "./AccountMenu";
+import { Menu } from "./Menu";
 import { activeTimer, now, startTimer, stopTimer } from "../lib/timer";
 import type { KanbanCard, KanbanComment, KanbanLabel, KanbanTimeEntry, NodeColor } from "../lib/types";
 import { ConfirmButton } from "./ConfirmButton";
@@ -39,6 +49,7 @@ import { IconClose, IconPlay, IconStop, IconSubtasks, IconTrash, KANBAN_ICON_KEY
 import { MarkdownView, onMarkdownKeyDown } from "./Markdown";
 import { RichTextEditor } from "./RichTextEditor";
 import { Links } from "./CardLinks";
+import { PlanningFields } from "./Planning";
 
 const COLORS: NodeColor[] = ["white", "yellow", "green", "blue", "purple", "pink"];
 
@@ -88,6 +99,7 @@ export function CardDialog(p: { cardId: string; onOpen: (id: string) => void; on
                   rows={1}
                   value={card().title}
                   placeholder="Card title"
+                  readOnly={!canEdit()}
                   ref={(el) => queueMicrotask(() => autosize(el))}
                   onInput={(e) => {
                     autosize(e.currentTarget);
@@ -101,6 +113,8 @@ export function CardDialog(p: { cardId: string; onOpen: (id: string) => void; on
                   }}
                 />
 
+                {/* Viewing only: every field and button in it is off */}
+                <fieldset class="kd-fields" disabled={!canEdit()}>
                 <div class="kd-body">
                   <div class="kd-main">
                     <Description card={card()} />
@@ -109,6 +123,8 @@ export function CardDialog(p: { cardId: string; onOpen: (id: string) => void; on
                     <Discussion card={card()} />
                   </div>
                   <aside class="kd-aside">
+                    <Assignees card={card()} />
+                    <PlanningFields card={card()} />
                     <Field label="Status">
                       <select
                         class="kd-select"
@@ -133,17 +149,31 @@ export function CardDialog(p: { cardId: string; onOpen: (id: string) => void; on
                     <Effort card={card()} />
                   </aside>
                 </div>
+                </fieldset>
 
                 <div class="kanban-dialog-footer">
-                  <ConfirmButton
-                    class="text-btn danger-text"
-                    onConfirm={() => {
-                      p.onClose();
-                      deleteCard(p.cardId);
-                    }}
-                  >
-                    <IconTrash /> Delete card
-                  </ConfirmButton>
+                  <Show when={canEdit()} fallback={<span />}>
+                    <ConfirmButton
+                      class="text-btn danger-text"
+                      onConfirm={() => {
+                        p.onClose();
+                        deleteCard(p.cardId);
+                      }}
+                    >
+                      <IconTrash /> Delete card
+                    </ConfirmButton>
+                  </Show>
+                  <Show when={canComment() && openDoc()?.role}>
+                    <button
+                      class="text-btn"
+                      onClick={() => {
+                        close();
+                        startThread({ kind: "card", id: p.cardId });
+                      }}
+                    >
+                      Comment on this card
+                    </button>
+                  </Show>
                   <button class="text-btn primary" onClick={close}>
                     Done
                   </button>
@@ -153,6 +183,75 @@ export function CardDialog(p: { cardId: string; onOpen: (id: string) => void; on
           </Portal>
         );
       }}
+    </Show>
+  );
+}
+
+/** Who works on the card: the people with access to the board, picked from a menu. */
+function Assignees(p: { card: KanbanCard }) {
+  const ids = () => p.card.assigneeIds ?? [];
+  const myId = () => me()?.user.id;
+  return (
+    // Only boards from the server have people
+    <Show when={openDoc()?.role}>
+      <div class="kd-field">
+        <div class="kd-label">
+          Assigned to
+          <Menu
+            align="right"
+            button={(toggle) => (
+              <button class="kd-link kd-label-action" onClick={toggle} disabled={!people().length}>
+                + Assign
+              </button>
+            )}
+          >
+            {(close) => (
+              <>
+                <div class="menu-title">People on this board</div>
+                <For each={people()}>
+                  {(u) => (
+                    <button
+                      class="menu-item"
+                      onClick={() => {
+                        toggleAssignee(p.card.id, u.id);
+                        close();
+                      }}
+                    >
+                      <span class="assign-option">
+                        <Avatar name={u.name} url={u.avatarUrl} size={20} />
+                        {u.name}
+                        <Show when={u.id === myId()}> (you)</Show>
+                      </span>
+                      <small>{ids().includes(u.id) ? "✓ assigned" : ""}</small>
+                    </button>
+                  )}
+                </For>
+              </>
+            )}
+          </Menu>
+        </div>
+        <div class="kd-assignees">
+          <For each={ids()} fallback={<span class="kd-empty">Nobody yet</span>}>
+            {(id) => {
+              const u = () => personById(id);
+              return (
+                <span class="kd-assignee" title={u()?.email ?? "No longer on this board"}>
+                  <Avatar name={u()?.name ?? "?"} url={u()?.avatarUrl} size={22} />
+                  <span>{u()?.name ?? "Former member"}</span>
+                  <button class="kd-assignee-remove" title="Unassign" onClick={() => toggleAssignee(p.card.id, id)}>
+                    ×
+                  </button>
+                </span>
+              );
+            }}
+          </For>
+        </div>
+        <Show when={myId() && !ids().includes(myId()!)}>
+          <button class="kd-link" onClick={() => toggleAssignee(p.card.id, myId()!)}>
+            Assign me
+          </button>
+        </Show>
+      </div>
     </Show>
   );
 }
@@ -178,6 +277,7 @@ function Description(p: { card: KanbanCard }) {
           value={p.card.description}
           placeholder="Add more details… Type ## for a heading, - for a list or [ ] for a checklist."
           onChange={(description) => updateCard(p.card.id, { description })}
+          readOnly={!canEdit()}
         />
       </Show>
     </section>
@@ -508,6 +608,8 @@ function TimeLog(p: { card: KanbanCard }) {
   // Newest first; `now()` makes a running session tick
   const entries = () => [...timeEntries(p.card)].reverse();
   const total = () => timeEntries(p.card).reduce((sum, e) => sum + entryMs(e, now()), 0);
+  // Who spent how much (only worth showing when someone is named)
+  const perPerson = () => timeByPerson(p.card, now()).filter((r) => r.userId);
   return (
     <section>
       <div class="kd-label">
@@ -530,6 +632,19 @@ function TimeLog(p: { card: KanbanCard }) {
           }}
         />
       </Show>
+      <Show when={perPerson().length}>
+        <div class="kd-time-people">
+          <For each={perPerson()}>
+            {(r) => (
+              <span class="kd-time-person" title={`${r.name}: ${formatHours(r.ms / HOUR)} on this card`}>
+                <Avatar name={r.name} url={personById(r.userId!)?.avatarUrl} size={20} />
+                <span>{r.name}</span>
+                <strong>{formatHours(r.ms / HOUR)}</strong>
+              </span>
+            )}
+          </For>
+        </div>
+      </Show>
       <Show when={entries().length} fallback={<Show when={!adding()}><p class="kd-empty">Start the timer, or add time you already spent.</p></Show>}>
         <div class="kd-time-log">
           <For each={entries()}>{(e) => <TimeEntryRow cardId={p.card.id} entry={e} />}</For>
@@ -542,6 +657,8 @@ function TimeLog(p: { card: KanbanCard }) {
 function TimeEntryRow(p: { cardId: string; entry: KanbanTimeEntry }) {
   const [editing, setEditing] = createSignal(false);
   const running = () => p.entry.endedAt == null;
+  // People change their own time; the board's owner can correct anyone's
+  const mayChange = () => isMine(p.entry) || openDoc()?.role === "owner" || openDoc()?.role === "coOwner";
   return (
     <Show
       when={!editing()}
@@ -560,6 +677,11 @@ function TimeEntryRow(p: { cardId: string; entry: KanbanTimeEntry }) {
       }
     >
       <div class="kd-time-row" classList={{ running: running() }}>
+        <Show when={p.entry.userName}>
+          <span class="kd-time-who" title={p.entry.userName!}>
+            <Avatar name={p.entry.userName!} url={personById(p.entry.userId ?? "")?.avatarUrl} size={18} />
+          </span>
+        </Show>
         <span class="kd-time-day">{formatDay(p.entry.startedAt)}</span>
         <span class="kd-time-range">
           {formatTime(p.entry.startedAt)} – {running() ? "now" : formatTime(p.entry.endedAt!)}
@@ -571,10 +693,11 @@ function TimeEntryRow(p: { cardId: string; entry: KanbanTimeEntry }) {
           class="kd-time-note"
           value={p.entry.note ?? ""}
           placeholder="What did you do?"
+          disabled={!mayChange()}
           onChange={(e) => updateTimeEntry(p.cardId, p.entry.id, { note: e.currentTarget.value })}
           onKeyDown={(e) => e.key === "Enter" && e.currentTarget.blur()}
         />
-        <span class="kd-time-actions">
+        <span class="kd-time-actions" hidden={!mayChange()}>
           <Show when={!running()}>
             <button class="kd-link" onClick={() => setEditing(true)}>
               Edit

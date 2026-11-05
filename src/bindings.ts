@@ -18,12 +18,7 @@ export const commands = {
 	renameFolder: (projectId: string, folderId: string, name: string) => typedError<null, string>(__TAURI_INVOKE("rename_folder", { projectId, folderId, name })),
 	/**  Moves a folder to another parent (`None` = project root) and/or position. */
 	moveFolder: (projectId: string, folderId: string, parentId: string | null, order: number) => typedError<null, string>(__TAURI_INVOKE("move_folder", { projectId, folderId, parentId, order })),
-	/**
-	 *  Deletes a folder. Its contents (subfolders and documents) move up one level.
-	 * 
-	 *  Only the direct children need a new parent: anything deeper stays attached
-	 *  to those children and moves along with them.
-	 */
+	/**  Deletes a folder. Its contents (subfolders and documents) move up one level. */
 	deleteFolder: (projectId: string, folderId: string) => typedError<null, string>(__TAURI_INVOKE("delete_folder", { projectId, folderId })),
 	/**  All documents of a project without their content, sorted by `order`. */
 	listDocuments: (projectId: string) => typedError<DocumentMeta[], string>(__TAURI_INVOKE("list_documents", { projectId })),
@@ -38,20 +33,45 @@ export const commands = {
 	moveDocument: (projectId: string, id: string, folderId: string | null, order: number) => typedError<null, string>(__TAURI_INVOKE("move_document", { projectId, id, folderId, order })),
 	/**  Deletes a document. A document that is already gone counts as success. */
 	deleteDocument: (projectId: string, id: string) => typedError<null, string>(__TAURI_INVOKE("delete_document", { projectId, id })),
-	autoLayout: (nodes: Node[], edges: Edge[]) => typedError<Position[], string>(__TAURI_INVOKE("auto_layout", { nodes, edges })),
+	autoLayout: (nodes: Node[], edges: Edge[]) => typedError<Arranged, string>(__TAURI_INVOKE("auto_layout", { nodes, edges })),
+	/**
+	 *  Writes the export to the Downloads folder: one file, or several (Java) in a
+	 *  new folder. Returns the path of the file or folder.
+	 */
 	exportDocument: (doc: Document, format: ExportFormat) => typedError<string, string>(__TAURI_INVOKE("export_document", { doc, format })),
 	/**  The SQL for a diagram, as a preview in the app. */
 	eerSql: (doc: EerDoc, dialect: SqlDialect) => __TAURI_INVOKE<string>("eer_sql", { doc, dialect }),
+	/**  Code for the UML classes in a flowchart, to preview. */
 	classCode: (flow: FlowDoc, language: CodeLanguage) => __TAURI_INVOKE<CodeFile[]>("class_code", { flow, language }),
 	/**  The Mermaid blocks for a document, to preview: one per diagram in it. */
 	mermaidPreview: (doc: Document) => __TAURI_INVOKE<CodeFile[]>("mermaid_preview", { doc }),
 	/**  The tables and relations in a SQL script, to add to an EER diagram. */
 	importSql: (sql: string) => __TAURI_INVOKE<SqlImport>("import_sql", { sql }),
+	/**  The diagram as DBML (dbdiagram.io), as a preview in the app. */
+	eerDbml: (doc: EerDoc) => __TAURI_INVOKE<string>("eer_dbml", { doc }),
+	/**  The tables, relations and table groups in DBML, to add to an EER diagram. */
+	importDbml: (dbml: string) => __TAURI_INVOKE<SqlImport>("import_dbml", { dbml }),
 	/**  The classes in source code, as a class diagram. Without a language it is guessed. */
 	importCode: (code: string, language: CodeLanguage | null) => __TAURI_INVOKE<CodeImport>("import_code", { code, language }),
+	getSessionToken: () => typedError<string | null, string>(__TAURI_INVOKE("get_session_token")),
+	setSessionToken: (token: string) => typedError<null, string>(__TAURI_INVOKE("set_session_token", { token })),
+	clearSessionToken: () => typedError<null, string>(__TAURI_INVOKE("clear_session_token")),
+	/**
+	 *  Google sign-in for the desktop app (the "loopback" flow for native apps):
+	 *  listens once on 127.0.0.1 for the browser coming back from the server with a
+	 *  one-time code, answers with a "you can close this" page, and sends the code to
+	 *  the frontend as the `login-code` event. Returns the port to give the server.
+	 */
+	startLoginListener: () => typedError<number, string>(__TAURI_INVOKE("start_login_listener")),
 };
 
 /* Types */
+/**  The result of Arrange: the nodes that move, and the lines between them. */
+export type Arranged = {
+	nodes: Position[],
+	edges: EdgePorts[],
+};
+
 /**  A column. */
 export type Attribute = {
 	id: string,
@@ -68,6 +88,25 @@ export type Attribute = {
 	autoIncrement?: boolean,
 	/**  As written in SQL: `0`, `'open'`, `CURRENT_TIMESTAMP`. Plain text is quoted on export. */
 	defaultValue?: string | null,
+};
+
+/**  Who has access to a board, for its Share dialog. */
+export type BoardAccess = {
+	members: BoardMember[],
+	invites: Invite[],
+	link: ShareLink,
+	/**  What the person asking may do */
+	role: Role,
+};
+
+/**
+ *  Someone's access to one board: their project role, and the board's own
+ *  setting for them if it has one (which then counts instead).
+ */
+export type BoardMember = {
+	user: User,
+	projectRole: Role,
+	boardRole: Role | null,
 };
 
 /**  The visible part of a canvas. Also used by EER diagrams. */
@@ -129,10 +168,46 @@ export type ColumnPair = {
 	to: string,
 };
 
+export type Comment = {
+	id: string,
+	documentId: string,
+	/**  The comment this replies to; replies have the anchor of their thread */
+	parentId: string | null,
+	anchor: CommentAnchor,
+	body: string,
+	author: CommentAuthor,
+	createdAt: number,
+	editedAt: number | null,
+	resolvedAt: number | null,
+};
+
+/**  Where a comment is attached. */
+export type CommentAnchor = 
+/**  The board as a whole */
+{ kind: "board" } | 
+/**  A flowchart block */
+{ kind: "node"; id: string } | 
+/**  An EER table */
+{ kind: "entity"; id: string } | 
+/**  A kanban card */
+{ kind: "card"; id: string } | 
+/**  A spot on a flowchart or EER canvas */
+{ kind: "point"; x: number; y: number };
+
+export type CommentAuthor = {
+	/**  None for a guest */
+	userId: string | null,
+	name: string,
+	avatarUrl: string | null,
+};
+
 /**  Column types, translated per database on export. */
 export type DataType = "smallint" | "int" | "bigint" | "decimal" | "float" | "boolean" | "char" | "varchar" | "text" | "date" | "time" | "datetime" | 
 /**  Date and time with time zone */
 "timestamp" | "uuid" | "json" | "blob";
+
+/**  The type of a flow board (see src/lib/boardTypes.ts for what each shows). */
+export type DiagramType = "flowchart" | "mindmap" | "sequence" | "class" | "usecase" | "activity" | "state" | "whiteboard";
 
 /**
  *  The content of a document; each kind has its own data.
@@ -169,6 +244,10 @@ export type DocumentMeta = {
 	name: string,
 	kind: DocumentKind,
 	updatedAt: number,
+	/**  What the logged-in user may do with it (from the server; None in the desktop app's own files) */
+	role?: Role | null,
+	/**  For a flow board: its type (missing: a whiteboard), for its icon in the list */
+	diagram?: DiagramType | null,
 };
 
 export type Edge = {
@@ -233,6 +312,17 @@ export type EdgeCap = "none" |
 /**  Hollow diamond: aggregation */
 "hollowDiamond" | "dot";
 
+/**
+ *  How a line between arranged nodes is attached after Arrange: its own route
+ *  (bend) is dropped, and it leaves and enters at these angles (none: the side
+ *  facing the other node). A line back up a flow (a loop) goes around a side.
+ */
+export type EdgePorts = {
+	id: string,
+	fromAngle: number | null,
+	toAngle: number | null,
+};
+
 export type EdgeStyle = "curved" | "straight" | 
 /**  Horizontal and vertical segments only */
 "elbow";
@@ -240,7 +330,23 @@ export type EdgeStyle = "curved" | "straight" |
 export type EerDoc = {
 	entities: Entity[],
 	relations: Relation[],
+	/**  Frames to group tables in; only for the picture (the SQL does not use them) */
+	sections?: EerSection[],
 	camera: Camera,
+};
+
+/**
+ *  A titled frame around tables. What lies inside it moves along with it: tables
+ *  whose center is inside, and sections that fit in completely.
+ */
+export type EerSection = {
+	id: string,
+	title: string,
+	x: number,
+	y: number,
+	w: number,
+	h: number,
+	color?: NodeColor | null,
 };
 
 /**  A table. */
@@ -255,6 +361,8 @@ export type Entity = {
 	color?: NodeColor | null,
 	/**  Written to the SQL as a comment above the table */
 	comment?: string | null,
+	/**  Indexes on its columns (the primary key and unique columns have their own) */
+	indexes?: TableIndex[],
 };
 
 export type ExportFormat = "svg" | "png" | "mermaid" | 
@@ -267,6 +375,16 @@ export type FlowDoc = {
 	nodes: Node[],
 	edges: Edge[],
 	camera: Camera,
+	/**
+	 *  Sequence diagrams: each call, the activation bar it starts and its return
+	 *  in a color of their own. Missing means off.
+	 */
+	callColors?: boolean | null,
+	/**
+	 *  What the board is for: which tools, actions and exports it shows.
+	 *  Missing means `Whiteboard` (everything, as boards were before types).
+	 */
+	diagram?: DiagramType | null,
 };
 
 /**  A folder inside a project. Folders nest via `parent_id`. */
@@ -281,6 +399,20 @@ export type Folder = {
 	 */
 	order: number,
 };
+
+/**  An invitation that has not been accepted yet. */
+export type Invite = {
+	id: string,
+	email: string,
+	role: Role,
+	/**  Set for an invite to one board only */
+	documentId: string | null,
+	invitedBy: string,
+	createdAt: number,
+};
+
+/**  What a star or a trash item is. */
+export type ItemKind = "project" | "document";
 
 export type KanbanCard = {
 	id: string,
@@ -298,6 +430,15 @@ export type KanbanCard = {
 	links?: CardLink[],
 	comments?: KanbanComment[],
 	timeEntries?: KanbanTimeEntry[],
+	/**  The people working on it (user ids of people with access to the board) */
+	assigneeIds?: string[],
+	/**  When work on it starts, `YYYY-MM-DD` (for the timeline) */
+	startDate?: string | null,
+	/**  When it must be done, `YYYY-MM-DD` */
+	dueDate?: string | null,
+	priority?: Priority | null,
+	/**  Cards on this board that must be done before this one can be */
+	blockedBy?: string[],
 };
 
 export type KanbanColumn = {
@@ -344,6 +485,10 @@ export type KanbanTimeEntry = {
 	startedAt: number,
 	endedAt?: number | null,
 	note?: string,
+	/**  Who spent the time (the user id; none in the desktop app's own files) */
+	userId?: string | null,
+	/**  Their name when they logged it, so it still reads after they leave */
+	userName?: string | null,
 };
 
 /**
@@ -362,6 +507,29 @@ export type Lane = {
 
 export type LinePattern = "solid" | "dashed" | "dotted";
 
+/**  What a board's public link allows people who are not invited (also guests). */
+export type LinkAccess = 
+/**  Only people with access can open the link */
+"restricted" | 
+/**  Anyone with the link can view */
+"view" | 
+/**  Anyone with the link can view and comment */
+"comment";
+
+/**  The logged-in user, as the app needs it. */
+export type Me = {
+	user: User,
+	emailVerified: boolean,
+	hasPassword: boolean,
+	hasGoogle: boolean,
+};
+
+/**  Someone in a project, with their role there. */
+export type Member = {
+	user: User,
+	role: Role,
+};
+
 export type Node = {
 	id: string,
 	kind: NodeKind,
@@ -379,6 +547,15 @@ export type Node = {
 	parent?: string | null,
 	/**  Only for `Lanes`, left to right. `w` is always the sum of their sizes. */
 	lanes?: Lane[] | null,
+	/**  Cannot be moved, resized or deleted until unlocked (it can still be selected by clicking it) */
+	locked?: boolean | null,
+	/**  Only for `Image`: the id of its file on the server */
+	image?: string | null,
+	/**
+	 *  Only for `Icon`: its shapes, in a 24×24 box, as the icon set has them:
+	 *  the element (`path`, `circle`, ...) and its attributes
+	 */
+	icon?: ([string, { [key in string]: string }])[] | null,
 };
 
 export type NodeColor = "white" | "yellow" | "green" | "blue" | "purple" | "pink";
@@ -432,7 +609,13 @@ export type NodeKind = "box" | "diamond" | "note" | "pill" |
 /**  Combined fragment (alt, loop, opt, ...): a frame with the operator in a corner tag */
 "fragment" | 
 /**  Destruction of a lifeline: a cross */
-"destroy";
+"destroy" | 
+/**  A picture uploaded to the board (`image` is its file, `text` its name) */
+"image" | 
+/**  A line drawing from the icon set (`icon` has its shapes) */
+"icon" | 
+/**  A mind map topic: joined to its subtopics, laid out as a tree to the right */
+"topic";
 
 /**  A point on the canvas, in world coordinates. */
 export type Point = {
@@ -440,12 +623,21 @@ export type Point = {
 	y: number,
 };
 
-/**  Result of `auto_layout`: the new top-left corner of a node. */
+/**
+ *  Where Arrange puts a node: its new top-left corner, and for a section or
+ *  swimlane its new size (fitted around what is in it).
+ */
 export type Position = {
 	id: string,
 	x: number,
 	y: number,
+	w?: number | null,
+	h?: number | null,
+	/**  A swimlane's lane widths, left to right */
+	lanes?: number[] | null,
 };
+
+export type Priority = "urgent" | "high" | "medium" | "low";
 
 /**
  *  A project, stored as `projects/<id>/project.json`.
@@ -462,6 +654,19 @@ export type Project = {
 	/**  Position in the sidebar */
 	order: number,
 	updatedAt?: number | null,
+	/**  What the logged-in user may do in this project (from the server; None in the desktop app's own files) */
+	role?: Role | null,
+};
+
+/**  A board someone opened lately (newest first). */
+export type RecentBoard = {
+	documentId: string,
+	projectId: string,
+	name: string,
+	kind: DocumentKind,
+	diagram?: DiagramType | null,
+	/**  Milliseconds since 1970 */
+	openedAt: number,
 };
 
 /**  What happens to the foreign key when the referenced row is deleted or updated. */
@@ -491,6 +696,38 @@ export type Relation = {
 	onUpdate?: RefAction,
 };
 
+/**
+ *  What someone may do with a project or a board. Each role can do everything
+ *  the ones before it can (`Role::Editor >= Role::Commenter`).
+ */
+export type Role = 
+/**  Not even visible (a board hidden from a project member) */
+"none" | "viewer" | 
+/**  View, and add comments */
+"commenter" | "editor" | 
+/**
+ *  Everything the owner can do (also inviting and removing people), except
+ *  deleting the project or changing the owner
+ */
+"coOwner" | 
+/**  Edit, and decide who has access */
+"owner";
+
+/**  A board's public link. */
+export type ShareLink = {
+	token: string,
+	access: LinkAccess,
+};
+
+/**  What a share link opens. */
+export type SharedBoard = {
+	documentId: string,
+	projectId: string,
+	name: string,
+	/**  What the person who opened the link may do */
+	role: Role,
+};
+
 /**  The databases SQL can be generated for. */
 export type SqlDialect = "postgres" | "mysql" | "sqlite" | "sqlserver" | "oracle";
 
@@ -501,11 +738,81 @@ export type SqlDialect = "postgres" | "mysql" | "sqlite" | "sqlserver" | "oracle
 export type SqlImport = {
 	entities: Entity[],
 	relations: Relation[],
+	/**  Groups of tables (DBML's `TableGroup`), already around their tables */
+	sections?: EerSection[],
 	skipped: string[],
+};
+
+/**  A project or board someone starred. */
+export type Star = {
+	itemId: string,
+	kind: ItemKind,
+};
+
+/**  An index on one or more columns of a table. */
+export type TableIndex = {
+	id: string,
+	/**  Made from the table and columns when empty: `idx_orders_customer_id` */
+	name?: string,
+	/**  Attribute ids, in index order */
+	columns: string[],
+	unique?: boolean,
+};
+
+export type Template = {
+	meta: TemplateMeta,
+	content: DocContent,
+};
+
+/**  A board someone saved to start new boards from, without its content. */
+export type TemplateMeta = {
+	id: string,
+	name: string,
+	kind: DocumentKind,
+	createdAt: number,
 };
 
 export type TextDoc = {
 	markdown: string,
+};
+
+/**  A deleted board or project, which can be restored for 30 days. */
+export type TrashItem = {
+	id: string,
+	kind: ItemKind,
+	name: string,
+	/**  A board's project (its id and name) */
+	projectId?: string | null,
+	projectName?: string | null,
+	/**  A board's kind and type, for its icon */
+	docKind?: DocumentKind | null,
+	diagram?: DiagramType | null,
+	/**  Milliseconds since 1970 */
+	deletedAt: number,
+};
+
+export type User = {
+	id: string,
+	email: string,
+	name: string,
+	avatarUrl: string | null,
+};
+
+/**  A saved state of a board, with its content. */
+export type Version = {
+	meta: VersionMeta,
+	content: DocContent,
+};
+
+/**  A saved state of a board, without its content (the history list). */
+export type VersionMeta = {
+	id: string,
+	/**  Given when saved by hand; none for the ones kept automatically */
+	name?: string | null,
+	/**  The name of who saved it (or whose change was kept) */
+	createdBy?: string | null,
+	/**  Milliseconds since 1970 */
+	createdAt: number,
 };
 
 /* Tauri Specta runtime */

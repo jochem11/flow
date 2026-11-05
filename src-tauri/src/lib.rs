@@ -1,6 +1,8 @@
 mod commands;
-mod models;
 mod storage;
+
+// The documents are defined in `flow_core` (shared with the server)
+use flow_core::models;
 
 use specta_typescript::semantic;
 use tauri_specta::{Builder, collect_commands};
@@ -12,7 +14,7 @@ pub type CmdResult<T> = Result<T, String>;
 /// Every command the frontend may call. Both the `invoke_handler` and
 /// `bindings.ts` are generated from this list, so they can never drift apart.
 fn specta_builder() -> Builder<tauri::Wry> {
-    use commands::{code_import, codegen, documents, eer, flow, folders, mermaid, projects, sql_import};
+    use commands::{documents, folders, projects, session, tools};
 
     Builder::<tauri::Wry>::new()
         .commands(collect_commands![
@@ -31,14 +33,31 @@ fn specta_builder() -> Builder<tauri::Wry> {
             documents::rename_document,
             documents::move_document,
             documents::delete_document,
-            flow::auto_layout,
-            flow::export_document,
-            eer::eer_sql,
-            codegen::class_code,
-            mermaid::mermaid_preview,
-            sql_import::import_sql,
-            code_import::import_code,
+            tools::auto_layout,
+            tools::export_document,
+            tools::eer_sql,
+            tools::class_code,
+            tools::mermaid_preview,
+            tools::import_sql,
+            tools::eer_dbml,
+            tools::import_dbml,
+            tools::import_code,
+            session::get_session_token,
+            session::set_session_token,
+            session::clear_session_token,
+            session::start_login_listener,
         ])
+        // Types of the server's API (accounts, sharing, comments), not used by a command here
+        .typ::<models::Me>()
+        .typ::<models::Member>()
+        .typ::<models::BoardAccess>()
+        .typ::<models::SharedBoard>()
+        .typ::<models::Comment>()
+        .typ::<models::Version>()
+        .typ::<models::Template>()
+        .typ::<models::Star>()
+        .typ::<models::RecentBoard>()
+        .typ::<models::TrashItem>()
         // One TS type per struct instead of separate `X_Serialize` / `X_Deserialize` types.
         .disable_serde_phases()
         // By default f64 becomes `number | null`, because serde_json writes NaN/Infinity
@@ -67,6 +86,14 @@ pub fn run() {
     export_bindings(&builder);
 
     tauri::Builder::default()
+        // One Flow at a time: a `flowapp://` link opened while it runs goes to the open window
+        .plugin(tauri_plugin_single_instance::init(|app, _args, _cwd| {
+            use tauri::Manager;
+            if let Some(w) = app.get_webview_window("main") {
+                let _ = w.set_focus();
+            }
+        }))
+        .plugin(tauri_plugin_deep_link::init())
         .plugin(tauri_plugin_opener::init())
         .invoke_handler(builder.invoke_handler())
         .run(tauri::generate_context!())

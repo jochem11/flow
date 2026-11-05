@@ -1,12 +1,14 @@
-// Sidebar: a collapsible tree of projects → folders → documents.
+// Sidebar: a filter on top, then sections: Recent, Starred, My projects (a
+// collapsible tree of projects → folders → boards), Shared with me, and Trash.
 // Double-click to rename, drag to move, and use the + on a project or folder to add items.
 
+import { roleCanEdit, roleOwns } from "../lib/roles";
 import { createSignal, For, onMount, Show, type JSX } from "solid-js";
-import type { DocumentKind, DocumentMeta, Folder, Project } from "../lib/types";
+import type { DocumentMeta, Folder, Project } from "../lib/types";
 import {
-  createDocument,
   createFolder,
   createProject,
+  reloadProjects,
   deleteDocument,
   deleteFolder,
   deleteProject,
@@ -22,10 +24,19 @@ import {
   updateProject,
   view,
 } from "../lib/workspace";
-import { IconChevronRight, IconFolder, IconNewFolder, IconPlus, IconProject, IconTrash } from "./icons";
-import { KIND_LABEL, KINDS, KindIcon } from "./kinds";
+import { IconChevronRight, IconClose, IconFolder, IconNewFolder, IconPlus, IconProject, IconStar, IconTrash, IconUndo } from "./icons";
+import { deleteForever, isStarred, recent, restoreItem, stars, toggleStar, trash } from "../lib/personal";
+import { when } from "../lib/history";
+import { errMsg } from "../lib/api";
+import { toast } from "../lib/toast";
+import { ConfirmButton } from "./ConfirmButton";
+import type { DocumentKind, ItemKind, TrashItem } from "../lib/types";
+import { BoardIcon } from "./kinds";
 import { Menu } from "./Menu";
 import { TimerIndicator } from "./TimerIndicator";
+import { AccountMenu } from "./AccountMenu";
+import { NewBoardDialog } from "./BoardDialogs";
+import { boardTypeOf } from "../lib/boardTypes";
 
 // ---------- sidebar UI state (local only, not saved to the backend) ----------
 
@@ -40,19 +51,280 @@ function loadCollapsed(): Set<string> {
 }
 
 const [collapsed, setCollapsed] = createSignal(loadCollapsed());
-const isOpen = (id: string) => !collapsed().has(id);
+/** Open unless closed; while filtering everything is open, so what matches shows. */
+const isOpen = (id: string) => filtering() || !collapsed().has(id);
 
-function toggle(id: string, open?: boolean) {
-  const next = new Set(collapsed());
-  const shouldOpen = open ?? next.has(id);
-  if (shouldOpen) next.delete(id);
-  else next.add(id);
+function saveCollapsed(next: Set<string>) {
   setCollapsed(next);
   try {
     localStorage.setItem(COLLAPSED_KEY, JSON.stringify([...next]));
   } catch {
     /* ignore */
   }
+}
+
+function toggle(id: string, open?: boolean) {
+  const next = new Set(collapsed());
+  const shouldOpen = open ?? next.has(id);
+  if (shouldOpen) next.delete(id);
+  else next.add(id);
+  saveCollapsed(next);
+}
+
+// ---------- filter (the box and chips on top) ----------
+
+const [query, setQuery] = createSignal("");
+/** Only boards of this kind (null: all) */
+const [kindFilter, setKindFilter] = createSignal<DocumentKind | null>(null);
+const filtering = () => !!query().trim() || kindFilter() !== null;
+const nameHit = (name: string) => name.toLowerCase().includes(query().trim().toLowerCase());
+const docHit = (d: DocumentMeta) => (kindFilter() === null || d.kind === kindFilter()) && nameHit(d.name);
+/** A project or folder whose own name matches shows all it holds (no kind chip on) */
+const containerHit = (name: string) => kindFilter() === null && !!query().trim() && nameHit(name);
+
+/** Whether a folder, or anything in it, matches. */
+function folderHit(project: Project, folder: Folder): boolean {
+  if (containerHit(folder.name)) return true;
+  if (docsOf(project.id).some((d) => d.folderId === folder.id && docHit(d))) return true;
+  return project.folders.some((f) => f.parentId === folder.id && folderHit(project, f));
+}
+
+const projectHit = (p: Project) =>
+  !filtering() || containerHit(p.name) || docsOf(p.id).some(docHit) || p.folders.some((f) => folderHit(p, f));
+
+const KIND_CHIPS: { kind: DocumentKind; label: string }[] = [
+  { kind: "flow", label: "Diagrams" },
+  { kind: "text", label: "Docs" },
+  { kind: "kanban", label: "Kanban" },
+  { kind: "eer", label: "EER" },
+];
+
+function FilterBar() {
+  let input!: HTMLInputElement;
+  return (
+    <div class="sidebar-filter">
+      <div class="filter-box">
+        <input
+          ref={input}
+          type="search"
+          placeholder="Filter boards…"
+          aria-label="Filter boards by name"
+          value={query()}
+          onInput={(e) => setQuery(e.currentTarget.value)}
+          onKeyDown={(e) => {
+            if (e.key === "Escape") {
+              setQuery("");
+              input.blur();
+            }
+          }}
+        />
+        <Show when={filtering()}>
+          <button
+            class="icon-btn small"
+            title="Clear the filter"
+            onClick={() => {
+              setQuery("");
+              setKindFilter(null);
+            }}
+          >
+            <IconClose />
+          </button>
+        </Show>
+      </div>
+      <div class="filter-chips" role="group" aria-label="Only boards of one kind">
+        <For each={KIND_CHIPS}>
+          {(c) => (
+            <button
+              class="chip-toggle small"
+              classList={{ on: kindFilter() === c.kind }}
+              aria-pressed={kindFilter() === c.kind}
+              onClick={() => setKindFilter(kindFilter() === c.kind ? null : c.kind)}
+            >
+              {c.label}
+            </button>
+          )}
+        </For>
+      </div>
+    </div>
+  );
+}
+
+// ---------- sections ----------
+
+/** A section of the sidebar with a title that opens and closes it (remembered). */
+function Section(p: { id: string; title: string; count?: number; defaultOpen?: boolean; children: JSX.Element }) {
+  const key = () => `section:${p.id}`;
+  // Remembered as the opposite of the default; open while filtering, so what matches shows
+  const open = () => filtering() || (p.defaultOpen === false ? collapsed().has(key()) : !collapsed().has(key()));
+  const flip = () => {
+    const next = new Set(collapsed());
+    if (next.has(key())) next.delete(key());
+    else next.add(key());
+    saveCollapsed(next);
+  };
+  return (
+    <section class="sidebar-section">
+      <button class="tree-heading section-toggle" aria-expanded={open()} onClick={flip}>
+        <span class="twisty" classList={{ open: open() }}>
+          <IconChevronRight />
+        </span>
+        <span>{p.title}</span>
+        <Show when={p.count}>
+          <span class="section-count">{p.count}</span>
+        </Show>
+      </button>
+      <Show when={open()}>{p.children}</Show>
+    </section>
+  );
+}
+
+/** The star of a project or board (in its row's actions; always shown when starred). */
+function StarButton(p: { id: string; kind: ItemKind }) {
+  return (
+    <button
+      class="icon-btn small star-btn"
+      classList={{ starred: isStarred(p.id) }}
+      title={isStarred(p.id) ? "Unstar" : "Star (shows it under Starred)"}
+      aria-pressed={isStarred(p.id)}
+      onClick={() => toggleStar(p.id, p.kind)}
+    >
+      <IconStar />
+    </button>
+  );
+}
+
+/** A board by its id, wherever it is in the loaded projects. */
+const findDoc = (id: string) => projects().flatMap((p) => docsOf(p.id)).find((d) => d.id === id);
+
+function RecentList() {
+  // Only boards still in the sidebar (not deleted, still shared)
+  const items = () => recent().filter((r) => findDoc(r.documentId));
+  return (
+    <Show when={items().length}>
+      <Section id="recent" title="Recent">
+        <For each={items()}>
+          {(r) => (
+            <Row
+              key={`recent:${r.documentId}`}
+              depth={0}
+              active={(() => {
+                const v = view();
+                return v.type === "doc" && v.docId === r.documentId;
+              })()}
+              onClick={() => openDocument(r.projectId, r.documentId)}
+              icon={<BoardIcon kind={r.kind} diagram={r.diagram} />}
+              name={findDoc(r.documentId)?.name ?? r.name}
+              sub={projectById(r.projectId)?.name}
+            />
+          )}
+        </For>
+      </Section>
+    </Show>
+  );
+}
+
+/** A starred project or board that is still in the sidebar. */
+type StarredItem = { id: string; project?: Project; doc?: DocumentMeta };
+
+function StarredList() {
+  const items = () =>
+    stars().flatMap((s): StarredItem[] => {
+      if (s.kind === "project") {
+        const project = projectById(s.itemId);
+        return project ? [{ id: s.itemId, project }] : [];
+      }
+      const doc = findDoc(s.itemId);
+      return doc ? [{ id: s.itemId, doc }] : [];
+    });
+  const viewing = (docId: string) => {
+    const v = view();
+    return v.type === "doc" && v.docId === docId;
+  };
+  return (
+    <Show when={items().length}>
+      <Section id="starred" title="Starred">
+        <For each={items()}>
+          {(item) => (
+            <Show
+              when={item.doc}
+              fallback={
+                <Row
+                  key={`star:${item.id}`}
+                  depth={0}
+                  onClick={() => openProject(item.id)}
+                  icon={<IconProject />}
+                  name={item.project?.name ?? ""}
+                  actions={<StarButton id={item.id} kind="project" />}
+                />
+              }
+            >
+              {(d) => (
+                <Row
+                  key={`star:${item.id}`}
+                  depth={0}
+                  active={viewing(d().id)}
+                  onClick={() => openDocument(d().projectId, d().id)}
+                  icon={<BoardIcon kind={d().kind} diagram={d().diagram} />}
+                  name={d().name}
+                  sub={projectById(d().projectId)?.name}
+                  actions={<StarButton id={item.id} kind="document" />}
+                />
+              )}
+            </Show>
+          )}
+        </For>
+      </Section>
+    </Show>
+  );
+}
+
+function TrashList() {
+  const restore = async (item: TrashItem) => {
+    try {
+      await restoreItem(item);
+      await reloadProjects();
+      toast(`“${item.name}” is back`);
+    } catch (e) {
+      toast(errMsg(e), "error");
+    }
+  };
+  const remove = async (item: TrashItem) => {
+    try {
+      await deleteForever(item);
+    } catch (e) {
+      toast(errMsg(e), "error");
+    }
+  };
+  return (
+    <Show when={trash().length}>
+      <Section id="trash" title="Trash" count={trash().length} defaultOpen={false}>
+        <p class="tree-note">Deleted boards and projects stay here for 30 days.</p>
+        <For each={trash()}>
+          {(item) => (
+            <Row
+              key={`trash:${item.id}`}
+              depth={0}
+              onClick={() => restore(item)}
+              title="Click to restore"
+              icon={item.kind === "project" ? <IconProject /> : <BoardIcon kind={item.docKind ?? "flow"} diagram={item.diagram} />}
+              name={item.name}
+              sub={`${item.projectName ? `${item.projectName} · ` : ""}${when(item.deletedAt)}`}
+              actions={
+                <>
+                  <button class="icon-btn small" title="Restore" onClick={() => restore(item)}>
+                    <IconUndo />
+                  </button>
+                  <ConfirmButton class="icon-btn small danger" title="Delete for good (click twice)" onConfirm={() => remove(item)}>
+                    <IconTrash />
+                  </ConfirmButton>
+                </>
+              }
+            />
+          )}
+        </For>
+      </Section>
+    </Show>
+  );
 }
 
 /** Id of the item being renamed (project, folder or document). */
@@ -183,6 +455,15 @@ function dragProps(item: DragItem) {
 
 // ---------- components ----------
 
+// Projects of others (a role other than owner) are listed under "Shared with me";
+// the desktop app's own files have no role and count as own.
+/** May the user change this project's folders and boards? (owner or editor; the desktop app's own files: yes) */
+const editsProject = (p: Project | undefined) => roleCanEdit(p?.role);
+const ownsProject = (p: Project | undefined) => roleOwns(p?.role);
+
+const ownProjects = () => projects().filter((p) => !p.role || p.role === "owner");
+const sharedProjects = () => projects().filter((p) => p.role && p.role !== "owner");
+
 export function Sidebar() {
   return (
     <aside class="sidebar">
@@ -200,12 +481,31 @@ export function Sidebar() {
           <IconPlus />
         </button>
       </div>
+      <FilterBar />
       <nav class="tree" aria-label="Projects">
-        <For each={projects()} fallback={<p class="tree-empty">No projects yet</p>}>
-          {(p) => <ProjectNode project={p} />}
-        </For>
+        <Show when={!filtering()}>
+          <RecentList />
+          <StarredList />
+        </Show>
+        <Section id="mine" title="My projects">
+          <For
+            each={ownProjects().filter(projectHit)}
+            fallback={<p class="tree-empty">{filtering() ? "Nothing matches" : "No projects yet"}</p>}
+          >
+            {(p) => <ProjectNode project={p} />}
+          </For>
+        </Section>
+        <Show when={sharedProjects().filter(projectHit).length}>
+          <Section id="shared" title="Shared with me">
+            <For each={sharedProjects().filter(projectHit)}>{(p) => <ProjectNode project={p} />}</For>
+          </Section>
+        </Show>
+        <Show when={!filtering()}>
+          <TrashList />
+        </Show>
       </nav>
       <TimerIndicator />
+      <AccountMenu />
     </aside>
   );
 }
@@ -228,12 +528,17 @@ function ProjectNode(p: { project: Project }) {
         icon={<IconProject />}
         name={p.project.name}
         strong
-        onRename={(name) => updateProject(id(), { name })}
-        drop={dropProps(id(), id(), false, () => drop(id(), null))}
+        onRename={editsProject(p.project) ? (name) => updateProject(id(), { name }) : undefined}
+        drop={editsProject(p.project) ? dropProps(id(), id(), false, () => drop(id(), null)) : undefined}
         actions={
           <>
-            <AddMenu projectId={id()} folderId={null} />
-            <DeleteButton id={id()} title="Delete project" onConfirm={() => deleteProject(id())} />
+            <StarButton id={id()} kind="project" />
+            <Show when={editsProject(p.project)}>
+              <AddMenu projectId={id()} folderId={null} />
+            </Show>
+            <Show when={ownsProject(p.project)}>
+              <DeleteButton id={id()} title="Move the project to the trash" onConfirm={() => deleteProject(id())} />
+            </Show>
           </>
         }
       />
@@ -244,19 +549,26 @@ function ProjectNode(p: { project: Project }) {
   );
 }
 
-/** All folders and documents directly inside one parent (a folder or the project root). */
-function Level(p: { project: Project; parentId: string | null; depth: number }) {
+/**
+ * All folders and documents directly inside one parent (a folder or the project
+ * root). While filtering, only what matches (all of it under a matching name).
+ */
+function Level(p: { project: Project; parentId: string | null; depth: number; all?: boolean }) {
+  const parentHit = () => p.all || containerHit(p.parentId ? (p.project.folders.find((f) => f.id === p.parentId)?.name ?? "") : p.project.name);
+  const show = () => !filtering() || parentHit();
   const folders = () =>
-    p.project.folders.filter((f) => f.parentId === p.parentId).sort((a, b) => a.order - b.order);
+    p.project.folders
+      .filter((f) => f.parentId === p.parentId && (show() || folderHit(p.project, f)))
+      .sort((a, b) => a.order - b.order);
   const docs = () =>
     docsOf(p.project.id)
-      .filter((d) => d.folderId === p.parentId)
+      .filter((d) => d.folderId === p.parentId && (show() || docHit(d)))
       .sort((a, b) => a.order - b.order);
   return (
     <>
-      <For each={folders()}>{(f) => <FolderNode project={p.project} folder={f} depth={p.depth} />}</For>
+      <For each={folders()}>{(f) => <FolderNode project={p.project} folder={f} depth={p.depth} all={filtering() && parentHit()} />}</For>
       <For each={docs()}>{(d) => <DocNode doc={d} depth={p.depth} />}</For>
-      <Show when={!folders().length && !docs().length && p.depth > 0}>
+      <Show when={!folders().length && !docs().length && p.depth > 0 && !filtering()}>
         <p class="tree-empty" style={{ "padding-left": `${p.depth * 14 + 30}px` }}>
           Empty
         </p>
@@ -265,7 +577,7 @@ function Level(p: { project: Project; parentId: string | null; depth: number }) 
   );
 }
 
-function FolderNode(p: { project: Project; folder: Folder; depth: number }) {
+function FolderNode(p: { project: Project; folder: Folder; depth: number; all?: boolean }) {
   const id = () => p.folder.id;
   const pid = () => p.project.id;
   return (
@@ -278,28 +590,29 @@ function FolderNode(p: { project: Project; folder: Folder; depth: number }) {
         onClick={() => toggle(id())}
         icon={<IconFolder />}
         name={p.folder.name}
-        onRename={(name) => renameFolder(pid(), id(), name)}
-        drag={dragProps({ type: "folder", projectId: pid(), id: id() })}
-        drop={dropProps(id(), pid(), false, () => drop(pid(), id()))}
+        onRename={editsProject(p.project) ? (name) => renameFolder(pid(), id(), name) : undefined}
+        drag={editsProject(p.project) ? dragProps({ type: "folder", projectId: pid(), id: id() }) : undefined}
+        drop={editsProject(p.project) ? dropProps(id(), pid(), false, () => drop(pid(), id())) : undefined}
         actions={
-          <>
+          <Show when={editsProject(p.project)}>
             <AddMenu projectId={pid()} folderId={id()} />
             <DeleteButton
               id={id()}
               title="Delete folder (its contents move up one level)"
               onConfirm={() => deleteFolder(pid(), id())}
             />
-          </>
+          </Show>
         }
       />
       <Show when={isOpen(id())}>
-        <Level project={p.project} parentId={id()} depth={p.depth + 1} />
+        <Level project={p.project} parentId={id()} depth={p.depth + 1} all={p.all} />
       </Show>
     </div>
   );
 }
 
 function DocNode(p: { doc: DocumentMeta; depth: number }) {
+  const editsDoc = () => roleCanEdit(p.doc.role);
   const active = () => {
     const v = view();
     return v.type === "doc" && v.docId === p.doc.id;
@@ -310,20 +623,23 @@ function DocNode(p: { doc: DocumentMeta; depth: number }) {
       depth={p.depth}
       active={active()}
       onClick={() => openDocument(p.doc.projectId, p.doc.id)}
-      icon={<KindIcon kind={p.doc.kind} />}
+      icon={<BoardIcon kind={p.doc.kind} diagram={p.doc.diagram} />}
       name={p.doc.name}
-      title={KIND_LABEL[p.doc.kind]}
-      onRename={(name) => renameDocument(p.doc.projectId, p.doc.id, name)}
-      drag={dragProps({ type: "doc", projectId: p.doc.projectId, id: p.doc.id })}
-      drop={dropProps(p.doc.id, p.doc.projectId, true, (pos) =>
-        drop(p.doc.projectId, p.doc.folderId, { doc: p.doc, pos }),
-      )}
+      title={boardTypeOf(p.doc.kind, p.doc.diagram).label}
+      onRename={editsDoc() ? (name) => renameDocument(p.doc.projectId, p.doc.id, name) : undefined}
+      drag={editsDoc() && editsProject(projectById(p.doc.projectId)) ? dragProps({ type: "doc", projectId: p.doc.projectId, id: p.doc.id }) : undefined}
+      drop={
+        editsProject(projectById(p.doc.projectId))
+          ? dropProps(p.doc.id, p.doc.projectId, true, (pos) => drop(p.doc.projectId, p.doc.folderId, { doc: p.doc, pos }))
+          : undefined
+      }
       actions={
-        <DeleteButton
-          id={p.doc.id}
-          title="Delete document"
-          onConfirm={() => deleteDocument(p.doc.projectId, p.doc.id)}
-        />
+        <>
+          <StarButton id={p.doc.id} kind="document" />
+          <Show when={editsProject(projectById(p.doc.projectId))}>
+            <DeleteButton id={p.doc.id} title="Move to the trash" onConfirm={() => deleteDocument(p.doc.projectId, p.doc.id)} />
+          </Show>
+        </>
       }
     />
   );
@@ -336,12 +652,15 @@ function Row(p: {
   name: string;
   icon: JSX.Element;
   title?: string;
+  /** Small text after the name (a board's project, when it was deleted) */
+  sub?: string;
   strong?: boolean;
   active?: boolean;
   open?: boolean;
   onToggle?: () => void;
   onClick: () => void;
-  onRename: (name: string) => void;
+  /** None: cannot be renamed (viewing only) */
+  onRename?: (name: string) => void;
   actions?: JSX.Element;
   drag?: ReturnType<typeof dragProps>;
   drop?: ReturnType<typeof dropProps>;
@@ -363,7 +682,7 @@ function Row(p: {
       onClick={() => !editing() && p.onClick()}
       onDblClick={(e) => {
         e.stopPropagation();
-        setRenaming(p.key);
+        if (p.onRename) setRenaming(p.key);
       }}
       {...p.drag}
       {...p.drop}
@@ -382,12 +701,22 @@ function Row(p: {
         </button>
       </Show>
       <span class="row-icon">{p.icon}</span>
-      <Show when={editing()} fallback={<span class="row-name">{p.name}</span>}>
+      <Show
+        when={editing()}
+        fallback={
+          <>
+            <span class="row-name">{p.name}</span>
+            <Show when={p.sub}>
+              <small class="row-sub">{p.sub}</small>
+            </Show>
+          </>
+        }
+      >
         <RenameInput
           value={p.name}
           onDone={(name) => {
             setRenaming(null);
-            if (name !== null && name.trim() && name !== p.name) p.onRename(name);
+            if (name !== null && name.trim() && name !== p.name) p.onRename?.(name);
           }}
         />
       </Show>
@@ -435,51 +764,56 @@ function AddMenu(p: { projectId: string; folderId: string | null }) {
     const id = await createFolder(p.projectId, p.folderId);
     if (id) setRenaming(id);
   };
-  const addDocument = async (kind: DocumentKind) => {
-    expand();
-    const id = await createDocument(p.projectId, p.folderId, kind);
-    if (id) setRenaming(id);
-  };
+  // A new board: first its type, then what it starts with (blank or a template)
+  const [picking, setPicking] = createSignal(false);
   return (
-    <Menu
-      button={(toggleMenu, open) => (
-        <button class="icon-btn small" classList={{ pressed: open() }} title="Add" onClick={toggleMenu}>
-          <IconPlus />
-        </button>
-      )}
-    >
-      {(close) => (
-        <>
-          <button
-            class="menu-item"
-            onClick={() => {
-              close();
-              addFolder();
-            }}
-          >
-            <span class="with-icon">
-              <IconNewFolder /> New folder
-            </span>
+    <>
+      <Menu
+        button={(toggleMenu, open) => (
+          <button class="icon-btn small" classList={{ pressed: open() }} title="Add" onClick={toggleMenu}>
+            <IconPlus />
           </button>
-          <div class="menu-sep" />
-          <For each={KINDS}>
-            {(kind) => (
-              <button
-                class="menu-item"
-                onClick={() => {
-                  close();
-                  addDocument(kind);
-                }}
-              >
-                <span class="with-icon">
-                  <KindIcon kind={kind} /> {KIND_LABEL[kind]}
-                </span>
-              </button>
-            )}
-          </For>
-        </>
-      )}
-    </Menu>
+        )}
+      >
+        {(close) => (
+          <>
+            <button
+              class="menu-item"
+              onClick={() => {
+                close();
+                expand();
+                setPicking(true);
+              }}
+            >
+              <span class="with-icon">
+                <IconPlus /> New board…
+              </span>
+            </button>
+            <button
+              class="menu-item"
+              onClick={() => {
+                close();
+                addFolder();
+              }}
+            >
+              <span class="with-icon">
+                <IconNewFolder /> New folder
+              </span>
+            </button>
+          </>
+        )}
+      </Menu>
+      <Show when={picking()}>
+        <NewBoardDialog
+          projectId={p.projectId}
+          folderId={p.folderId}
+          onClose={(id) => {
+            setPicking(false);
+            if (id) setRenaming(id);
+          }}
+        />
+      </Show>
+    </>
   );
 }
 

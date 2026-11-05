@@ -9,6 +9,8 @@ export function Menu(p: {
   button: (toggle: () => void, open: () => boolean) => JSX.Element;
   children: (close: () => void) => JSX.Element;
   align?: "left" | "right";
+  /** Open above the button (at the bottom of the screen) */
+  up?: boolean;
 }) {
   const [pos, setPos] = createSignal<{ x: number; y: number } | null>(null);
   let anchor!: HTMLSpanElement;
@@ -18,7 +20,7 @@ export function Menu(p: {
   const toggle = () => {
     if (pos()) return close();
     const r = anchor.getBoundingClientRect();
-    setPos({ x: p.align === "right" ? r.right : r.left, y: r.bottom + 6 });
+    setPos({ x: p.align === "right" ? r.right : r.left, y: p.up ? r.top - 6 : r.bottom + 6 });
   };
 
   const onDoc = (e: PointerEvent) => {
@@ -38,7 +40,7 @@ export function Menu(p: {
               ref={menu}
               class="menu panel"
               style={{
-                top: `${at().y}px`,
+                ...(p.up ? { bottom: `${window.innerHeight - at().y}px` } : { top: `${at().y}px` }),
                 ...(p.align === "right"
                   ? { right: `${window.innerWidth - at().x}px` }
                   : { left: `${at().x}px` }),

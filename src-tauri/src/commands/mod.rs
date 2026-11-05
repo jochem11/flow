@@ -10,18 +10,12 @@
 //!   projects.rs   projects, plus the `load_project` / `save_project` helpers
 //!   folders.rs    folders inside a project (a tree via `parent_id`)
 //!   documents.rs  documents: list, load, save, create, rename, move, delete
-//!   flow.rs       flowchart auto-layout and export (Mermaid, SVG, PNG)
-//!   flow_svg.rs   drawing a flowchart as SVG (no commands)
-//!   eer.rs        SQL from an EER diagram, for several databases
-//!   codegen.rs    code from the UML classes in a flowchart, for several languages
+//!   session.rs    the Flow server session token, in the system keychain
+//!   tools.rs      layout, export, SQL, code, Mermaid and imports: wrappers around
+//!                 `flow_core`, where all of that lives (shared with the server)
 
-pub mod code_import;
-pub mod codegen;
 pub mod documents;
-pub mod eer;
-pub mod flow;
-mod flow_svg;
-pub mod mermaid;
-pub mod sql_import;
 pub mod folders;
 pub mod projects;
+pub mod session;
+pub mod tools;

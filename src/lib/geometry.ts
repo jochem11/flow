@@ -472,3 +472,72 @@ export function bounds(rects: Rect[]): Rect | null {
   }
   return { x: minX, y: minY, w: maxX - minX, h: maxY - minY };
 }
+
+/** A side or corner of a rectangle, by compass direction */
+export type ResizeDir = "n" | "ne" | "e" | "se" | "s" | "sw" | "w" | "nw";
+export const RESIZE_DIRS: ResizeDir[] = ["n", "ne", "e", "se", "s", "sw", "w", "nw"];
+
+/**
+ * `r` with one of its sides or corners dragged by (dx, dy). The sides that move go
+ * through `roundX` / `roundY` (to the grid), the others stay put; never smaller than `min`.
+ */
+export function resizeRect(
+  r: Rect,
+  dir: ResizeDir,
+  dx: number,
+  dy: number,
+  min: { w: number; h: number },
+  roundX: (v: number) => number = (v) => v,
+  roundY: (v: number) => number = roundX,
+): Rect {
+  const right = r.x + r.w;
+  const bottom = r.y + r.h;
+  let { x, y, w, h } = r;
+  if (dir.includes("e")) w = Math.max(min.w, roundX(right + dx) - x);
+  if (dir.includes("w")) {
+    x = Math.min(roundX(r.x + dx), right - min.w);
+    w = right - x;
+  }
+  if (dir.includes("s")) h = Math.max(min.h, roundY(bottom + dy) - y);
+  if (dir.includes("n")) {
+    y = Math.min(roundY(r.y + dy), bottom - min.h);
+    h = bottom - y;
+  }
+  return { x, y, w, h };
+}
+
+export type AlignTo = "left" | "center" | "right" | "top" | "middle" | "bottom";
+
+/** Where each rectangle goes to line up with the others' outer edge or middle. */
+export function alignRects<T extends Rect & { id: string }>(items: T[], to: AlignTo): Map<string, Pt> {
+  const box = bounds(items);
+  const out = new Map<string, Pt>();
+  if (!box) return out;
+  for (const r of items) {
+    const x = to === "left" ? box.x : to === "center" ? box.x + box.w / 2 - r.w / 2 : to === "right" ? box.x + box.w - r.w : r.x;
+    const y = to === "top" ? box.y : to === "middle" ? box.y + box.h / 2 - r.h / 2 : to === "bottom" ? box.y + box.h - r.h : r.y;
+    out.set(r.id, { x, y });
+  }
+  return out;
+}
+
+/**
+ * Where each rectangle goes for equal gaps between them along `axis`, the first
+ * and last staying where they are (in the order they are in along that axis).
+ */
+export function distributeRects<T extends Rect & { id: string }>(items: T[], axis: "x" | "y"): Map<string, Pt> {
+  const out = new Map<string, Pt>();
+  if (items.length < 3) return out;
+  const size = (r: Rect) => (axis === "x" ? r.w : r.h);
+  const pos = (r: Rect) => (axis === "x" ? r.x : r.y);
+  const sorted = [...items].sort((a, b) => pos(a) + size(a) / 2 - (pos(b) + size(b) / 2));
+  const first = pos(sorted[0]);
+  const last = sorted[sorted.length - 1];
+  const gap = (pos(last) + size(last) - first - sorted.reduce((s, r) => s + size(r), 0)) / (sorted.length - 1);
+  let at = first;
+  for (const r of sorted) {
+    out.set(r.id, axis === "x" ? { x: at, y: r.y } : { x: r.x, y: at });
+    at += size(r) + gap;
+  }
+  return out;
+}

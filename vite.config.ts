@@ -28,5 +28,10 @@ export default defineConfig(() => ({
       // 3. tell Vite to ignore watching `src-tauri`
       ignored: ["**/src-tauri/**"],
     },
+    // 4. the web version talks to the Flow server on its own origin, as when the
+    //    server serves the build (`cd server && cargo run`, on port 8080 by default)
+    proxy: {
+      "/api": { target: process.env.FLOW_SERVER ?? "http://localhost:8080", changeOrigin: false, ws: true },
+    },
   },
 }));

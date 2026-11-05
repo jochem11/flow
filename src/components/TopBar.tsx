@@ -3,15 +3,15 @@
 
 import { createSignal, For, Show } from "solid-js";
 import { canRedoEer, canUndoEer, redoEer, undoEer } from "../lib/eer";
-import { DIALECTS, SqlDialog } from "./SqlDialog";
-import { inTauri } from "../lib/api";
+import { DIALECTS, SqlDialog, type SchemaFormat } from "./SqlDialog";
 import { board, canRedo, canUndo, redo, undo } from "../lib/store";
 import { CodeDialog, LANGUAGES } from "./CodeDialog";
 import { MermaidDialog } from "./MermaidDialog";
+import { currentFlowType } from "./Toolbar";
 import { SqlImportDialog } from "./SqlImportDialog";
 import { CodeImportDialog } from "./CodeImportDialog";
 import { CardLinksMenu } from "./CardLinksMenu";
-import type { CodeLanguage, ExportFormat, Folder, SqlDialect } from "../lib/types";
+import type { CodeLanguage, ExportFormat, Folder } from "../lib/types";
 import {
   openDoc,
   openProject,
@@ -22,7 +22,9 @@ import {
   saveState,
 } from "../lib/workspace";
 import { IconExport, IconImport, IconLayout, IconRedo, IconUndo } from "./icons";
-import { KindIcon } from "./kinds";
+import { BoardIcon } from "./kinds";
+import { canEdit, ROLE_LABEL } from "../lib/access";
+import { ShareActions } from "./ShareDialog";
 import { Menu } from "./Menu";
 
 export function SaveIndicator() {
@@ -41,7 +43,7 @@ export function SaveIndicator() {
   };
   const title = () => {
     const s = saveState();
-    return s.kind === "error" ? s.message : inTauri ? "Saved to disk" : "Saved in the browser (localStorage)";
+    return s.kind === "error" ? s.message : "Saved on the server";
   };
   return (
     <span class={`save-state ${saveState().kind}`} title={title()}>
@@ -75,21 +77,23 @@ const [mermaidOpen, setMermaidOpen] = createSignal(false);
 
 /** Undo/redo, SQL import and SQL export for an EER diagram. */
 function EerActions() {
-  const [preview, setPreview] = createSignal<SqlDialect | null>(null);
+  const [preview, setPreview] = createSignal<SchemaFormat | null>(null);
   const [importing, setImporting] = createSignal(false);
   return (
     <div class="header-actions">
-      <button class="icon-btn" title="Undo (Ctrl+Z)" disabled={!canUndoEer()} onClick={undoEer}>
-        <IconUndo />
-      </button>
-      <button class="icon-btn" title="Redo (Ctrl+Shift+Z)" disabled={!canRedoEer()} onClick={redoEer}>
-        <IconRedo />
-      </button>
-      <span class="divider" />
-      <button class="text-btn" title="Add tables from a SQL script" onClick={() => setImporting(true)}>
-        <IconImport />
-        <span>Import SQL</span>
-      </button>
+      <Show when={canEdit()}>
+        <button class="icon-btn" title="Undo (Ctrl+Z)" disabled={!canUndoEer()} onClick={undoEer}>
+          <IconUndo />
+        </button>
+        <button class="icon-btn" title="Redo (Ctrl+Shift+Z)" disabled={!canRedoEer()} onClick={redoEer}>
+          <IconRedo />
+        </button>
+        <span class="divider" />
+        <button class="text-btn" title="Add tables from a SQL script or DBML (dbdiagram.io)" onClick={() => setImporting(true)}>
+          <IconImport />
+          <span>Import SQL / DBML</span>
+        </button>
+      </Show>
       <Menu
         align="right"
         button={(toggle) => (
@@ -117,6 +121,16 @@ function EerActions() {
               )}
             </For>
             <div class="menu-sep" />
+            <button
+              class="menu-item"
+              onClick={() => {
+                setPreview("dbml");
+                close();
+              }}
+            >
+              <span>DBML</span>
+              <small>dbdiagram.io and others</small>
+            </button>
             <button
               class="menu-item"
               onClick={() => {
@@ -164,11 +178,12 @@ export function TopBar() {
                 )}
               </For>
               <span class="crumb-sep">/</span>
-              <KindIcon kind={doc().kind} />
+              <BoardIcon kind={doc().kind} diagram={doc().kind === "flow" ? board.diagram : undefined} />
               <input
                 class="doc-name"
                 value={doc().name}
                 aria-label="Document name"
+                readOnly={!canEdit()}
                 size={Math.max(6, doc().name.length)}
                 onChange={(e) => renameDocument(doc().projectId, doc().id, e.currentTarget.value)}
                 onKeyDown={(e) => {
@@ -176,35 +191,42 @@ export function TopBar() {
                   if (e.key === "Enter" || e.key === "Escape") e.currentTarget.blur();
                 }}
               />
-              <SaveIndicator />
+              <Show when={canEdit()} fallback={<span class="role-chip">{ROLE_LABEL[doc().role]}</span>}>
+                <SaveIndicator />
+              </Show>
             </div>
 
             {/* Cards about this whole document (a board links its own cards from the card dialog) */}
-            <Show when={doc().kind !== "kanban"}>
+            <Show when={doc().kind !== "kanban" && canEdit()}>
               <div class="header-actions header-cards">
                 <CardLinksMenu nodeId={null} />
               </div>
             </Show>
+            <ShareActions />
             <Show when={doc().kind === "eer"}>
               <EerActions />
             </Show>
             <Show when={doc().kind === "flow"}>
               <div class="header-actions">
-                <button class="icon-btn" title="Undo (Ctrl+Z)" disabled={!canUndo()} onClick={undo}>
-                  <IconUndo />
-                </button>
-                <button class="icon-btn" title="Redo (Ctrl+Shift+Z)" disabled={!canRedo()} onClick={redo}>
-                  <IconRedo />
-                </button>
-                <span class="divider" />
-                <button class="text-btn" title="Arrange automatically" onClick={runAutoLayout}>
-                  <IconLayout />
-                  <span>Arrange</span>
-                </button>
-                <button class="text-btn" title="Add UML classes from source code" onClick={() => setCodeImport(true)}>
-                  <IconImport />
-                  <span>Import code</span>
-                </button>
+                <Show when={canEdit()}>
+                  <button class="icon-btn" title="Undo (Ctrl+Z)" disabled={!canUndo()} onClick={undo}>
+                    <IconUndo />
+                  </button>
+                  <button class="icon-btn" title="Redo (Ctrl+Shift+Z)" disabled={!canRedo()} onClick={redo}>
+                    <IconRedo />
+                  </button>
+                  <span class="divider" />
+                  <button class="text-btn" title="Arrange automatically" onClick={runAutoLayout}>
+                    <IconLayout />
+                    <span>Arrange</span>
+                  </button>
+                  <Show when={currentFlowType().code}>
+                    <button class="text-btn" title="Add UML classes from source code" onClick={() => setCodeImport(true)}>
+                      <IconImport />
+                      <span>Import code</span>
+                    </button>
+                  </Show>
+                </Show>
                 <Menu
                   align="right"
                   button={(toggle) => (

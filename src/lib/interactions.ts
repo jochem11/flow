@@ -1,9 +1,23 @@
 // All drag interactions on the canvas. Pattern: pointerdown starts the gesture,
 // then move/up are tracked on window so it keeps working when the cursor leaves the element.
 
+import { canEdit } from "./access";
+import { batch } from "solid-js";
 import { panBy, toWorld } from "./camera";
 import type { FlowEdge } from "./types";
-import { angleAt, containsRect, intersects, nearestT, normRect, pickSides, type EdgeGeom, type Pt } from "./geometry";
+import {
+  angleAt,
+  bounds,
+  containsRect,
+  intersects,
+  nearestT,
+  normRect,
+  pickSides,
+  resizeRect,
+  type EdgeGeom,
+  type Pt,
+  type ResizeDir,
+} from "./geometry";
 import {
   addConnectedNode,
   addEdge,
@@ -37,14 +51,17 @@ import {
   uid,
   ui,
   assignParents,
-  frameAt,
   freeEndsIn,
   moveFreeEnds,
   refreshFrame,
   updateFrames,
+  growFrames,
+  frameSizes,
+  restoreFrames,
   withContents,
 } from "./store";
 import { messageYAt, SELF_H, SEQUENCE_KINDS } from "./sequence";
+import { guidesFor, nearestLine, snapBox, snapLines, SNAP_REACH, type Guide } from "./snapping";
 
 const DRAG_THRESHOLD = 3;
 
@@ -121,8 +138,10 @@ export function beginPan(e: PointerEvent) {
  * The grabbed node snaps to the grid (hold Alt to move freely).
  */
 export function beginNodeDrag(e: PointerEvent, grabbedId: string) {
+  if (!canEdit()) return; // viewing only (see access.ts)
   const start = toWorld(e.clientX, e.clientY);
-  const moving = withContents(ui.selected);
+  // Locked items stay where they are
+  const moving = new Set([...withContents(ui.selected)].filter((id) => !nodeById(id)?.locked));
   const origin = new Map(board.nodes.filter((n) => moving.has(n.id)).map((n) => [n.id, { x: n.x, y: n.y }]));
   // Lines drawn freely inside a moving section come along
   const freeEnds = freeEndsIn(moving);
@@ -131,6 +150,13 @@ export function beginNodeDrag(e: PointerEvent, grabbedId: string) {
   const grabbedNode = nodeById(grabbedId);
   const snapOffset = grabbedNode?.kind === "pin" ? grabbedNode.w / 2 : 0;
   if (!grabbed) return;
+  // The sections as they were: they grow while something is dragged to their edge, and
+  // shrink back when it is dragged on, out of them
+  const frames = frameSizes(moving);
+  // Smart guides: the edges and centers of everything that stays put
+  const others = board.nodes.filter((n) => !moving.has(n.id));
+  const lines = snapLines(others);
+  const box0 = bounds(board.nodes.filter((n) => moving.has(n.id)))!;
   let started = false;
 
   trackPointer(
@@ -145,31 +171,42 @@ export function beginNodeDrag(e: PointerEvent, grabbedId: string) {
       const w = toWorld(ev.clientX, ev.clientY);
       let dx = w.x - start.x;
       let dy = w.y - start.y;
+      let guides: Guide[] = [];
       if (!ev.altKey) {
-        dx = snap(grabbed.x + snapOffset + dx) - grabbed.x - snapOffset;
-        dy = snap(grabbed.y + snapOffset + dy) - grabbed.y - snapOffset;
+        // Lined up with something close by, else on the grid
+        const s = snapBox({ ...box0, x: box0.x + dx, y: box0.y + dy }, lines, SNAP_REACH / board.camera.zoom);
+        dx = s.dx !== null ? dx + s.dx : snap(grabbed.x + snapOffset + dx) - grabbed.x - snapOffset;
+        dy = s.dy !== null ? dy + s.dy : snap(grabbed.y + snapOffset + dy) - grabbed.y - snapOffset;
+        guides = guidesFor({ ...box0, x: box0.x + dx, y: box0.y + dy }, others);
       }
+      setUi("guides", guides);
       const pos = new Map<string, { x: number; y: number }>();
       for (const [id, o] of origin) pos.set(id, { x: o.x + dx, y: o.y + dy });
-      moveNodesTo(pos);
-      moveFreeEnds(freeEnds, dx, dy);
-      // Show which frame the grabbed block lands in
-      setUi("dropTarget", grabbedNode ? (frameAt(grabbedNode, moving)?.id ?? null) : null);
+      batch(() => {
+        restoreFrames(frames);
+        moveNodesTo(pos);
+        moveFreeEnds(freeEnds, dx, dy);
+        // In (or out of) a section where it is now: the section grows to fit it
+        assignParents(ui.selected);
+        growFrames(ui.selected);
+        // Show which frame the grabbed block lands in
+        setUi("dropTarget", nodeById(grabbedId)?.parent ?? null);
+      });
     },
-    () => {
-      setUi({ dragging: false, dropTarget: null });
-      // Dropped in (or out of) a section: it belongs there now
-      if (started) assignParents(ui.selected);
-    },
+    () => setUi({ dragging: false, dropTarget: null, guides: [] }),
   );
 }
 
-export function beginResize(e: PointerEvent, id: string) {
+/** Drags a side or corner of a node (`dir`; blocks only have the bottom-right one). */
+export function beginResize(e: PointerEvent, id: string, dir: ResizeDir = "se") {
+  if (!canEdit()) return; // viewing only (see access.ts)
   const n = nodeById(id);
   if (!n) return;
   const start = toWorld(e.clientX, e.clientY);
-  const w0 = n.w;
-  const h0 = n.h;
+  const r0 = { x: n.x, y: n.y, w: n.w, h: n.h };
+  const frames = frameSizes(new Set([id]));
+  const others = board.nodes.filter((x) => x.id !== id);
+  const lines = snapLines(others);
   let started = false;
 
   trackPointer(
@@ -184,13 +221,28 @@ export function beginResize(e: PointerEvent, id: string) {
       const w = toWorld(ev.clientX, ev.clientY);
       const round = ev.altKey ? (v: number) => v : snap;
       const min = minSize(n.kind);
-      // Thin shapes are not snapped, the grid would make them disappear
-      const roundW = n.w < GRID * 2 ? (v: number) => v : round;
-      const roundH = n.h < GRID * 2 ? (v: number) => v : round;
-      resizeNode(id, Math.max(min.w, roundW(w0 + w.x - start.x)), Math.max(min.h, roundH(h0 + w.y - start.y)));
+      const reach = SNAP_REACH / board.camera.zoom;
+      // A side lines up with an edge or center close by, else goes on the grid.
+      // Thin shapes are not put on the grid, it would make them disappear.
+      const onLine = (v: number, targets: number[], grid: (v: number) => number) =>
+        ev.altKey ? v : (nearestLine(v, targets, reach) ?? grid(v));
+      const roundX = (v: number) => onLine(v, lines.xs, r0.w < GRID * 2 ? (x) => x : round);
+      const roundY = (v: number) => onLine(v, lines.ys, r0.h < GRID * 2 ? (x) => x : round);
+      const r = resizeRect(r0, dir, w.x - start.x, w.y - start.y, min, roundX, roundY);
+      // A picture keeps its shape
+      if (n.kind === "image") r.h = Math.round((r.w * r0.h) / r0.w);
+      setUi("guides", ev.altKey ? [] : guidesFor(r, others));
+      batch(() => {
+        restoreFrames(frames);
+        // By the left or top side: the node moves (what is in a section stays where it is)
+        if (r.x !== n.x || r.y !== n.y) moveNodesTo(new Map([[id, { x: r.x, y: r.y }]]));
+        resizeNode(id, r.w, r.h);
+        // Grown past the edge of its section: that grows too (a section made smaller by hand stays so)
+        growFrames([id]);
+      });
     },
     () => {
-      setUi("dragging", false);
+      setUi({ dragging: false, guides: [] });
       if (started) updateFrames([id]);
     },
   );
@@ -198,6 +250,7 @@ export function beginResize(e: PointerEvent, id: string) {
 
 /** Drags the border right of a lane to change its width. */
 export function beginLaneResize(e: PointerEvent, id: string, index: number) {
+  if (!canEdit()) return; // viewing only (see access.ts)
   const size0 = nodeById(id)?.lanes?.[index]?.size;
   if (size0 === undefined) return;
   const start = toWorld(e.clientX, e.clientY);
@@ -225,6 +278,7 @@ export function beginLaneResize(e: PointerEvent, id: string, index: number) {
 
 /** Slides an edge label along its line. It clicks into the middle when it gets close. */
 export function beginLabelDrag(e: PointerEvent, id: string, geom: () => EdgeGeom | null) {
+  if (!canEdit()) return; // viewing only (see access.ts)
   let started = false;
 
   trackPointer(
@@ -281,6 +335,7 @@ function placeEnd(ev: PointerEvent, id: string, end: "from" | "to", pin: boolean
  * or off into empty space. Hold Alt to turn off snapping.
  */
 export function beginEndDrag(e: PointerEvent, id: string, end: "from" | "to") {
+  if (!canEdit()) return; // viewing only (see access.ts)
   let started = false;
 
   trackPointer(
@@ -303,6 +358,7 @@ export function beginEndDrag(e: PointerEvent, id: string, end: "from" | "to") {
  * is released. Either end attaches to a node when it is on one, and stays free otherwise.
  */
 export function beginLine(e: PointerEvent) {
+  if (!canEdit()) return; // viewing only (see access.ts)
   const start = toWorld(e.clientX, e.clientY);
   const startNode = nodeAt(e.clientX, e.clientY);
   let id: string | null = null;
@@ -343,6 +399,7 @@ export function beginLine(e: PointerEvent) {
 
 /** Drags a message up or down its lifelines. */
 function beginMessageMove(e: PointerEvent, id: string, messageY: number) {
+  if (!canEdit()) return; // viewing only (see access.ts)
   const start = toWorld(e.clientX, e.clientY);
   let started = false;
 
@@ -367,6 +424,7 @@ function beginMessageMove(e: PointerEvent, id: string, messageY: number) {
 
 /** Drags the middle of a line to another spot; its ends stay where they are attached. */
 function beginBendDrag(e: PointerEvent, id: string, bend0: Pt) {
+  if (!canEdit()) return; // viewing only (see access.ts)
   const start = toWorld(e.clientX, e.clientY);
   let started = false;
 
@@ -392,6 +450,7 @@ function beginBendDrag(e: PointerEvent, id: string, bend0: Pt) {
  * ends moves those ends along; a line attached at both ends changes its route.
  */
 export function beginEdgeMove(e: PointerEvent, id: string) {
+  if (!canEdit()) return; // viewing only (see access.ts)
   const edge = board.edges.find((x) => x.id === id);
   if (edge?.messageY != null) {
     beginMessageMove(e, id, edge.messageY);
@@ -457,6 +516,7 @@ function selfMessage(id: string, y: number): Partial<FlowEdge> | undefined {
  * releasing on empty space creates a new block there.
  */
 export function beginConnect(e: PointerEvent, fromId: string) {
+  if (!canEdit()) return; // viewing only (see access.ts)
   let started = false;
 
   trackPointer(
@@ -529,8 +589,9 @@ export function beginMarquee(e: PointerEvent) {
       const r = normRect(w0.x, w0.y, w.x, w.y);
       // Sections and swimlanes only when they are completely inside the rectangle,
       // otherwise every selection inside one would select it too
+      // Locked items only by clicking them
       const hits = board.nodes
-        .filter((n) => (isContainer(n.kind) ? containsRect(r, n) : intersects(n, r)))
+        .filter((n) => !n.locked && (isContainer(n.kind) ? containsRect(r, n) : intersects(n, r)))
         .map((n) => n.id);
       setUi({ selected: additive ? [...new Set([...base, ...hits])] : hits, selectedEdge: null });
     },

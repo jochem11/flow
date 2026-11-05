@@ -1,0 +1,11 @@
+node_modules
+target
+src-tauri/target
+src-tauri/gen
+dist
+.git
+.vscode
+server/.env
+server/outbox
+.env
+prod.env

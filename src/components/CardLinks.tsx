@@ -5,7 +5,7 @@ import { updateCard } from "../lib/kanban";
 import type { CardLink, KanbanCard } from "../lib/types";
 import { IconClose } from "./icons";
 import { docParts, linkableDocs, openLinkedNode, withDocLinks } from "../lib/links";
-import { KindIcon } from "./kinds";
+import { BoardIcon } from "./kinds";
 
 /**
  * What this card is about, per file: a document of the project, and within it any
@@ -69,7 +69,7 @@ export function Links(p: { card: KanbanCard }) {
             {(d) => (
               <button class="link-picker-item" onClick={() => linkFile(d.id)}>
                 <span class="with-icon">
-                  <KindIcon kind={d.kind} />
+                  <BoardIcon kind={d.kind} diagram={d.diagram} />
                   {d.name}
                 </span>
                 <small>{d.kind}</small>
@@ -93,7 +93,7 @@ export function Links(p: { card: KanbanCard }) {
                     title={doc() ? "Open the file" : "This file was deleted"}
                     onClick={() => openLinkedNode(docId)}
                   >
-                    <KindIcon kind={doc()?.kind ?? "text"} />
+                    <BoardIcon kind={doc()?.kind ?? "text"} diagram={doc()?.diagram} />
                     <span>{doc()?.name ?? "Deleted file"}</span>
                   </button>
                   <button class="link-chip-remove" title="Unlink the file (and its sections)" onClick={() => unlinkFile(docId)}>

@@ -82,3 +82,14 @@ export function fitView(padding = 80) {
     y: r.height / 2 - (minY + h / 2) * zoom,
   });
 }
+
+/** Where the pointer last was over the canvas (world coordinates), if it is still over it */
+let pointer: { x: number; y: number } | null = null;
+export const setPointer = (p: { x: number; y: number } | null) => (pointer = p);
+
+/** Where pasted things go: under the pointer, else the middle of the view. */
+export function pastePoint() {
+  if (pointer) return pointer;
+  const r = viewportRect();
+  return toWorld(r.left + r.width / 2, r.top + r.height / 2);
+}

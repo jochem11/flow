@@ -38,6 +38,10 @@ export const SIZES: Record<NodeKind, { w: number; h: number }> = {
   activation: { w: 16, h: 120 },
   fragment: { w: 480, h: 240 },
   destroy: { w: 30, h: 30 },
+  // Content
+  image: { w: 240, h: 160 },
+  icon: { w: 60, h: 60 },
+  topic: { w: 160, h: 48 },
 };
 
 /** Smallest size when resizing. Bars and activations are thin on purpose. */
@@ -51,7 +55,7 @@ export const MIN_LANE = 60;
 export const LANE_SIZE = 240;
 
 const CONTAINERS: NodeKind[] = ["section", "lanes", "boundary", "package", "fragment"];
-const NO_TEXT: NodeKind[] = ["start", "end", "bar", "flowfinal", "activation", "destroy", "pin"];
+const NO_TEXT: NodeKind[] = ["start", "end", "bar", "flowfinal", "activation", "destroy", "pin", "image", "icon"];
 
 /** Frames (sections, swimlanes, ...): drawn behind everything, and they carry the nodes inside them along. */
 export const isContainer = (kind: NodeKind) => CONTAINERS.includes(kind);
@@ -88,6 +92,9 @@ const DEFAULT_COLOR: Record<NodeKind, NodeColor> = {
   activation: "white",
   fragment: "white",
   destroy: "white",
+  image: "white",
+  icon: "white",
+  topic: "white",
 };
 
 /** Text a new node starts with, so it shows how the shape is meant to be filled in. */

@@ -199,11 +199,30 @@ export function setLabelPos(id: string, t: number) {
   touch();
 }
 
+/** The line whose label is being typed live (its undo checkpoint is taken) */
+let liveLabelOf: string | null = null;
+
+/** Finishes editing a line's label. */
 export function setEdgeLabel(id: string, label: string) {
+  const live = liveLabelOf === id;
+  liveLabelOf = null;
   const edge = board.edges.find((e) => e.id === id);
   const value = label.trim() || undefined;
   if (!edge || (edge.label ?? undefined) === value) return;
-  checkpoint();
+  if (!live) checkpoint();
+  setBoard("edges", (e) => e.id === id, "label", value);
+  touch();
+}
+
+/** Typing a line's label: on the board with every key (saved, and seen by others). One undo step. */
+export function setEdgeLabelLive(id: string, label: string) {
+  const edge = board.edges.find((e) => e.id === id);
+  const value = label || undefined;
+  if (!edge || (edge.label ?? undefined) === value) return;
+  if (liveLabelOf !== id) {
+    checkpoint();
+    liveLabelOf = id;
+  }
   setBoard("edges", (e) => e.id === id, "label", value);
   touch();
 }
