@@ -41,6 +41,9 @@ services:
       # The desktop app (not the Vite dev server)
       ALLOWED_ORIGINS: tauri://localhost,http://tauri.localhost
       DESKTOP_SCHEME: flowapp
+      # Reached through a proxy or tunnel that sets X-Forwarded-For (rate limits per
+      # address). Set TRUST_PROXY=0 in prod.env when people reach Flow directly.
+      TRUST_PROXY: ${TRUST_PROXY:-1}
       GOOGLE_CLIENT_ID: ${GOOGLE_CLIENT_ID:-}
       GOOGLE_CLIENT_SECRET: ${GOOGLE_CLIENT_SECRET:-}
       SMTP_HOST: ${SMTP_HOST:?set SMTP_HOST in prod.env (without mail nobody can confirm an account)}

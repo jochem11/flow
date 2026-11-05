@@ -10,6 +10,8 @@
 //!   SMTP_HOST, SMTP_PORT (587), SMTP_USER, SMTP_PASSWORD, MAIL_FROM        sending mail
 //!   MAIL_OUTBOX        a folder to write mails to instead (development)
 //!   DESKTOP_SCHEME     the desktop app's link scheme                       (flowapp)
+//!   TRUST_PROXY        1: behind a proxy (Caddy, a tunnel), the client's address
+//!                      is the first in X-Forwarded-For (for rate limits)     (off)
 
 use std::path::PathBuf;
 
@@ -25,6 +27,8 @@ pub struct Config {
     pub mail_from: String,
     pub mail_outbox: Option<PathBuf>,
     pub desktop_scheme: String,
+    /// Read the client's address from X-Forwarded-For (only behind a proxy that sets it)
+    pub trust_proxy: bool,
 }
 
 #[derive(Debug, Clone)]
@@ -69,6 +73,7 @@ impl Config {
             mail_from: var("MAIL_FROM").unwrap_or_else(|| "Flow <no-reply@localhost>".into()),
             mail_outbox: var("MAIL_OUTBOX").map(PathBuf::from),
             desktop_scheme: var("DESKTOP_SCHEME").unwrap_or_else(|| "flowapp".into()),
+            trust_proxy: var("TRUST_PROXY").is_some_and(|v| v == "1" || v.eq_ignore_ascii_case("true")),
             public_url,
         })
     }

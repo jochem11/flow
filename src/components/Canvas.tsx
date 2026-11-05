@@ -6,6 +6,8 @@ import { panBy, setPointer, setViewport, toWorld, zoomAt } from "../lib/camera";
 import { beginLine, beginMarquee, beginPan, blurActive } from "../lib/interactions";
 import { addNode, board, createNode, isContainer, select, setUi, ui } from "../lib/store";
 import { EdgeEnds, EdgeLabels, EdgesLayer, MessagesLayer } from "./Edges";
+import { currentFlowType } from "./Toolbar";
+import { MOD } from "../lib/shortcuts";
 import { FRAMES, NodeView } from "./NodeView";
 import { addImages } from "../lib/files";
 import { ContextBar } from "./ContextBar";
@@ -150,6 +152,14 @@ export function Canvas() {
       </div>
       <Show when={canEdit()}>
         <ContextBar />
+      </Show>
+      {/* An empty board: what to do first, for its type */}
+      <Show when={canEdit() && board.nodes.length === 0 && !ui.connecting}>
+        <div class="empty-hint">
+          <strong>{currentFlowType().label}</strong>
+          <p>{currentFlowType().hint}</p>
+          <small>Press ? for all shortcuts, or {MOD}+K for commands.</small>
+        </div>
       </Show>
       <PlacingOverlay kind="flow" />
     </div>

@@ -33,6 +33,7 @@ export type {
   Star,
   RecentBoard,
   TrashItem,
+  SearchHit,
   // flowchart
   FlowDoc,
   DiagramType,

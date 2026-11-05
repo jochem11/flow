@@ -27,8 +27,38 @@
   -webkit-font-smoothing: antialiased;
 }
 
+/* Light chosen on a dark system: light form controls and scrollbars too */
+:root[data-theme="light"] {
+  color-scheme: light;
+}
+
+/* Dark: chosen in the account menu, or following the system (see lib/theme.ts).
+   Keep both copies of these values the same. */
+:root[data-theme="dark"] {
+  --bg: #19191c;
+  --grid-dot: #34343a;
+  --panel: #232327;
+  --panel-border: #33333a;
+  --shadow: 0 1px 2px rgba(0, 0, 0, 0.3), 0 8px 24px rgba(0, 0, 0, 0.35);
+  --text: #ececf0;
+  --text-muted: #94939c;
+  --hover: #2e2e34;
+  --accent: #8b7fff;
+  --accent-soft: rgba(139, 127, 255, 0.18);
+  --danger: #ff6b84;
+  --edge: #a9a9b3;
+
+  --white-fill: #2a2a2f;   --white-stroke: #5c5c66;
+  --yellow-fill: #3a3420;  --yellow-stroke: #a68c3a;
+  --green-fill: #1f3428;   --green-stroke: #4f9a6c;
+  --blue-fill: #1f2b42;    --blue-stroke: #5b80c8;
+  --purple-fill: #2b2442;  --purple-stroke: #8a73d6;
+  --pink-fill: #3d2430;    --pink-stroke: #c4708e;
+
+  color-scheme: dark;
+}
 @media (prefers-color-scheme: dark) {
-  :root {
+  :root:not([data-theme="light"]) {
     --bg: #19191c;
     --grid-dot: #34343a;
     --panel: #232327;
@@ -2373,6 +2403,32 @@ button.crumb:hover {
   font-weight: 600;
 }
 
+/* The theme in the account menu: three options in a row */
+.menu-row {
+  display: flex;
+  gap: 2px;
+  margin: 2px 6px 6px;
+  padding: 2px;
+  border-radius: 7px;
+  background: var(--hover);
+}
+.theme-option {
+  flex: 1;
+  padding: 4px 8px;
+  border: 0;
+  border-radius: 5px;
+  background: none;
+  color: var(--text-muted);
+  font: inherit;
+  font-size: 12.5px;
+  cursor: pointer;
+}
+.theme-option.on {
+  background: var(--panel);
+  color: var(--text);
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.15);
+}
+
 .new-doc {
   display: flex;
   flex-direction: column;
@@ -4270,8 +4326,19 @@ textarea.kd-input {
   --tok-annotation: #b0388d;
   --tok-function: #9a5b00;
 }
+/* Dark: chosen in the account menu, or following the system (see lib/theme.ts).
+   Keep both copies of these values the same. */
+:root[data-theme="dark"] {
+  --tok-comment: #7d7d88;
+  --tok-string: #8fd19e;
+  --tok-number: #f0b46b;
+  --tok-keyword: #c3a6ff;
+  --tok-type: #7cc4ff;
+  --tok-annotation: #f2a3d6;
+  --tok-function: #f5d28b;
+}
 @media (prefers-color-scheme: dark) {
-  :root {
+  :root:not([data-theme="light"]) {
     --tok-comment: #7d7d88;
     --tok-string: #8fd19e;
     --tok-number: #f0b46b;
@@ -5975,4 +6042,166 @@ body.presenting .find-bar {
 .node-topic.topic-root .node-text {
   font-size: 15px;
   font-weight: 700;
+}
+
+/* ---------- quick open and commands (Cmd+K) ---------- */
+
+.palette-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 80;
+  display: flex;
+  justify-content: center;
+  align-items: flex-start;
+  padding-top: 12vh;
+  background: rgba(0, 0, 0, 0.25);
+}
+.palette {
+  width: min(620px, calc(100vw - 32px));
+  max-height: 70vh;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  border-radius: 12px;
+}
+.palette-input {
+  flex: none;
+  height: 48px;
+  padding: 0 16px;
+  border: 0;
+  border-bottom: 1px solid var(--panel-border);
+  outline: none;
+  background: transparent;
+  color: var(--text);
+  font: inherit;
+  font-size: 15px;
+}
+.palette-list {
+  overflow: auto;
+  padding: 6px;
+}
+.palette-group {
+  padding: 8px 10px 4px;
+  color: var(--text-muted);
+  font-size: 11.5px;
+  font-weight: 650;
+  letter-spacing: 0.02em;
+  text-transform: uppercase;
+}
+.palette-item {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+  height: 36px;
+  padding: 0 10px;
+  border: 0;
+  border-radius: 7px;
+  background: none;
+  color: var(--text);
+  font: inherit;
+  font-size: 13.5px;
+  text-align: left;
+  cursor: pointer;
+}
+.palette-item.selected {
+  background: var(--accent-soft);
+}
+.palette-icon {
+  display: inline-flex;
+  width: 18px;
+  flex: none;
+  justify-content: center;
+  color: var(--text-muted);
+}
+.palette-label {
+  flex: none;
+  max-width: 50%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.palette-sub {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--text-muted);
+  font-size: 12px;
+}
+.palette-empty {
+  margin: 0;
+  padding: 18px;
+  color: var(--text-muted);
+  text-align: center;
+}
+
+/* ---------- keyboard shortcuts sheet ---------- */
+
+.keys {
+  display: inline-flex;
+  gap: 3px;
+  margin-left: auto;
+  flex: none;
+}
+.keys kbd {
+  min-width: 20px;
+  padding: 1px 6px;
+  border: 1px solid var(--panel-border);
+  border-bottom-width: 2px;
+  border-radius: 5px;
+  background: var(--bg);
+  color: var(--text-muted);
+  font: inherit;
+  font-size: 11.5px;
+  text-align: center;
+}
+.shortcut-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
+  gap: 6px 24px;
+  width: 100%;
+}
+.shortcut-group h4 {
+  margin: 8px 0 4px;
+  font-size: 12px;
+  color: var(--text-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.02em;
+}
+.shortcut-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 4px 0;
+  font-size: 13px;
+}
+
+/* An empty board: what to do first (see boardTypes.ts) */
+.empty-hint {
+  position: absolute;
+  left: 50%;
+  top: 42%;
+  transform: translate(-50%, -50%);
+  max-width: 420px;
+  padding: 18px 22px;
+  border: 1px dashed var(--panel-border);
+  border-radius: 12px;
+  background: color-mix(in srgb, var(--panel) 85%, transparent);
+  color: var(--text-muted);
+  text-align: center;
+  pointer-events: none;
+}
+.empty-hint strong {
+  color: var(--text);
+  font-size: 15px;
+}
+.empty-hint p {
+  margin: 6px 0 8px;
+  font-size: 13.5px;
+  line-height: 1.45;
+}
+.empty-hint small {
+  font-size: 12px;
 }

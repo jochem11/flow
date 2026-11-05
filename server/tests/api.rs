@@ -25,6 +25,7 @@ fn config() -> Config {
         mail_from: "Flow <no-reply@flow.test>".into(),
         mail_outbox: None,
         desktop_scheme: "flowapp".into(),
+        trust_proxy: true,
     }
 }
 
@@ -472,4 +473,46 @@ async fn trash_stars_recent(pool: PgPool) {
     assert_eq!(s.ok(&ann, "GET", "/trash", None).await[0]["kind"], "project");
     s.ok(&ann, "POST", &format!("/trash/{pid}/restore"), Some(json!({}))).await;
     assert_eq!(s.ok(&ann, "GET", "/projects", None).await[0]["id"], pid.as_str());
+}
+
+#[sqlx::test(migrations = "./migrations")]
+async fn search_inside_boards(pool: PgPool) {
+    let s = Server::new(pool);
+    let ann = s.register("ann@example.com", "Ann").await;
+    let (pid, did) = project(&s, &ann).await;
+    s.ok(&ann, "PUT", &format!("/documents/{did}"), Some(flow_doc(&pid, &did, "Check the stock levels"))).await;
+
+    let hits = s.ok(&ann, "GET", "/search?q=STOCK", None).await;
+    assert_eq!((hits[0]["documentId"].as_str(), hits[0]["snippet"].as_str()), (Some(did.as_str()), Some("Check the stock levels")));
+    // Too short, no match, % taken literally
+    assert_eq!(s.ok(&ann, "GET", "/search?q=s", None).await, json!([]));
+    assert_eq!(s.ok(&ann, "GET", "/search?q=nothing%20like%20it", None).await, json!([]));
+    assert_eq!(s.ok(&ann, "GET", "/search?q=%25", None).await, json!([]));
+    // Not for someone without access, nor once it is in the trash
+    let bob = s.register("bob@example.com", "Bob").await;
+    assert_eq!(s.ok(&bob, "GET", "/search?q=stock", None).await, json!([]));
+    s.ok(&ann, "DELETE", &format!("/documents/{did}"), None).await;
+    assert_eq!(s.ok(&ann, "GET", "/search?q=stock", None).await, json!([]));
+}
+
+#[sqlx::test(migrations = "./migrations")]
+async fn sign_up_limit_per_address(pool: PgPool) {
+    let s = Server::new(pool);
+    // Behind the (trusted) proxy: the address is the first in X-Forwarded-For
+    let sign_up = |n: usize, ip: &'static str| {
+        let req = Request::builder()
+            .method("POST")
+            .uri("/api/auth/register")
+            .header("content-type", "application/json")
+            .header("x-forwarded-for", format!("{ip}, 10.0.0.1"))
+            .body(Body::from(json!({ "email": format!("user{n}@example.com"), "name": "U", "password": "correct horse" }).to_string()))
+            .unwrap();
+        s.app.clone().oneshot(req)
+    };
+    for n in 0..10 {
+        assert_eq!(sign_up(n, "203.0.113.7").await.unwrap().status(), StatusCode::OK, "sign-up {n}");
+    }
+    assert_eq!(sign_up(10, "203.0.113.7").await.unwrap().status(), StatusCode::TOO_MANY_REQUESTS);
+    // Someone else is not affected
+    assert_eq!(sign_up(11, "198.51.100.2").await.unwrap().status(), StatusCode::OK);
 }

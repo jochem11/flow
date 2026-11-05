@@ -27,5 +27,6 @@ async fn main() {
             }
         }
     });
-    axum::serve(listener, routes::app(state)).await.expect("server stopped");
+    // With the client's address, for rate limits (see auth::client_ip)
+    axum::serve(listener, routes::app(state).into_make_service_with_connect_info::<std::net::SocketAddr>()).await.expect("server stopped");
 }

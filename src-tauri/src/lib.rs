@@ -58,6 +58,7 @@ fn specta_builder() -> Builder<tauri::Wry> {
         .typ::<models::Star>()
         .typ::<models::RecentBoard>()
         .typ::<models::TrashItem>()
+        .typ::<models::SearchHit>()
         // One TS type per struct instead of separate `X_Serialize` / `X_Deserialize` types.
         .disable_serde_phases()
         // By default f64 becomes `number | null`, because serde_json writes NaN/Infinity

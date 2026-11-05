@@ -60,6 +60,52 @@ function swimlanes(): DocContent {
   );
 }
 
+/** A sequence diagram: logging in, with replies dashed. */
+function loginSequence(): DocContent {
+  const [user, app, server] = ["User", "App", "Server"].map((name, i) => at("lifeline", i * 260, 0, name, { h: 380 }));
+  const msg = (from: FlowNode, to: FlowNode, messageY: number, label: string, reply = false): FlowEdge => ({
+    id: uid(),
+    from: from.id,
+    to: to.id,
+    messageY,
+    label,
+    style: "straight",
+    ...(reply ? { pattern: "dashed" as const, endCap: "open" as const } : {}),
+  });
+  return flow(
+    [user, app, server],
+    [
+      msg(user, app, 100, "Log in"),
+      msg(app, server, 150, "POST /login"),
+      msg(server, server, 190, "Check password"),
+      msg(server, app, 260, "Session", true),
+      msg(app, user, 300, "Welcome", true),
+    ],
+  );
+}
+
+/** A state machine: an order from new to delivered (or cancelled). */
+function orderStates(): DocContent {
+  const start = at("start", 20, 30, "");
+  const state = (x: number, y: number, text: string) => at("pill", x, y, text, { w: 150, h: 56 });
+  const created = state(-25, 140, "New");
+  const paid = state(-25, 290, "Paid");
+  const shipped = state(-25, 440, "Shipped");
+  const cancelled = state(260, 215, "Cancelled");
+  const end = at("end", 20, 590, "");
+  return flow(
+    [start, created, paid, shipped, cancelled, end],
+    [
+      line(start, created),
+      line(created, paid, { label: "payment received" }),
+      line(paid, shipped, { label: "handed to carrier" }),
+      line(shipped, end, { label: "delivered" }),
+      line(created, cancelled, { label: "cancel" }),
+      line(paid, cancelled, { label: "cancel / refund" }),
+    ],
+  );
+}
+
 function storyMap(): DocContent {
   const activities = [
     { title: "Sign up", stories: ["Create an account", "Confirm email", "Log in with Google"] },
@@ -234,6 +280,8 @@ export const BUILT_IN: BuiltIn[] = [
   { id: "flowchart", kind: "flow", diagram: "flowchart", name: "Flowchart", description: "Start, steps, a decision and a loop back", make: flowchart },
   { id: "swimlanes", kind: "flow", diagram: "flowchart", name: "Swimlane process", description: "A process across three roles", make: swimlanes },
   { id: "story-map", kind: "flow", diagram: "whiteboard", name: "User story map", description: "Activities across, stories below, releases as rows", make: storyMap },
+  { id: "login", kind: "flow", diagram: "sequence", name: "Logging in", description: "A user, an app and a server, with replies", make: loginSequence },
+  { id: "order-states", kind: "flow", diagram: "state", name: "Order states", description: "From new to delivered, or cancelled", make: orderStates },
   { id: "retro", kind: "flow", diagram: "whiteboard", name: "Retrospective", description: "Went well, to improve, actions", make: retrospective },
   { id: "shop", kind: "eer", name: "Web shop", description: "Customers, orders, order lines and products", make: shop },
   { id: "scrum", kind: "kanban", name: "Scrum board", description: "Backlog to done, with labels and priorities", make: scrum },
@@ -241,3 +289,44 @@ export const BUILT_IN: BuiltIn[] = [
   { id: "meeting", kind: "text", name: "Meeting notes", description: "Agenda, notes, decisions, action items", make: () => text(MEETING) },
   { id: "spec", kind: "text", name: "Feature spec", description: "Problem, goal, proposal, open questions", make: () => text(SPEC) },
 ];
+
+// ---------- the first project of a new account ----------
+
+const GETTING_STARTED = `# Getting started
+
+Welcome to Flow. This project has one board of each kind to look at and change; delete
+them whenever you like (they wait in the Trash for 30 days).
+
+## Boards
+- **+ next to a project** → *New board…*: pick what it is (flowchart, sequence diagram,
+  class diagram, state machine, kanban, document, ...). Each kind only shows its own tools.
+- A board's kind can be changed later under **…** in the top bar.
+
+## Getting around
+- **${"⌘/Ctrl"}+K** opens any board or project by name, searches inside boards, and runs commands.
+- **?** shows all keyboard shortcuts.
+- The sidebar has a filter, and sections for *Recent*, *Starred* (the star on a row) and the *Trash*.
+
+## Together
+- **Share** (top right) invites people to the whole project or one board, or makes a link.
+- People who are on the same board see each other's cursors and changes as they happen.
+- Press **C** on a board to comment on a spot.
+`;
+
+/** The project a new account starts with: a guide and one board of each main kind. */
+export const WELCOME = {
+  name: "Welcome to Flow",
+  description: "A board of each kind to try things out. Start with **Getting started**.",
+  boards: [
+    { name: "Getting started", make: () => text(GETTING_STARTED) },
+    ...["flowchart", "login", "scrum", "shop"].map((id) => {
+      const t = BUILT_IN.find((b) => b.id === id)!;
+      // A flow board gets the type its template is for
+      const make = (): DocContent => {
+        const c = t.make();
+        return c.kind === "flow" && t.diagram ? { kind: "flow", data: { ...c.data, diagram: t.diagram } } : c;
+      };
+      return { name: t.name, make };
+    }),
+  ],
+};

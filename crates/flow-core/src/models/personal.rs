@@ -80,3 +80,18 @@ pub struct TrashItem {
     #[specta(type = f64)]
     pub deleted_at: u64,
 }
+
+/// A board whose content matches a search (Cmd+K), with the matching text.
+#[derive(Debug, Clone, Serialize, Deserialize, Type)]
+#[serde(rename_all = "camelCase")]
+pub struct SearchHit {
+    pub document_id: String,
+    pub project_id: String,
+    pub name: String,
+    pub kind: DocumentKind,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[specta(optional)]
+    pub diagram: Option<DiagramType>,
+    /// The matching text (a block, a card, a table), shortened around the match
+    pub snippet: String,
+}

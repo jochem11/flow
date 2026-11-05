@@ -1,12 +1,13 @@
-//! What is someone's own in the sidebar: starred projects and boards, and the
-//! boards they opened lately ("Recent", the same on every device).
+//! What is someone's own: starred projects and boards, the boards they opened
+//! lately ("Recent", the same on every device), and searching inside the boards
+//! they can see (Cmd+K).
 
-use axum::extract::{Path, State};
+use axum::extract::{Path, Query, State};
 use axum::http::StatusCode;
 use axum::routing::{get, post, put};
 use axum::{Json, Router};
 use chrono::{DateTime, Utc};
-use flow_core::models::{DocumentKind, ItemKind, RecentBoard, Star};
+use flow_core::models::{DocumentKind, ItemKind, RecentBoard, SearchHit, Star};
 use serde::Deserialize;
 
 use super::projects::ms;
@@ -25,6 +26,7 @@ pub fn routes() -> Router<AppState> {
         .route("/stars/{id}", put(star).delete(unstar))
         .route("/recent", get(recent))
         .route("/documents/{id}/opened", post(opened))
+        .route("/search", get(search))
 }
 
 async fn stars(State(state): State<AppState>, caller: Caller) -> ApiResult<Json<Vec<Star>>> {
@@ -118,4 +120,107 @@ async fn recent(State(state): State<AppState>, caller: Caller) -> ApiResult<Json
         })
         .collect();
     Ok(Json(boards))
+}
+
+#[derive(Deserialize)]
+struct SearchQuery {
+    q: String,
+}
+
+#[derive(sqlx::FromRow)]
+struct HitRow {
+    id: String,
+    project_id: String,
+    name: String,
+    kind: String,
+    diagram: Option<String>,
+    hit: String,
+    project_role: Option<String>,
+    board_role: Option<String>,
+}
+
+/// How many boards a search returns.
+const HITS: usize = 20;
+
+/// The text around the first match, at most about 80 characters, on one line.
+fn snippet(text: &str, q: &str) -> String {
+    let flat = text.split_whitespace().collect::<Vec<_>>().join(" ");
+    let lower = flat.to_lowercase();
+    let at = lower.find(&q.to_lowercase()).unwrap_or(0);
+    // Character positions, so a cut never splits a letter
+    let chars: Vec<char> = flat.chars().collect();
+    let start_char = lower[..at].chars().count().saturating_sub(30);
+    let end_char = (start_char + 80).min(chars.len());
+    let mut out: String = chars[start_char..end_char].iter().collect();
+    if start_char > 0 {
+        out.insert(0, '…');
+    }
+    if end_char < chars.len() {
+        out.push('…');
+    }
+    out
+}
+
+/// Boards the caller can see with `q` in a block, a card, a table or the text:
+/// one hit per board, the first matching text as its snippet.
+async fn search(State(state): State<AppState>, caller: Caller, Query(sq): Query<SearchQuery>) -> ApiResult<Json<Vec<SearchHit>>> {
+    let user = caller.user()?;
+    let q = sq.q.trim();
+    if q.chars().count() < 2 {
+        return Ok(Json(vec![]));
+    }
+    // ILIKE with the user's text taken literally
+    let pattern = format!("%{}%", q.replace('\\', "\\\\").replace('%', "\\%").replace('_', "\\_"));
+    let rows = sqlx::query_as::<_, HitRow>(
+        "SELECT d.id, d.project_id, d.name, d.kind, d.content->'data'->>'diagram' AS diagram, m.hit,
+                pm.role AS project_role, dr.role AS board_role
+         FROM documents d
+         JOIN projects p ON p.id = d.project_id AND p.deleted_at IS NULL
+         LEFT JOIN project_members pm ON pm.project_id = d.project_id AND pm.user_id = $1
+         LEFT JOIN document_roles dr ON dr.document_id = d.id AND dr.user_id = $1
+         CROSS JOIN LATERAL (
+           SELECT t #>> '{}' AS hit FROM jsonb_path_query(d.content, 'lax $.data.nodes[*].text') t
+           UNION ALL SELECT t #>> '{}' FROM jsonb_path_query(d.content, 'lax $.data.columns[*].cards[*].title') t
+           UNION ALL SELECT t #>> '{}' FROM jsonb_path_query(d.content, 'lax $.data.entities[*].name') t
+           UNION ALL SELECT d.content->'data'->>'markdown'
+         ) m
+         WHERE d.deleted_at IS NULL AND (pm.user_id IS NOT NULL OR dr.user_id IS NOT NULL) AND m.hit ILIKE $2
+         ORDER BY d.updated_at DESC
+         LIMIT 200",
+    )
+    .bind(&user.id)
+    .bind(&pattern)
+    .fetch_all(&state.db)
+    .await?;
+    let mut seen = std::collections::HashSet::new();
+    let hits = rows
+        .into_iter()
+        .filter(|r| combine(r.project_role.as_deref().and_then(Role::parse), r.board_role.as_deref().and_then(Role::parse)).can_view())
+        .filter(|r| seen.insert(r.id.clone()))
+        .take(HITS)
+        .map(|r| SearchHit {
+            snippet: snippet(&r.hit, q),
+            document_id: r.id,
+            project_id: r.project_id,
+            name: r.name,
+            kind: serde_json::from_value::<DocumentKind>(serde_json::Value::String(r.kind)).unwrap_or(DocumentKind::Flow),
+            diagram: r.diagram.and_then(|t| serde_json::from_value(serde_json::Value::String(t)).ok()),
+        })
+        .collect();
+    Ok(Json(hits))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::snippet;
+
+    #[test]
+    fn snippet_around_the_match() {
+        assert_eq!(snippet("Check stock", "stock"), "Check stock");
+        let long = format!("{} needle {}", "a ".repeat(40), "b ".repeat(40));
+        let s = snippet(&long, "NEEDLE");
+        assert!(s.starts_with('…') && s.ends_with('…') && s.contains("needle"), "{s}");
+        // Letters beyond ASCII are never cut in half
+        assert!(snippet(&"é".repeat(200), "é").chars().count() <= 82);
+    }
 }

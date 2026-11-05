@@ -211,12 +211,14 @@ function ContentButtons() {
   );
 }
 
+/** The open board's toolbar: a whiteboard has every tool (UML under its button), a typed board only its own. */
+export function currentToolGroups(): ToolDef[][] {
+  const type = currentFlowType();
+  return type.tools ? typedGroups(type) : GROUPS;
+}
+
 export function Toolbar() {
-  // A whiteboard has every tool (UML under its button); a typed board only its own
-  const groups = () => {
-    const type = currentFlowType();
-    return type.tools ? typedGroups(type) : GROUPS;
-  };
+  const groups = currentToolGroups;
   return (
     <nav class="toolbar panel" aria-label="Tools">
       <For each={groups()}>

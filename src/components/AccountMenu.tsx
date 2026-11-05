@@ -10,6 +10,8 @@ import { updateReady } from "../lib/version";
 import { inviteWhat, roleWords, type InviteInfo } from "./Gate";
 import { toast } from "../lib/toast";
 import { Menu } from "./Menu";
+import { setTheme, theme, THEME_NAMES, type Theme } from "../lib/theme";
+import { openShortcuts } from "./Shortcuts";
 import { UploadDialog } from "./UploadDialog";
 
 /** A round picture, or the first letter of the name. */
@@ -48,6 +50,26 @@ export function AccountMenu() {
             {(close) => (
               <>
                 <div class="menu-title">{m().user.email}</div>
+                <div class="menu-row" role="group" aria-label="Theme">
+                  <For each={["light", "dark", "system"] as Theme[]}>
+                    {(t) => (
+                      <button class="theme-option" classList={{ on: theme() === t }} aria-pressed={theme() === t} onClick={() => setTheme(t)}>
+                        {THEME_NAMES[t]}
+                      </button>
+                    )}
+                  </For>
+                </div>
+                <button
+                  class="menu-item"
+                  onClick={() => {
+                    close();
+                    openShortcuts();
+                  }}
+                >
+                  <span>Keyboard shortcuts</span>
+                  <small>?</small>
+                </button>
+                <div class="menu-sep" />
                 <Show when={inTauri}>
                   <button
                     class="menu-item"

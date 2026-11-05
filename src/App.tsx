@@ -48,6 +48,8 @@ import { addImages, copyImage, isImageFile } from "./lib/files";
 import { Toasts } from "./components/Toasts";
 import { TopBar } from "./components/TopBar";
 import { TOOL_KEYS, toolOffered } from "./components/Toolbar";
+import { CommandPalette, openPalette } from "./components/CommandPalette";
+import { openShortcuts, ShortcutSheet } from "./components/Shortcuts";
 import "./styles.css";
 // Editing together: joins the room of every board opened from the server
 import "./lib/collab";
@@ -103,7 +105,18 @@ export default function App() {
       saveNow();
       return;
     }
+    // Quick open and commands, also from a text field (not inside the text editor)
+    if (mod && e.key.toLowerCase() === "k" && !(e.target as HTMLElement | null)?.isContentEditable) {
+      e.preventDefault();
+      openPalette();
+      return;
+    }
     if (isTyping(e.target)) return;
+    if (e.key === "?" && !mod) {
+      e.preventDefault();
+      openShortcuts();
+      return;
+    }
     // Find on a flowchart or EER diagram (instead of the browser's own find)
     if (mod && e.key.toLowerCase() === "f" && (openDoc()?.kind === "flow" || openDoc()?.kind === "eer")) {
       e.preventDefault();
@@ -321,6 +334,8 @@ export default function App() {
       </Gate>
       <Toasts />
       <Presenter />
+      <CommandPalette />
+      <ShortcutSheet />
     </>
   );
 }

@@ -10,7 +10,8 @@ import { fitView } from "./camera";
 import { kanbanRev, kanbanSnapshot, replaceKanban } from "./kanban";
 import { eerRev, eerSnapshot, replaceEer } from "./eer";
 import { loadPersonal, loadTrash, noteOpened } from "./personal";
-import { applyLayout, board, boardSnapshot, replaceBoard, rev, setDiagram, starterFlow } from "./store";
+import { applyLayout, board, boardSnapshot, replaceBoard, rev, setDiagram } from "./store";
+import { WELCOME } from "../templates";
 import { toast } from "./toast";
 import type { DiagramType, DocContent, Document, DocumentKind, DocumentMeta, ExportFormat, FlowDoc, Project, Role, SharedBoard } from "./types";
 
@@ -175,10 +176,14 @@ export async function initWorkspace(route: Route = { kind: "home" }) {
   }
 }
 
+/** A new account: a welcome project with a guide and one board of each main kind. */
 async function createStarterProject() {
-  const project = await api.createProject("My first project");
-  const doc = await api.createDocument(project.id, null, "My first flowchart", "flow");
-  await api.saveDocument({ ...doc, content: { kind: "flow", data: starterFlow() } });
+  const project = await api.createProject(WELCOME.name);
+  await api.updateProject(project.id, WELCOME.name, WELCOME.description);
+  for (const b of WELCOME.boards) {
+    const content = b.make();
+    await api.createDocument(project.id, null, b.name, content.kind, content);
+  }
   await refreshProjects();
 }
 

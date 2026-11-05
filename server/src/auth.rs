@@ -10,7 +10,9 @@
 use argon2::Argon2;
 use argon2::password_hash::phc::PasswordHash;
 use argon2::password_hash::{PasswordHasher, PasswordVerifier};
-use axum::extract::{FromRequestParts, Query, State};
+use axum::extract::{ConnectInfo, FromRequestParts, Query, State};
+use axum::Extension;
+use std::net::SocketAddr;
 use axum::http::request::Parts;
 use axum::http::{HeaderMap, Method, StatusCode};
 use axum::response::{Html, IntoResponse, Redirect, Response};
@@ -259,7 +261,31 @@ fn check_password(password: &str) -> ApiResult<()> {
     Ok(())
 }
 
-async fn register(State(state): State<AppState>, headers: HeaderMap, jar: CookieJar, Json(r): Json<Register>) -> ApiResult<(CookieJar, Json<LoggedIn>)> {
+/// Where a request comes from (for rate limits): behind a trusted proxy the first
+/// address in X-Forwarded-For, else the connection's. None in tests (no connection).
+pub fn client_ip(state: &AppState, headers: &HeaderMap, conn: Option<SocketAddr>) -> Option<String> {
+    if state.config.trust_proxy {
+        let forwarded = headers.get("x-forwarded-for").and_then(|v| v.to_str().ok()).and_then(|v| v.split(',').next()).map(str::trim);
+        if let Some(ip) = forwarded.filter(|ip| !ip.is_empty()) {
+            return Some(ip.to_string());
+        }
+    }
+    conn.map(|c| c.ip().to_string())
+}
+
+async fn register(
+    State(state): State<AppState>,
+    conn: Option<Extension<ConnectInfo<SocketAddr>>>,
+    headers: HeaderMap,
+    jar: CookieJar,
+    Json(r): Json<Register>,
+) -> ApiResult<(CookieJar, Json<LoggedIn>)> {
+    // Each sign-up sends a mail: not too many from one place (or Flow's mail account gets blocked)
+    if let Some(ip) = client_ip(&state, &headers, conn.map(|Extension(ConnectInfo(addr))| addr)) {
+        if !state.limits.allow(&format!("register:{ip}")) {
+            return Err(AppError::new(StatusCode::TOO_MANY_REQUESTS, "Too many new accounts from here; try again in a few minutes"));
+        }
+    }
     let email = r.email.trim().to_lowercase();
     let name = r.name.trim();
     if !email.contains('@') || email.len() < 3 {

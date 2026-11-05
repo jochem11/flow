@@ -52,6 +52,7 @@ All from environment variables or `server/.env` (see `server/src/config.rs`):
 | `GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET` | Google sign-in (off when not set) |
 | `SMTP_HOST`, `SMTP_PORT`, `SMTP_USER`, `SMTP_PASSWORD`, `MAIL_FROM` | sending mail |
 | `MAIL_OUTBOX` | write mails to this folder instead (development) |
+| `TRUST_PROXY` | `1` behind a proxy that sets `X-Forwarded-For` (Caddy, a tunnel): rate limits per client address |
 
 ### Google sign-in
 

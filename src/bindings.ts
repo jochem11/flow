@@ -713,6 +713,17 @@ export type Role =
 /**  Edit, and decide who has access */
 "owner";
 
+/**  A board whose content matches a search (Cmd+K), with the matching text. */
+export type SearchHit = {
+	documentId: string,
+	projectId: string,
+	name: string,
+	kind: DocumentKind,
+	diagram?: DiagramType | null,
+	/**  The matching text (a block, a card, a table), shortened around the match */
+	snippet: string,
+};
+
 /**  A board's public link. */
 export type ShareLink = {
 	token: string,
