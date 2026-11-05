@@ -3,7 +3,7 @@
 use serde::{Deserialize, Serialize};
 use specta::Type;
 
-#[derive(Debug, Clone, Serialize, Deserialize, Type)]
+#[derive(Debug, Clone, Default, Serialize, Deserialize, Type)]
 #[serde(rename_all = "camelCase")]
 pub struct FlowDoc {
     pub nodes: Vec<Node>,
@@ -19,6 +19,12 @@ pub struct FlowDoc {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     #[specta(optional)]
     pub diagram: Option<DiagramType>,
+    /// Class diagrams: the programming language the classes are for. Their types are
+    /// shown as it writes them and offered from its built-in types; they are stored
+    /// language-neutral (see fixtures/types.json). Missing means UML-neutral.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[specta(optional)]
+    pub code_language: Option<CodeLanguage>,
 }
 
 /// The type of a flow board (see src/lib/boardTypes.ts for what each shows).

@@ -11,6 +11,8 @@ pub(super) fn python_ty(t: &str, imports: &mut BTreeSet<String>) -> String {
         ("Decimal", "from decimal import Decimal"),
         ("datetime", "from datetime import datetime"),
         ("date", "from datetime import date"),
+        ("time", "from datetime import time"),
+        ("timedelta", "from datetime import timedelta"),
         ("Any", "from typing import Any"),
     ] {
         if words.contains(&word) {

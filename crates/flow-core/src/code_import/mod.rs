@@ -52,7 +52,7 @@ pub(super) fn class(name: &str, kind: Kind) -> Class {
 }
 
 pub(super) fn field(vis: Vis, name: &str, ty: String, default: Option<String>, is_static: bool) -> Field {
-    Field { vis, name: name.to_string(), ty, default: default.and_then(|d| clean_default(&d)), is_static }
+    Field { vis, name: name.to_string(), ty, default: default.and_then(|d| clean_default(&d)), is_static, read_only: false }
 }
 
 pub(super) fn method(vis: Vis, name: &str, params: Vec<(String, String)>, ret: Option<String>, is_static: bool, is_abstract: bool) -> Method {

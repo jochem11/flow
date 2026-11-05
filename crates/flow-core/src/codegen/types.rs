@@ -54,9 +54,16 @@ pub fn plural(s: &str) -> String {
 pub(super) enum Ty {
     Named(String),
     List(Box<Ty>),
+    Set(Box<Ty>),
+    Map(Box<Ty>, Box<Ty>),
     Optional(Box<Ty>),
     Generic(String, Vec<Ty>),
 }
+
+/// Generic types read as a list, a set or a map of their arguments
+pub(crate) const LIST_TYPES: [&str; 5] = ["list", "collection", "array", "vec", "sequence"];
+pub(crate) const SET_TYPES: [&str; 2] = ["set", "hashset"];
+pub(crate) const MAP_TYPES: [&str; 4] = ["map", "dict", "dictionary", "hashmap"];
 
 pub(super) fn parse_ty(s: &str) -> Ty {
     let s = s.trim();
@@ -69,8 +76,15 @@ pub(super) fn parse_ty(s: &str) -> Ty {
     if let Some(i) = s.find('<') {
         let base = &s[..i];
         let args = split_args(&s[i + 1..s.len() - 1]);
-        if matches!(base.to_lowercase().as_str(), "list" | "set" | "collection" | "array" | "vec" | "sequence") && args.len() == 1 {
+        let lower = base.to_lowercase();
+        if LIST_TYPES.contains(&lower.as_str()) && args.len() == 1 {
             return Ty::List(Box::new(parse_ty(&args[0])));
+        }
+        if SET_TYPES.contains(&lower.as_str()) && args.len() == 1 {
+            return Ty::Set(Box::new(parse_ty(&args[0])));
+        }
+        if MAP_TYPES.contains(&lower.as_str()) && args.len() == 2 {
+            return Ty::Map(Box::new(parse_ty(&args[0])), Box::new(parse_ty(&args[1])));
         }
         return Ty::Generic(base.to_string(), args.iter().map(|a| parse_ty(a)).collect());
     }
@@ -98,22 +112,39 @@ pub(super) fn split_args(s: &str) -> Vec<String> {
     out
 }
 
-/// Built-in types, per language: [TypeScript, Java, C#, Python, Kotlin, Rust, Go].
-pub(super) fn builtin(name: &str) -> Option<[&'static str; 7]> {
-    Some(match name.to_lowercase().as_str() {
-        "int" | "integer" | "short" | "byte" => ["number", "int", "int", "int", "Int", "i32", "int"],
-        "long" | "bigint" => ["number", "long", "long", "int", "Long", "i64", "int64"],
-        "float" | "double" | "real" | "number" => ["number", "double", "double", "float", "Double", "f64", "float64"],
-        "decimal" | "money" | "bigdecimal" => ["number", "BigDecimal", "decimal", "Decimal", "BigDecimal", "f64", "float64"],
-        "bool" | "boolean" => ["boolean", "boolean", "bool", "bool", "Boolean", "bool", "bool"],
-        "string" | "str" | "text" | "char" => ["string", "String", "string", "str", "String", "String", "string"],
-        "date" => ["Date", "LocalDate", "DateOnly", "date", "LocalDate", "String", "time.Time"],
-        "datetime" | "timestamp" | "instant" => ["Date", "LocalDateTime", "DateTime", "datetime", "LocalDateTime", "String", "time.Time"],
-        "uuid" | "guid" => ["string", "UUID", "Guid", "UUID", "UUID", "String", "string"],
-        "void" => ["void", "void", "void", "None", "Unit", "()", ""],
-        "any" | "object" => ["unknown", "Object", "object", "Any", "Any", "String", "any"],
-        _ => return None,
+/// One built-in type from fixtures/types.json: its names and how each language writes it.
+#[derive(serde::Deserialize)]
+struct Builtin {
+    name: String,
+    aliases: Vec<String>,
+    #[serde(rename = "in")]
+    langs: [String; 7],
+}
+
+#[derive(serde::Deserialize)]
+struct TypeList {
+    types: Vec<Builtin>,
+}
+
+/// The built-in types (fixtures/types.json, shared with src/lib/classTypes.ts), by
+/// every name they go by, lowercase.
+fn builtins() -> &'static HashMap<String, [String; 7]> {
+    static TYPES: std::sync::OnceLock<HashMap<String, [String; 7]>> = std::sync::OnceLock::new();
+    TYPES.get_or_init(|| {
+        let list: TypeList = serde_json::from_str(include_str!("../../../../fixtures/types.json")).expect("fixtures/types.json");
+        list.types
+            .into_iter()
+            .flat_map(|t| {
+                let names: Vec<String> = std::iter::once(t.name).chain(t.aliases).map(|n| n.to_lowercase()).collect();
+                names.into_iter().map(move |n| (n, t.langs.clone()))
+            })
+            .collect()
     })
+}
+
+/// A built-in type, per language: [TypeScript, Java, C#, Python, Kotlin, Rust, Go].
+pub(super) fn builtin(name: &str) -> Option<&'static [String; 7]> {
+    builtins().get(&name.to_lowercase())
 }
 
 pub(super) const fn slot(l: CodeLanguage) -> usize {
@@ -134,7 +165,7 @@ pub(super) fn ty(t: &Ty, l: CodeLanguage, boxed: bool) -> String {
     match t {
         Ty::Named(n) => match builtin(n) {
             Some(names) => {
-                let s = names[slot(l)];
+                let s = names[slot(l)].as_str();
                 if l == L::Java && boxed {
                     match s {
                         "int" => "Integer".into(),
@@ -159,6 +190,26 @@ pub(super) fn ty(t: &Ty, l: CodeLanguage, boxed: bool) -> String {
                 _ => format!("List<{i}>"),
             }
         }
+        Ty::Set(inner) => {
+            let i = ty(inner, l, true);
+            match l {
+                L::CSharp => format!("HashSet<{i}>"),
+                L::Python => format!("set[{i}]"),
+                L::Rust => format!("HashSet<{i}>"),
+                L::Go => format!("map[{i}]bool"),
+                _ => format!("Set<{i}>"),
+            }
+        }
+        Ty::Map(k, v) => {
+            let (k, v) = (ty(k, l, true), ty(v, l, true));
+            match l {
+                L::CSharp => format!("Dictionary<{k}, {v}>"),
+                L::Python => format!("dict[{k}, {v}]"),
+                L::Rust => format!("HashMap<{k}, {v}>"),
+                L::Go => format!("map[{k}]{v}"),
+                _ => format!("Map<{k}, {v}>"),
+            }
+        }
         Ty::Optional(inner) => {
             let i = ty(inner, l, true);
             match l {
@@ -176,6 +227,25 @@ pub(super) fn ty(t: &Ty, l: CodeLanguage, boxed: bool) -> String {
                 L::Python => format!("{}[{}]", base, a.join(", ")),
                 L::Go => format!("{}[{}]", pascal(base), a.join(", ")),
                 _ => format!("{}<{}>", pascal(base), a.join(", ")),
+            }
+        }
+    }
+}
+
+#[cfg(test)]
+mod fixture_tests {
+    use super::*;
+
+    /// The same cases as src/lib/classTypes.test.ts.
+    #[test]
+    fn types_fixture() {
+        let fixture: serde_json::Value = serde_json::from_str(include_str!("../../../../fixtures/types.json")).unwrap();
+        let langs = [L::TypeScript, L::Java, L::CSharp, L::Python, L::Kotlin, L::Rust, L::Go];
+        use CodeLanguage as L;
+        for case in fixture["cases"].as_array().unwrap() {
+            let uml = case["uml"].as_str().unwrap();
+            for (i, l) in langs.iter().enumerate() {
+                assert_eq!(ty(&parse_ty(uml), *l, false), case["in"][i].as_str().unwrap(), "{uml} in {l:?}");
             }
         }
     }

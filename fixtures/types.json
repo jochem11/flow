@@ -1,0 +1,73 @@
+{
+  "about": "The built-in types of class diagrams. A class's text keeps neutral UML types (`name` and `aliases`); `in` is how each language writes them (in the order of `languages`), `read` is what may be picked or typed per language and the neutral type it means, in the order the type picker shows them. `cases` are checked by codegen/types.rs (neutral to language) and src/lib/classTypes.test.ts (both ways). Used by crates/flow-core/src/codegen/types.rs and src/lib/classTypes.ts.",
+  "languages": ["typescript", "java", "csharp", "python", "kotlin", "rust", "go"],
+  "types": [
+    { "name": "int", "aliases": ["integer", "short", "byte"], "in": ["number", "int", "int", "int", "Int", "i32", "int"] },
+    { "name": "long", "aliases": ["bigint"], "in": ["number", "long", "long", "int", "Long", "i64", "int64"] },
+    { "name": "double", "aliases": ["float", "real", "number"], "in": ["number", "double", "double", "float", "Double", "f64", "float64"] },
+    { "name": "decimal", "aliases": ["money", "bigdecimal"], "in": ["number", "BigDecimal", "decimal", "Decimal", "BigDecimal", "f64", "float64"] },
+    { "name": "bool", "aliases": ["boolean"], "in": ["boolean", "boolean", "bool", "bool", "Boolean", "bool", "bool"] },
+    { "name": "string", "aliases": ["str", "text", "char"], "in": ["string", "String", "string", "str", "String", "String", "string"] },
+    { "name": "date", "aliases": [], "in": ["Date", "LocalDate", "DateOnly", "date", "LocalDate", "String", "time.Time"] },
+    { "name": "datetime", "aliases": ["timestamp", "instant"], "in": ["Date", "LocalDateTime", "DateTime", "datetime", "LocalDateTime", "String", "time.Time"] },
+    { "name": "time", "aliases": [], "in": ["string", "LocalTime", "TimeOnly", "time", "LocalTime", "String", "time.Time"] },
+    { "name": "duration", "aliases": ["timespan"], "in": ["number", "Duration", "TimeSpan", "timedelta", "Duration", "std::time::Duration", "time.Duration"] },
+    { "name": "uuid", "aliases": ["guid"], "in": ["string", "UUID", "Guid", "UUID", "UUID", "String", "string"] },
+    { "name": "bytes", "aliases": ["binary", "blob"], "in": ["Uint8Array", "byte[]", "byte[]", "bytes", "ByteArray", "Vec<u8>", "[]byte"] },
+    { "name": "void", "aliases": [], "in": ["void", "void", "void", "None", "Unit", "()", ""] },
+    { "name": "any", "aliases": ["object"], "in": ["unknown", "Object", "object", "Any", "Any", "String", "any"] }
+  ],
+  "read": {
+    "typescript": {
+      "string": "string", "number": "double", "boolean": "bool", "Date": "datetime", "bigint": "long",
+      "Uint8Array": "bytes", "unknown": "any", "any": "any", "void": "void"
+    },
+    "java": {
+      "String": "string", "int": "int", "long": "long", "double": "double", "boolean": "bool", "BigDecimal": "decimal",
+      "LocalDate": "date", "LocalDateTime": "datetime", "LocalTime": "time", "Duration": "duration", "UUID": "uuid",
+      "byte[]": "bytes", "Object": "any", "void": "void",
+      "Integer": "int", "Long": "long", "Double": "double", "Boolean": "bool", "float": "double", "Float": "double",
+      "short": "int", "byte": "int", "char": "string", "Instant": "datetime"
+    },
+    "csharp": {
+      "string": "string", "int": "int", "long": "long", "double": "double", "bool": "bool", "decimal": "decimal",
+      "DateOnly": "date", "DateTime": "datetime", "TimeOnly": "time", "TimeSpan": "duration", "Guid": "uuid",
+      "byte[]": "bytes", "object": "any", "void": "void",
+      "float": "double", "short": "int", "byte": "int", "char": "string", "String": "string", "Int32": "int", "Int64": "long",
+      "Boolean": "bool", "DateTimeOffset": "datetime"
+    },
+    "python": {
+      "str": "string", "int": "int", "float": "double", "bool": "bool", "Decimal": "decimal", "date": "date",
+      "datetime": "datetime", "time": "time", "timedelta": "duration", "UUID": "uuid", "bytes": "bytes", "Any": "any",
+      "None": "void", "object": "any"
+    },
+    "kotlin": {
+      "String": "string", "Int": "int", "Long": "long", "Double": "double", "Boolean": "bool", "BigDecimal": "decimal",
+      "LocalDate": "date", "LocalDateTime": "datetime", "LocalTime": "time", "Duration": "duration", "UUID": "uuid",
+      "ByteArray": "bytes", "Any": "any", "Unit": "void",
+      "Float": "double", "Short": "int", "Byte": "int", "Char": "string", "Instant": "datetime"
+    },
+    "rust": {
+      "String": "string", "i32": "int", "i64": "long", "f64": "double", "bool": "bool", "Vec<u8>": "bytes",
+      "std::time::Duration": "duration", "Duration": "duration", "()": "void",
+      "&str": "string", "i8": "int", "i16": "int", "u8": "int", "u16": "int", "u32": "long", "u64": "long",
+      "usize": "long", "isize": "long", "f32": "double", "char": "string"
+    },
+    "go": {
+      "string": "string", "int": "int", "int64": "long", "float64": "double", "bool": "bool", "time.Time": "datetime",
+      "time.Duration": "duration", "[]byte": "bytes", "any": "any",
+      "int8": "int", "int16": "int", "int32": "int", "uint": "long", "uint32": "long", "uint64": "long",
+      "float32": "double", "rune": "string", "byte": "int", "interface{}": "any"
+    }
+  },
+  "cases": [
+    { "uml": "int", "in": ["number", "int", "int", "int", "Int", "i32", "int"] },
+    { "uml": "string?", "in": ["string | null", "String", "string?", "str | None", "String?", "Option<String>", "*string"] },
+    { "uml": "List<Order>", "in": ["Order[]", "List<Order>", "List<Order>", "list[Order]", "List<Order>", "Vec<Order>", "[]Order"] },
+    { "uml": "Set<string>", "in": ["Set<string>", "Set<String>", "HashSet<string>", "set[str]", "Set<String>", "HashSet<String>", "map[string]bool"] },
+    { "uml": "Map<string, int>", "in": ["Map<string, number>", "Map<String, Integer>", "Dictionary<string, int>", "dict[str, int]", "Map<String, Int>", "HashMap<String, i32>", "map[string]int"] },
+    { "uml": "List<int>", "in": ["number[]", "List<Integer>", "List<int>", "list[int]", "List<Int>", "Vec<i32>", "[]int"] },
+    { "uml": "duration", "in": ["number", "Duration", "TimeSpan", "timedelta", "Duration", "std::time::Duration", "time.Duration"] },
+    { "uml": "bytes", "in": ["Uint8Array", "byte[]", "byte[]", "bytes", "ByteArray", "Vec<u8>", "[]byte"] }
+  ]
+}

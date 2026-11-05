@@ -133,5 +133,10 @@ pub(super) fn rust(classes: &[Class]) -> String {
             }
         }
     }
+    // Sets and maps come from std::collections
+    let uses: Vec<&str> = ["HashMap", "HashSet"].into_iter().filter(|t| s.contains(&format!("{t}<"))).collect();
+    if !uses.is_empty() {
+        s.insert_str(0, &format!("use std::collections::{{{}}};\n\n", uses.join(", ")));
+    }
     s
 }

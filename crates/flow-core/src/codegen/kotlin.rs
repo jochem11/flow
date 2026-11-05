@@ -18,7 +18,14 @@ pub(super) fn kotlin(classes: &[Class]) -> String {
         })
         .flat_map(|x| x.split(|c: char| !c.is_alphanumeric()).map(String::from).collect::<Vec<_>>())
         .collect();
-    let imports: Vec<&str> = [("BigDecimal", "java.math.BigDecimal"), ("LocalDateTime", "java.time.LocalDateTime"), ("LocalDate", "java.time.LocalDate"), ("UUID", "java.util.UUID")]
+    let imports: Vec<&str> = [
+        ("BigDecimal", "java.math.BigDecimal"),
+        ("LocalDateTime", "java.time.LocalDateTime"),
+        ("LocalDate", "java.time.LocalDate"),
+        ("LocalTime", "java.time.LocalTime"),
+        ("Duration", "java.time.Duration"),
+        ("UUID", "java.util.UUID"),
+    ]
         .into_iter()
         .filter(|(w, _)| used.contains(*w))
         .map(|(_, i)| i)

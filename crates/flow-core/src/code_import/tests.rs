@@ -22,8 +22,7 @@ fn as_flow(imp: &CodeImport) -> FlowDoc {
         nodes: imp.nodes.clone(),
         edges: imp.edges.clone(),
         camera: Camera::default(),
-        call_colors: None,
-        diagram: None,
+        ..Default::default()
     }
 }
 

@@ -62,8 +62,7 @@ impl DocContent {
                 nodes: vec![],
                 edges: vec![],
                 camera: Camera::default(),
-                call_colors: None,
-                diagram: None,
+                ..Default::default()
             }),
             DocumentKind::Text => Self::Text(TextDoc::default()),
             DocumentKind::Kanban => Self::Kanban(KanbanDoc::default()),

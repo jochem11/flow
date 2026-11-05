@@ -24,8 +24,8 @@ import { loadComments, guest } from "../comments";
 import { applyRemoteEer, eer, eerHistoryChanged, eerRev, useSharedEerUndo } from "../eer";
 import { applyRemoteKanban, kanban, kanbanRev } from "../kanban";
 import { currentShareToken, inTauri, serverUrl, sessionToken } from "../server";
-import { applyRemoteFlow, board, historyChanged, rev, touch, useSharedUndo, type SharedUndo } from "../store";
-import type { DiagramType, EerSection, Entity, FlowEdge, FlowNode, KanbanCard, KanbanColumn, KanbanLabel, Relation } from "../types";
+import { applyRemoteFlow, board, FLOW_SETTINGS, type FlowSettings, historyChanged, rev, touch, useSharedUndo, type SharedUndo } from "../store";
+import type { EerSection, Entity, FlowEdge, FlowNode, KanbanCard, KanbanColumn, KanbanLabel, Relation } from "../types";
 import { checkOpenAccess, openDoc, type OpenDoc } from "../workspace";
 import { readList, writeList } from "./ylist";
 
@@ -100,16 +100,19 @@ function flowBinding(doc: Y.Doc): Binding {
       writeList(nodes, board.nodes as never);
       writeList(edges, board.edges as never);
       // The board's settings, only when they changed (each set is a change for everyone)
-      const callColors = board.callColors ?? false;
-      if ((root.get("callColors") ?? false) !== callColors) root.set("callColors", callColors);
-      if (board.diagram && root.get("diagram") !== board.diagram) root.set("diagram", board.diagram);
+      for (const [key, unset] of Object.entries(FLOW_SETTINGS)) {
+        const value = board[key as keyof typeof FLOW_SETTINGS] ?? unset;
+        if ((root.get(key) ?? unset) !== value) root.set(key, value);
+      }
       if (!root.has("seeded")) root.set("seeded", true);
     },
+    // A setting the shared document does not have yet stays as loaded
     read: () =>
-      applyRemoteFlow(readList<FlowNode>(nodes), readList<FlowEdge>(edges), {
-        callColors: root.get("callColors") as boolean | undefined,
-        diagram: root.get("diagram") as DiagramType | undefined,
-      }),
+      applyRemoteFlow(
+        readList<FlowNode>(nodes),
+        readList<FlowEdge>(edges),
+        Object.fromEntries(Object.keys(FLOW_SETTINGS).filter((k) => root.has(k)).map((k) => [k, root.get(k)])) as FlowSettings,
+      ),
   };
 }
 

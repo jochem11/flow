@@ -338,8 +338,7 @@ mod tests {
                 edge("note", "s"),
             ],
             camera: Camera::default(),
-            call_colors: None,
-            diagram: None,
+            ..Default::default()
         }
     }
 
@@ -392,8 +391,7 @@ mod tests {
                 edge("check", "done"),
             ],
             camera: Camera::default(),
-            call_colors: None,
-            diagram: None,
+            ..Default::default()
         }
     }
 

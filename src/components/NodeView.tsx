@@ -10,7 +10,6 @@ import { RESIZE_DIRS, type ResizeDir, type Side } from "../lib/geometry";
 import {
   attributeNames,
   classKind,
-  className,
   classParts,
   classText,
   fixOperation,
@@ -18,6 +17,7 @@ import {
   rowProblem,
   type ClassContext,
 } from "../lib/umlClass";
+import { parseClass } from "../lib/classModel";
 import { canEdit } from "../lib/access";
 import { NEST } from "../lib/sequence";
 import { beginConnect, beginLaneResize, beginLine, beginNodeDrag, beginResize, blurActive } from "../lib/interactions";
@@ -25,7 +25,6 @@ import {
   activationsOf,
   callColorOf,
   board,
-  nodeById,
   hasText,
   isConnectable,
   isResizable,
@@ -326,14 +325,13 @@ function ClassBody(p: { node: FlowNode }) {
   const active = () => isSelected(p.node.id) && ui.selected.length === 1 && !ui.dragging;
   let body!: HTMLDivElement;
 
-  /** What this class may use as a type: itself, the classes connected to it, its attributes */
+  /** What this class may use as a type: itself, the classes on the board, its type parameters, its attributes */
   const ctx = createMemo((): ClassContext => {
-    const related = board.edges
-      .filter((e) => e.from === p.node.id || e.to === p.node.id)
-      .map((e) => nodeById(e.from === p.node.id ? e.to : e.from))
-      .filter((n) => n?.kind === "class")
-      .map((n) => className(n!.text));
-    return { self: className(p.node.text), related, attributes: attributeNames(p.node.text) };
+    const related = [
+      ...board.nodes.filter((n) => n.kind === "class" && n.id !== p.node.id).map((n) => parseClass(n.text).name),
+      ...parseClass(p.node.text).typeParams,
+    ];
+    return { self: parseClass(p.node.text).name, related, attributes: attributeNames(p.node.text) };
   });
   /** Rows not in UML notation, or with types this class cannot use, are marked (the code export skips them) */
   const problem = (part: number, line: string) => rowProblem(classKind(p.node.text), part, line, ctx());

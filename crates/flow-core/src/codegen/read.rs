@@ -27,6 +27,8 @@ pub struct Field {
     pub ty: String,
     pub default: Option<String>,
     pub is_static: bool,
+    /// `{readOnly}`: set once (final, readonly, val), no setter
+    pub read_only: bool,
 }
 
 #[derive(Debug, Clone, PartialEq)]
@@ -66,8 +68,16 @@ pub struct Class {
     pub unreadable: Vec<String>,
 }
 
-/// `+`, `-`, `#`, `~` in front of a row, and `static` / `{static}` / `{abstract}`.
-pub(super) fn modifiers(line: &str) -> (Vis, bool, bool, String) {
+/// What is written around a row's declaration: `+`, `-`, `#`, `~` in front, and
+/// `static` / `{static}`, `{abstract}`, `{readOnly}`.
+pub(super) struct Modifiers {
+    pub vis: Vis,
+    pub is_static: bool,
+    pub is_abstract: bool,
+    pub read_only: bool,
+}
+
+pub(super) fn modifiers(line: &str) -> (Modifiers, String) {
     let mut s = line.trim().to_string();
     let vis = match s.chars().next() {
         Some('+') => Vis::Public,
@@ -88,7 +98,13 @@ pub(super) fn modifiers(line: &str) -> (Vis, bool, bool, String) {
     }
     let is_abstract = s.contains("{abstract}");
     s = s.replace("{abstract}", "").trim().to_string();
-    (vis, is_static, is_abstract, s)
+    let read_only = s.to_lowercase().contains("{readonly}");
+    if read_only {
+        let at = s.to_lowercase().find("{readonly}").unwrap();
+        s.replace_range(at..at + "{readonly}".len(), "");
+        s = s.trim().to_string();
+    }
+    (Modifiers { vis, is_static, is_abstract, read_only }, s)
 }
 
 pub fn is_ident(s: &str) -> bool {
@@ -100,7 +116,7 @@ pub fn is_ident(s: &str) -> bool {
 pub(super) fn is_type(s: &str) -> bool {
     let s = s.trim().trim_end_matches('?').trim_end_matches("[]");
     match s.find('<') {
-        Some(i) if s.ends_with('>') => is_ident(&s[..i]) && s[i + 1..s.len() - 1].split(',').all(is_type),
+        Some(i) if s.ends_with('>') => is_ident(&s[..i]) && split_args(&s[i + 1..s.len() - 1]).iter().all(|a| is_type(a)),
         Some(_) => false,
         None => is_ident(s),
     }
@@ -108,19 +124,19 @@ pub(super) fn is_type(s: &str) -> bool {
 
 /// `[+] name: Type [= default]`
 pub fn parse_attribute(line: &str) -> Option<Field> {
-    let (vis, is_static, _, rest) = modifiers(line);
+    let (Modifiers { vis, is_static, read_only, .. }, rest) = modifiers(line);
     let (decl, default) = match rest.split_once('=') {
         Some((d, v)) => (d.trim(), Some(v.trim().to_string()).filter(|v| !v.is_empty())),
         None => (rest.as_str(), None),
     };
     let (name, ty) = decl.split_once(':')?;
     let (name, ty) = (name.trim().trim_start_matches('/'), ty.trim());
-    (is_ident(name) && is_type(ty)).then(|| Field { vis, name: name.into(), ty: ty.into(), default, is_static })
+    (is_ident(name) && is_type(ty)).then(|| Field { vis, name: name.into(), ty: ty.into(), default, is_static, read_only })
 }
 
 /// `[+] name(param: Type, ...)[: ReturnType]`
 pub fn parse_operation(line: &str) -> Option<Method> {
-    let (vis, is_static, is_abstract, rest) = modifiers(line);
+    let (Modifiers { vis, is_static, is_abstract, .. }, rest) = modifiers(line);
     // `getName: String`, without the (): an operation without parameters
     if !rest.contains('(') {
         let (name, ret) = rest.split_once(':')?;
@@ -142,7 +158,8 @@ pub fn parse_operation(line: &str) -> Option<Method> {
         return None;
     }
     let mut params = vec![];
-    for p in rest[open + 1..close].split(',').map(str::trim).filter(|p| !p.is_empty()) {
+    // On the top-level commas: `index(map: Map<string, int>)` has one parameter
+    for p in split_args(&rest[open + 1..close]).iter().map(|p| p.trim()).filter(|p| !p.is_empty()) {
         let (n, t) = p.split_once(':')?;
         let (n, t) = (n.trim(), t.trim());
         if !is_ident(n) || !is_type(t) {
@@ -243,10 +260,10 @@ pub fn read_class(n: &Node) -> Class {
     class
 }
 
-/// Generic types read as a list of their argument
-pub(super) const CONTAINERS: [&str; 6] = ["list", "set", "collection", "array", "vec", "sequence"];
+/// Generic types that are lists, sets and maps of their arguments (not classes)
+pub(super) const CONTAINERS: [&str; 11] = ["list", "collection", "array", "vec", "sequence", "set", "hashset", "map", "dict", "dictionary", "hashmap"];
 
-/// The first name in type `t` that is not a built-in type, the class itself, or a related class.
+/// The first name in type `t` that is not a built-in type, the class itself, or a class on the board.
 pub(super) fn unknown_in(t: &str, own: &str, related: &BTreeSet<String>) -> Option<String> {
     t.split(|c: char| !(c.is_alphanumeric() || c == '_'))
         .filter(|w| !w.is_empty() && !CONTAINERS.contains(&w.to_lowercase().as_str()))
@@ -256,8 +273,10 @@ pub(super) fn unknown_in(t: &str, own: &str, related: &BTreeSet<String>) -> Opti
 
 /// Moves attributes and operations with types the class cannot use to `unreadable`,
 /// with why (the editor marks the same rows, see `rowProblem` in umlClass.ts).
-pub(super) fn check_types(c: &mut Class, related: &BTreeSet<String>) {
-    let why = |t: &str| format!("Unknown type `{t}` (not built in, this class or a class connected to it), skipped:");
+/// `known`: the classes on the board (the editor draws a line to one when it is used).
+pub(super) fn check_types(c: &mut Class, known: &BTreeSet<String>) {
+    let related = known;
+    let why = |t: &str| format!("Unknown type `{t}` (not built in, and no class on this board), skipped:");
     let (own, mut skipped) = (c.name.clone(), vec![]);
     c.fields.retain(|f| match unknown_in(&f.ty, &own, related) {
         Some(t) => {
@@ -308,16 +327,10 @@ pub fn read_classes(flow: &FlowDoc) -> Vec<Class> {
     let index: HashMap<String, usize> = classes.iter().enumerate().map(|(i, (id, _))| (id.clone(), i)).collect();
     let name_of = |i: usize, classes: &[(String, Class)]| classes[i].1.name.clone();
 
-    // A class may only use built-in types, itself, and classes connected to it with a line
-    let mut related: Vec<BTreeSet<String>> = vec![BTreeSet::new(); classes.len()];
-    for e in &flow.edges {
-        if let (Some(&a), Some(&b)) = (index.get(&e.from), index.get(&e.to)) {
-            related[a].insert(name_of(b, &classes));
-            related[b].insert(name_of(a, &classes));
-        }
-    }
-    for (i, (_, c)) in classes.iter_mut().enumerate() {
-        check_types(c, &related[i]);
+    // A class may use built-in types and the classes on the board
+    let known: BTreeSet<String> = classes.iter().map(|(_, c)| c.name.clone()).collect();
+    for (_, c) in classes.iter_mut() {
+        check_types(c, &known);
     }
 
     for e in &flow.edges {
@@ -352,7 +365,7 @@ pub fn read_classes(flow: &FlowDoc) -> Vec<Class> {
         let refers = |f: &Field| f.ty.split(|c: char| !(c.is_alphanumeric() || c == '_')).any(|t| pascal(t) == part_name);
         if w.kind != Kind::Enum && !w.fields.iter().any(|f| f.name == field || refers(f)) {
             let ty = if many { format!("List<{part_name}>") } else { format!("{part_name}?") };
-            w.fields.push(Field { vis: Vis::Private, name: field, ty, default: None, is_static: false });
+            w.fields.push(Field { vis: Vis::Private, name: field, ty, default: None, is_static: false, read_only: false });
         }
     }
 

@@ -385,6 +385,12 @@ export type FlowDoc = {
 	 *  Missing means `Whiteboard` (everything, as boards were before types).
 	 */
 	diagram?: DiagramType | null,
+	/**
+	 *  Class diagrams: the programming language the classes are for. Their types are
+	 *  shown as it writes them and offered from its built-in types; they are stored
+	 *  language-neutral (see fixtures/types.json). Missing means UML-neutral.
+	 */
+	codeLanguage?: CodeLanguage | null,
 };
 
 /**  A folder inside a project. Folders nest via `parent_id`. */

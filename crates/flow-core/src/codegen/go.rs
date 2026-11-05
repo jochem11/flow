@@ -24,10 +24,12 @@ pub(super) fn go(classes: &[Class]) -> String {
     // A type in Go: structs by pointer (so they can refer to each other), interfaces and enums by value
     fn go_ty(t: &Ty, structs: &BTreeSet<String>) -> String {
         match t {
-            Ty::Named(n) if builtin(n).is_some() => builtin(n).unwrap()[6].into(),
+            Ty::Named(n) if builtin(n).is_some() => builtin(n).unwrap()[6].clone(),
             Ty::Named(n) if structs.contains(&pascal(n)) => format!("*{}", pascal(n)),
             Ty::Named(n) => pascal(n),
             Ty::List(inner) => format!("[]{}", go_ty(inner, structs)),
+            Ty::Set(inner) => format!("map[{}]bool", go_ty(inner, structs)),
+            Ty::Map(k, v) => format!("map[{}]{}", go_ty(k, structs), go_ty(v, structs)),
             // Pointers and interfaces can already be nil
             Ty::Optional(inner) => {
                 let i = go_ty(inner, structs);
@@ -161,6 +163,6 @@ pub(super) fn go(classes: &[Class]) -> String {
         .and_then(|p| p.rsplit('.').next().map(|s| s.chars().filter(|c| c.is_alphanumeric()).collect::<String>().to_lowercase()))
         .filter(|p| !p.is_empty() && p.starts_with(char::is_alphabetic))
         .unwrap_or_else(|| "model".into());
-    let imports = if body.contains("time.Time") { "\nimport \"time\"\n" } else { "" };
+    let imports = if body.contains("time.") { "\nimport \"time\"\n" } else { "" };
     format!("package {pkg}\n{imports}{body}")
 }

@@ -36,6 +36,8 @@ pub(super) fn typescript(classes: &[Class]) -> String {
                     let init = match (&f.default, &parsed) {
                         (Some(d), _) => format!(" = {}", default_value(l, &t(&f.ty), d)),
                         (None, Ty::List(_)) => " = []".into(),
+                        (None, Ty::Set(_)) => " = new Set()".into(),
+                        (None, Ty::Map(..)) => " = new Map()".into(),
                         (None, Ty::Optional(_)) => " = null".into(),
                         _ => String::new(),
                     };

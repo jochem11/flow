@@ -1,3 +1,5 @@
+import { CONTAINERS, isBuiltin } from "./classTypes";
+
 // A UML class is stored in a node's `text`: the name, then a line with just `--`,
 // the attributes, another `--`, and the operations. The editor never shows the `--`.
 
@@ -113,16 +115,10 @@ export function isOperation(line: string): boolean {
 }
 
 // ---------- which types a class may use ----------
-// Built-in types (the same list as `builtin` in codegen.rs), the class itself, and
-// classes connected to it with a line. An operation may also return one of the
-// class's own attributes: that makes it a getter.
-
-const BUILTIN_TYPES = new Set(
-  `int integer short byte long bigint float double real number decimal money bigdecimal bool boolean
-   string str text char date datetime timestamp instant uuid guid void any object`.split(/\s+/),
-);
-/** Generic types that are read as a list of their argument */
-const CONTAINERS = new Set(["list", "set", "collection", "array", "vec", "sequence"]);
+// Built-in types (fixtures/types.json, shared with the code export), the classes on
+// the board (the class panel draws a line to one when it is used), and the class's
+// own type parameters. An operation may also return one of the class's own
+// attributes: that makes it a getter.
 
 /** For comparing class names written in different styles: `order_line` = `OrderLine` */
 export const sameName = (a: string, b: string) =>
@@ -133,9 +129,10 @@ function typeNames(type: string): string[] {
   return (type.match(/[\p{L}_][\p{L}\p{N}_]*/gu) ?? []).filter((w) => !CONTAINERS.has(w.toLowerCase()));
 }
 
-/** What a class may refer to: its own name, the classes connected to it, and its attributes. */
+/** What a class may refer to: its own name, the classes on the board, and its attributes. */
 export interface ClassContext {
   self: string;
+  /** The classes on the board (and the class's type parameters) */
   related: string[];
   attributes: string[];
 }
@@ -154,15 +151,15 @@ function unknownType(types: string[], ctx: ClassContext, returnType?: string): s
     types = types.filter((t) => t !== returnType);
   }
   for (const t of types.flatMap(typeNames)) {
-    const ok = BUILTIN_TYPES.has(t.toLowerCase()) || sameName(t, ctx.self) || ctx.related.some((r) => sameName(t, r));
+    const ok = isBuiltin(t) || sameName(t, ctx.self) || ctx.related.some((r) => sameName(t, r));
     if (!ok) return t;
   }
   return null;
 }
 
 const unknownMessage = (t: string, operation: boolean) =>
-  `"${t}" is not known here: use a built-in type (int, string, bool, decimal, date, …), this class, ` +
-  `a class connected to it with a line${operation ? ", or one of its attributes to return it" : ""}`;
+  `"${t}" is not known here: use a built-in type (int, string, bool, decimal, date, …) or a class on this board` +
+  `${operation ? ", or one of its attributes to return it" : ""}`;
 
 /** The types used in an attribute row, and in an operation row (with its return type apart). */
 function attributeType(line: string): string {

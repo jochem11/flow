@@ -1,0 +1,27 @@
+{
+  "about": "Rows of a UML class as written in a class node's text, and what they mean. Checked by src/lib/classModel.test.ts (parse and write back: `written`, when not the row itself) and by crates/flow-core/src/codegen/tests.rs (parse_attribute, parse_operation). `null`: not UML notation.",
+  "attributes": [
+    { "row": "- name: string", "parsed": { "vis": "-", "name": "name", "type": "string", "default": null, "static": false, "readOnly": false } },
+    { "row": "+ count: int = 0", "parsed": { "vis": "+", "name": "count", "type": "int", "default": "0", "static": false, "readOnly": false } },
+    { "row": "id: uuid", "parsed": { "vis": "", "name": "id", "type": "uuid", "default": null, "static": false, "readOnly": false } },
+    { "row": "# lines: List<OrderLine>", "parsed": { "vis": "#", "name": "lines", "type": "List<OrderLine>", "default": null, "static": false, "readOnly": false } },
+    { "row": "- prices: Map<string, decimal>", "parsed": { "vis": "-", "name": "prices", "type": "Map<string, decimal>", "default": null, "static": false, "readOnly": false } },
+    { "row": "+ static MAX: int = 10", "parsed": { "vis": "+", "name": "MAX", "type": "int", "default": "10", "static": true, "readOnly": false } },
+    { "row": "+ {static} total: decimal", "written": "+ static total: decimal", "parsed": { "vis": "+", "name": "total", "type": "decimal", "default": null, "static": true, "readOnly": false } },
+    { "row": "- id: int {readOnly}", "parsed": { "vis": "-", "name": "id", "type": "int", "default": null, "static": false, "readOnly": true } },
+    { "row": "- created: datetime = now {readOnly}", "parsed": { "vis": "-", "name": "created", "type": "datetime", "default": "now", "static": false, "readOnly": true } },
+    { "row": "~ owner: Customer?", "parsed": { "vis": "~", "name": "owner", "type": "Customer?", "default": null, "static": false, "readOnly": false } },
+    { "row": "just some text", "parsed": null },
+    { "row": "- name string", "parsed": null }
+  ],
+  "operations": [
+    { "row": "+ total(): decimal", "parsed": { "vis": "+", "name": "total", "params": [], "returns": "decimal", "static": false, "abstract": false } },
+    { "row": "+ add(line: OrderLine, count: int)", "parsed": { "vis": "+", "name": "add", "params": [["line", "OrderLine"], ["count", "int"]], "returns": null, "static": false, "abstract": false } },
+    { "row": "- find(id: uuid): Order?", "parsed": { "vis": "-", "name": "find", "params": [["id", "uuid"]], "returns": "Order?", "static": false, "abstract": false } },
+    { "row": "+ area(): double {abstract}", "parsed": { "vis": "+", "name": "area", "params": [], "returns": "double", "static": false, "abstract": true } },
+    { "row": "+ static create(name: string): Order", "parsed": { "vis": "+", "name": "create", "params": [["name", "string"]], "returns": "Order", "static": true, "abstract": false } },
+    { "row": "+ getName: string", "written": "+ getName(): string", "parsed": { "vis": "+", "name": "getName", "params": [], "returns": "string", "static": false, "abstract": false } },
+    { "row": "+ index(map: Map<string, int>): int", "parsed": { "vis": "+", "name": "index", "params": [["map", "Map<string, int>"]], "returns": "int", "static": false, "abstract": false } },
+    { "row": "+ broken(x): int", "parsed": null }
+  ]
+}

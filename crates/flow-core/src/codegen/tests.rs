@@ -78,11 +78,10 @@ fn only_known_types() {
     let order = classes.iter().find(|c| c.name == "Order").unwrap();
     let fields: Vec<&str> = order.fields.iter().map(|f| f.name.as_str()).collect();
     let methods: Vec<&str> = order.methods.iter().map(|m| m.name.as_str()).collect();
-    // Customer is connected, Ghost does not exist
+    // Customer and Invoice are on the board (connected or not), Ghost and Thing are not
     assert_eq!(fields, ["id", "owner"]);
-    // Invoice exists but is not connected to Order; Thing does not exist
-    assert_eq!(methods, ["getId", "copy"]);
-    assert!(order.unreadable.iter().any(|u| u.contains("`Invoice`") && u.contains("find()")));
+    assert_eq!(methods, ["getId", "copy", "find"]);
+    assert!(order.unreadable.iter().any(|u| u.contains("`Thing`") && u.contains("items()")));
     assert!(order.unreadable.iter().any(|u| u.contains("`Ghost`")));
 }
 
@@ -213,4 +212,31 @@ fn every_language() {
     assert!(go.contains("type RushOrder struct {\n\tOrder"));
     assert!(go.contains("var _ Payable = (*Order)(nil)"));
     assert!(go.contains("func (c *Customer) GetName() string {\n\treturn c.name"));
+}
+
+/// The same rows as src/lib/classModel.test.ts, so the class panel and the code agree.
+#[test]
+fn class_rows_fixture() {
+    let fixture: serde_json::Value = serde_json::from_str(include_str!("../../../../fixtures/classRows.json")).unwrap();
+    let vis = |v: Vis| match v {
+        Vis::Public => "+",
+        Vis::Private => "-",
+        Vis::Protected => "#",
+        Vis::Package => "~",
+        Vis::Unset => "",
+    };
+    for case in fixture["attributes"].as_array().unwrap() {
+        let row = case["row"].as_str().unwrap();
+        let parsed = parse_attribute(row).map(|f| {
+            serde_json::json!({ "vis": vis(f.vis), "name": f.name, "type": f.ty, "default": f.default, "static": f.is_static, "readOnly": f.read_only })
+        });
+        assert_eq!(parsed.unwrap_or(serde_json::Value::Null), case["parsed"], "{row}");
+    }
+    for case in fixture["operations"].as_array().unwrap() {
+        let row = case["row"].as_str().unwrap();
+        let parsed = parse_operation(row).map(|m| {
+            serde_json::json!({ "vis": vis(m.vis), "name": m.name, "params": m.params, "returns": m.ret, "static": m.is_static, "abstract": m.is_abstract })
+        });
+        assert_eq!(parsed.unwrap_or(serde_json::Value::Null), case["parsed"], "{row}");
+    }
 }

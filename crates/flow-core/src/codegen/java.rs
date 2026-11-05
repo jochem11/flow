@@ -8,6 +8,10 @@ pub(super) fn java_ty(t: &str, imports: &mut BTreeSet<&'static str>) -> String {
     let words: Vec<&str> = out.split(|c: char| !c.is_alphanumeric()).collect();
     for (word, import) in [
         ("List", "java.util.List"),
+        ("Set", "java.util.Set"),
+        ("Map", "java.util.Map"),
+        ("LocalTime", "java.time.LocalTime"),
+        ("Duration", "java.time.Duration"),
         ("BigDecimal", "java.math.BigDecimal"),
         ("LocalDateTime", "java.time.LocalDateTime"),
         ("LocalDate", "java.time.LocalDate"),
@@ -71,6 +75,14 @@ pub(super) fn java(c: &Class, classes: &[Class]) -> String {
             None if t.starts_with("List<") => {
                 imports.insert("java.util.ArrayList");
                 " = new ArrayList<>()".into()
+            }
+            None if t.starts_with("Set<") => {
+                imports.insert("java.util.HashSet");
+                " = new HashSet<>()".into()
+            }
+            None if t.starts_with("Map<") => {
+                imports.insert("java.util.HashMap");
+                " = new HashMap<>()".into()
             }
             None => String::new(),
         };
