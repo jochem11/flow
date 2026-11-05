@@ -17,7 +17,7 @@ import {
   rowProblem,
   type ClassContext,
 } from "../lib/umlClass";
-import { parseClass } from "../lib/classModel";
+import { parseClass, rowFrom, rowIn } from "../lib/classModel";
 import { canEdit } from "../lib/access";
 import { NEST } from "../lib/sequence";
 import { beginConnect, beginLaneResize, beginLine, beginNodeDrag, beginResize, blurActive } from "../lib/interactions";
@@ -349,7 +349,9 @@ function ClassBody(p: { node: FlowNode }) {
   const commitRow = (part: number, index: number, value: string, insert: boolean, key?: string) => {
     // An operation without its () gets them: `+ getName: name` → `+ getName(): name`
     const typed = value.replace(/\n/g, " ").trim();
-    const line = part === 2 ? fixOperation(typed) : typed;
+    const fixed = part === 2 ? fixOperation(typed) : typed;
+    // Typed in the board's language: back to neutral UML (unchanged types keep what they were)
+    const line = rowFrom(part, classKind(p.node.text), fixed, board.codeLanguage, insert ? undefined : parts()[part][index]);
     save((next) => {
       if (insert) {
         if (line) next[part].splice(index, 0, line);
@@ -424,7 +426,7 @@ function ClassBody(p: { node: FlowNode }) {
                             setRow(part, index);
                           }}
                         >
-                          <span>{value()}</span>
+                          <span>{rowIn(part, classKind(p.node.text), value(), board.codeLanguage)}</span>
                           <Show when={active()}>
                             <button
                               class="class-row-remove"
@@ -440,7 +442,7 @@ function ClassBody(p: { node: FlowNode }) {
                     >
                       <TextEditor
                         class="class-row editor"
-                        value={value()}
+                        value={rowIn(part, classKind(p.node.text), value(), board.codeLanguage)}
                         onDone={(t, key) => commitRow(part, index, t, false, key)}
                       />
                     </Show>

@@ -258,7 +258,8 @@ export function TopBar() {
                       <Show when={board.nodes.some((n) => n.kind === "class")}>
                         <div class="menu-sep" />
                         <div class="menu-title">Class diagram as code</div>
-                        <For each={LANGUAGES}>
+                        {/* The board's language first */}
+                        <For each={[...LANGUAGES].sort((a, b) => Number(b.value === board.codeLanguage) - Number(a.value === board.codeLanguage))}>
                           {(l) => (
                             <button
                               class="menu-item"
@@ -268,7 +269,7 @@ export function TopBar() {
                               }}
                             >
                               <span>{l.label}</span>
-                              <small>{l.hint}</small>
+                              <small>{l.value === board.codeLanguage ? "this board" : l.hint}</small>
                             </button>
                           )}
                         </For>

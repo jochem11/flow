@@ -10,6 +10,8 @@ RUN npm ci
 COPY index.html vite.config.ts tsconfig.json tsconfig.node.json ./
 COPY public ./public
 COPY src ./src
+# Shared with the Rust code: built-in types and other rules (see fixtures/)
+COPY fixtures ./fixtures
 # production (default) or development: which .env.<mode> the frontend gets
 ARG MODE=production
 COPY .env.production .env.development ./

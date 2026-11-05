@@ -240,3 +240,14 @@ fn class_rows_fixture() {
         assert_eq!(parsed.unwrap_or(serde_json::Value::Null), case["parsed"], "{row}");
     }
 }
+
+/// Rows shown in a board's language: the same as rowIn in src/lib/classModel.test.ts.
+#[test]
+fn rows_in_a_language() {
+    use CodeLanguage as L;
+    assert_eq!(row_in(1, false, "- owner: Customer?", L::TypeScript), "- owner: Customer | null");
+    assert_eq!(row_in(2, false, "+ find(id: uuid): Order?", L::Go), "+ find(id: string): *Order");
+    assert_eq!(row_in(1, false, "- id: int {readOnly}", L::Kotlin), "- id: Int {readOnly}");
+    assert_eq!(row_in(1, true, "Paid", L::Java), "Paid");
+    assert_eq!(row_in(1, false, "not uml", L::Go), "not uml");
+}

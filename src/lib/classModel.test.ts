@@ -39,3 +39,22 @@ describe("a class as a structure", () => {
     expect(formatClass({ ...c, values: [...c.values, { name: "Shipped", value: null }] })).toBe("«enum»\nStatus\n--\nNew\nPaid = 2\nShipped\n--\n");
   });
 });
+
+describe("rows in a programming language", () => {
+  it("shows types as the board's language writes them", async () => {
+    const { rowIn } = await import("./classModel");
+    expect(rowIn(1, "class", "- lines: List<OrderLine>", "java")).toBe("- lines: List<OrderLine>");
+    expect(rowIn(1, "class", "- owner: Customer?", "typescript")).toBe("- owner: Customer | null");
+    expect(rowIn(2, "class", "+ find(id: uuid): Order?", "go")).toBe("+ find(id: string): *Order");
+    expect(rowIn(1, "class", "not uml", "go")).toBe("not uml");
+  });
+
+  it("reads what is typed back to neutral, keeping types that read the same", async () => {
+    const { rowFrom } = await import("./classModel");
+    expect(rowFrom(1, "class", "- owner: Customer | null", "typescript")).toBe("- owner: Customer?");
+    // `number` stays `int` when it was `int`; a new name keeps the type
+    expect(rowFrom(1, "class", "- total: number", "typescript", "- count: int")).toBe("- total: int");
+    expect(rowFrom(2, "class", "+ find(id: string): *Order", "go", "+ find(id: uuid): Order?")).toBe("+ find(id: uuid): Order?");
+    expect(rowFrom(2, "class", "+ all(): []Order", "go")).toBe("+ all(): List<Order>");
+  });
+});

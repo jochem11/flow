@@ -49,6 +49,21 @@ export function connect(from: string, to: string, extra?: Partial<FlowEdge>) {
   touch();
 }
 
+/**
+ * A class uses another (picked as a type in the class panel): draws the line
+ * between them when there is none yet, so the diagram shows it. An attribute is
+ * an association (with its multiplicity: `*` for a list or set, `0..1` when
+ * optional), a parameter or return type a dependency (dashed).
+ */
+export function ensureRelation(from: string, to: string, use: "attribute" | "operation", type = "") {
+  if (from === to) return;
+  if (board.edges.some((e) => (e.from === from && e.to === to) || (e.from === to && e.to === from))) return;
+  if (use === "operation") return connect(from, to, { pattern: "dashed", endCap: "open" });
+  const many = /^(List|Set)</.test(type) || /^Map</.test(type);
+  const optional = type.trim().endsWith("?");
+  connect(from, to, { endCap: "open", ...(many ? { endLabel: "*" } : optional ? { endLabel: "0..1" } : {}) });
+}
+
 /** Between two UML classes a new line is an association: an open arrow, not a flowchart arrow. */
 export function umlDefaults(from: string, to: string): Partial<FlowEdge> {
   return nodeById(from)?.kind === "class" && nodeById(to)?.kind === "class" ? { endCap: "open" } : {};

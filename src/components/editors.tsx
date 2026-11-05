@@ -28,6 +28,7 @@ import { colorFor, textDoc } from "../lib/collab";
 import { guest } from "../lib/comments";
 import { MembersDialog } from "./ShareDialog";
 import { ZoomControls } from "./ZoomControls";
+import { ClassPanel } from "./ClassPanel";
 import { FindBar, Minimap } from "./FindAndMap";
 
 export function FlowEditor() {
@@ -40,6 +41,7 @@ export function FlowEditor() {
       <ZoomControls />
       <Minimap />
       <FindBar />
+      <ClassPanel />
     </>
   );
 }

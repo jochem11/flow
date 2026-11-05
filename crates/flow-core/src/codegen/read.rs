@@ -382,3 +382,48 @@ pub fn read_classes(flow: &FlowDoc) -> Vec<Class> {
     }
     out
 }
+
+// ---------- rows as a board's language shows them (as rowIn in src/lib/classModel.ts) ----------
+
+fn vis_mark(v: Vis) -> &'static str {
+    match v {
+        Vis::Public => "+ ",
+        Vis::Private => "- ",
+        Vis::Protected => "# ",
+        Vis::Package => "~ ",
+        Vis::Unset => "",
+    }
+}
+
+/// A class row with its types as `lang` writes them: `part` 1 is attributes, 2
+/// operations. Enum values and rows that are not UML notation stay as they are.
+pub fn row_in(part: usize, is_enum: bool, line: &str, lang: CodeLanguage) -> String {
+    let t = |s: &str| ty(&parse_ty(s), lang, false);
+    match part {
+        1 if !is_enum => match parse_attribute(line) {
+            Some(f) => format!(
+                "{}{}{}: {}{}{}",
+                vis_mark(f.vis),
+                if f.is_static { "static " } else { "" },
+                f.name,
+                t(&f.ty),
+                f.default.map_or(String::new(), |d| format!(" = {d}")),
+                if f.read_only { " {readOnly}" } else { "" }
+            ),
+            None => line.to_string(),
+        },
+        2 => match parse_operation(line) {
+            Some(m) => format!(
+                "{}{}{}({}){}{}",
+                vis_mark(m.vis),
+                if m.is_static { "static " } else { "" },
+                m.name,
+                m.params.iter().map(|(n, p)| format!("{n}: {}", t(p))).collect::<Vec<_>>().join(", "),
+                m.ret.map_or(String::new(), |r| format!(": {}", t(&r))),
+                if m.is_abstract { " {abstract}" } else { "" }
+            ),
+            None => line.to_string(),
+        },
+        _ => line.to_string(),
+    }
+}

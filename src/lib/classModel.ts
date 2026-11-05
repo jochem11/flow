@@ -6,6 +6,8 @@
 // they are.
 
 import { classKind, classParts, classText, fixOperation, type ClassKind } from "./umlClass";
+import { typeFrom, typeIn } from "./classTypes";
+import type { CodeLanguage } from "./types";
 
 /** + public, - private, # protected, ~ package, "" not written (the language's default) */
 export type Vis = "+" | "-" | "#" | "~" | "";
@@ -101,8 +103,11 @@ function modifiers(line: string) {
   return { vis, isStatic, isAbstract, readOnly, rest: s };
 }
 
-/** `[+] name: Type [= default] [{readOnly}]`, or null when it is not that. */
-export function parseAttribute(line: string): Attribute | null {
+/**
+ * `[+] name: Type [= default] [{readOnly}]`, or null when it is not that.
+ * `typeOk` decides what counts as a type (a language's spelling, when reading one back).
+ */
+export function parseAttribute(line: string, typeOk: (t: string) => boolean = isType): Attribute | null {
   const m = modifiers(line);
   const eq = m.rest.indexOf("=");
   const decl = eq < 0 ? m.rest : m.rest.slice(0, eq).trim();
@@ -111,12 +116,12 @@ export function parseAttribute(line: string): Attribute | null {
   if (colon < 0) return null;
   const name = decl.slice(0, colon).trim().replace(/^\//, "");
   const type = decl.slice(colon + 1).trim();
-  if (!isIdent(name) || !isType(type)) return null;
+  if (!isIdent(name) || !typeOk(type)) return null;
   return { vis: m.vis, name, type, default: def, static: m.isStatic, readOnly: m.readOnly };
 }
 
-/** `[+] name(param: Type, ...)[: ReturnType]`, or null when it is not that. */
-export function parseOperation(line: string): Operation | null {
+/** `[+] name(param: Type, ...)[: ReturnType]`, or null when it is not that (`typeOk` as for attributes). */
+export function parseOperation(line: string, typeOk: (t: string) => boolean = isType): Operation | null {
   const m = modifiers(fixOperation(line));
   const rest = m.rest;
   const open = rest.indexOf("(");
@@ -129,14 +134,14 @@ export function parseOperation(line: string): Operation | null {
     const colon = p.indexOf(":");
     if (colon < 0) return null;
     const [n, t] = [p.slice(0, colon).trim(), p.slice(colon + 1).trim()];
-    if (!isIdent(n) || !isType(t)) return null;
+    if (!isIdent(n) || !typeOk(t)) return null;
     params.push([n, t]);
   }
   const after = rest.slice(close + 1).trim();
   let returns: string | null = null;
   if (after.startsWith(":")) {
     returns = after.slice(1).trim();
-    if (!isType(returns)) return null;
+    if (!typeOk(returns)) return null;
   } else if (after) return null;
   return { vis: m.vis, name, params, returns, static: m.isStatic, abstract: m.isAbstract };
 }
@@ -198,4 +203,57 @@ export function formatClass(c: ClassModel): string {
     c.kind === "enum" ? c.values.map((v) => row(v, formatEnumValue)) : c.attributes.map((a) => row(a, formatAttribute)),
     c.operations.map((o) => row(o, formatOperation)),
   ]);
+}
+
+// ---------- rows in a programming language (the board's codeLanguage) ----------
+
+/** Anything that is not empty: a type as some language writes it */
+const anyType = (t: string) => t.trim().length > 0;
+
+/**
+ * A row as a board with language `lang` shows it: its types as that language
+ * writes them. `part` 1 is attributes, 2 operations; enum values and rows that
+ * are not UML notation stay as they are.
+ */
+export function rowIn(part: number, kind: ClassKind, line: string, lang: CodeLanguage | null | undefined): string {
+  if (!lang || (part === 1 && kind === "enum")) return line;
+  if (part === 1) {
+    const a = parseAttribute(line);
+    return a ? formatAttribute({ ...a, type: typeIn(a.type, lang) }) : line;
+  }
+  if (part === 2) {
+    const o = parseOperation(line);
+    if (!o) return line;
+    return formatOperation({
+      ...o,
+      params: o.params.map(([n, t]) => [n, typeIn(t, lang)] as Param),
+      returns: o.returns && typeIn(o.returns, lang),
+    });
+  }
+  return line;
+}
+
+/**
+ * A row typed on a board with language `lang`, back to neutral UML. With
+ * `before` (the row it was), types that still read the same keep what they were.
+ */
+export function rowFrom(part: number, kind: ClassKind, typed: string, lang: CodeLanguage | null | undefined, before?: string): string {
+  if (!lang || (part === 1 && kind === "enum")) return typed;
+  if (part === 1) {
+    const a = parseAttribute(typed, anyType);
+    if (!a) return typed;
+    const old = before ? parseAttribute(before) : null;
+    return formatAttribute({ ...a, type: typeFrom(a.type, lang, old?.type) });
+  }
+  if (part === 2) {
+    const o = parseOperation(typed, anyType);
+    if (!o) return typed;
+    const old = before ? parseOperation(before) : null;
+    return formatOperation({
+      ...o,
+      params: o.params.map(([n, t], i) => [n, typeFrom(t, lang, old?.params[i]?.[1])] as Param),
+      returns: o.returns && typeFrom(o.returns, lang, old?.returns ?? undefined),
+    });
+  }
+  return typed;
 }

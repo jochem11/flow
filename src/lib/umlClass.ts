@@ -81,7 +81,7 @@ function stripModifiers(line: string): string {
   return line
     .trim()
     .replace(/^[+\-#~]\s*/, "")
-    .replace(/\{static\}|\{abstract\}|^static\s+/g, "")
+    .replace(/\{static\}|\{abstract\}|\{readonly\}|^static\s+/gi, "")
     .trim();
 }
 
