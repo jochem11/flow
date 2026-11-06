@@ -102,6 +102,7 @@ fn class_diagram(flow: &FlowDoc) -> String {
             Kind::Interface => s.push_str("    <<interface>>\n"),
             Kind::Abstract => s.push_str("    <<abstract>>\n"),
             Kind::Enum => s.push_str("    <<enumeration>>\n"),
+            Kind::Record => s.push_str("    <<record>>\n"),
             Kind::Class => {}
         }
         for v in &c.values {

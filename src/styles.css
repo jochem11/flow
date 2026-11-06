@@ -6467,3 +6467,18 @@ body.presenting .find-bar {
   font-size: 13px;
   line-height: 1.45;
 }
+
+.generate-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+.generate-row .text-btn {
+  border: 1px solid var(--panel-border);
+  border-radius: 6px;
+  height: 26px;
+  padding: 0 9px;
+}
+.generate-row .text-btn:disabled {
+  opacity: 0.45;
+}

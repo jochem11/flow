@@ -25,7 +25,7 @@ import { board, ensureRelation, nodeById, reverseEdge, selectedNodes, setCodeLan
 import { relationMeaning } from "../lib/classRelations";
 import { RELATIONS } from "./EdgeMenus";
 import { sameName, type ClassKind } from "../lib/umlClass";
-import { formatClass } from "../lib/classModel";
+import { formatClass, missingOperations, withAccessors, withConstructor } from "../lib/classModel";
 import type { CodeLanguage, FlowNode } from "../lib/types";
 import { LANGUAGES as LANGUAGE_NAMES } from "./CodeDialog";
 import { IconClose, IconPlus } from "./icons";
@@ -44,6 +44,7 @@ const KINDS: { kind: ClassKind; label: string }[] = [
   { kind: "abstract", label: "Abstract class" },
   { kind: "interface", label: "Interface" },
   { kind: "enum", label: "Enum" },
+  { kind: "record", label: "Record (value type)" },
 ];
 
 const COLLAPSED_KEY = "flowapp:classPanelClosed";
@@ -147,6 +148,19 @@ function ClassEditor(p: { id: string }) {
     (uml.match(/[\p{L}_][\p{L}\p{N}_]*/gu) ?? [])
       .filter((w) => !["List", "Set", "Map"].includes(w))
       .every((w) => isBuiltin(w) || classNames().some((c) => sameName(c, w)) || attributeNames().includes(w));
+
+  /** The classes this one extends or implements (lines with a triangle from it) */
+  const supers = createMemo(() =>
+    board.edges
+      .filter((e) => e.from === p.id && e.endCap === "triangle")
+      .map((e) => nodeById(e.to))
+      .filter((n): n is FlowNode => n?.kind === "class")
+      .map((n) => parseClass(n.text)),
+  );
+  const inherited = () => missingOperations(model(), supers());
+  const operationNames = () => model().operations.filter((o): o is Operation => !isRaw(o)).map((o) => o.name);
+  /** The class made anew from what it is (generating members) */
+  const replace = (fn: (m: ClassModel) => ClassModel) => setNodeText(p.id, formatClass(fn(model())));
 
   /** Changes the class and writes it back to its text (one undo step). */
   const update = (fn: (m: ClassModel) => void) => {
@@ -431,6 +445,41 @@ function ClassEditor(p: { id: string }) {
             )}
           </Index>
         </Section>
+        {/* ---------- generate ---------- */}
+        <Show when={model().kind !== "enum"}>
+          <section class="member-section">
+            <div class="member-head">
+              <span>Generate</span>
+            </div>
+            <div class="generate-row">
+              <Show when={model().kind !== "interface"}>
+                <button class="text-btn small" title="A getter for each attribute, and a setter unless it is read-only" onClick={() => replace(withAccessors)}>
+                  Getters &amp; setters
+                </button>
+                <button
+                  class="text-btn small"
+                  disabled={operationNames().includes(model().name)}
+                  title={operationNames().includes(model().name) ? "It has a constructor" : "A constructor that takes every attribute"}
+                  onClick={() => replace(withConstructor)}
+                >
+                  Constructor
+                </button>
+              </Show>
+              <button
+                class="text-btn small"
+                disabled={!inherited().length}
+                title={
+                  inherited().length
+                    ? `Adds ${inherited().map((o) => o.name).join(", ")}`
+                    : "Nothing to add from the interfaces it implements or the abstract classes it extends"
+                }
+                onClick={() => update((m) => m.operations.push(...inherited()))}
+              >
+                Implement inherited{inherited().length ? ` (${inherited().length})` : ""}
+              </button>
+            </div>
+          </section>
+        </Show>
         <p class="panel-hint">What is written here is the class's UML text; double-click a row on the board to type it instead.</p>
       </div>
     </div>

@@ -179,7 +179,7 @@ export function parseClass(text: string): ClassModel {
   const title = parts[0].find((l) => !STEREOTYPE.test(l.trim()))?.trim() ?? "";
   const generic = /^(.*?)\s*<(.*)>$/.exec(title);
   const enumRows = kind === "enum";
-  const kindLines = new Set(["«abstract»", "«interface»", "«enum»", "«enumeration»"]);
+  const kindLines = new Set(["«abstract»", "«interface»", "«enum»", "«enumeration»", "«record»"]);
   return {
     kind,
     stereotypes: parts[0].filter((l) => STEREOTYPE.test(l.trim()) && !kindLines.has(l.trim().toLowerCase().replace(/<<(.*)>>/, "«$1»"))),
@@ -191,7 +191,7 @@ export function parseClass(text: string): ClassModel {
   };
 }
 
-const STEREOTYPES: Partial<Record<ClassKind, string>> = { abstract: "«abstract»", interface: "«interface»", enum: "«enum»" };
+const STEREOTYPES: Partial<Record<ClassKind, string>> = { abstract: "«abstract»", interface: "«interface»", enum: "«enum»", record: "«record»" };
 
 /** A class structure as the text that is stored. */
 export function formatClass(c: ClassModel): string {
@@ -256,4 +256,56 @@ export function rowFrom(part: number, kind: ClassKind, typed: string, lang: Code
     });
   }
   return typed;
+}
+
+// ---------- generating members (the class panel's "Generate") ----------
+
+const cap = (s: string) => s.charAt(0).toUpperCase() + s.slice(1);
+const attributesOf = (m: ClassModel) => m.attributes.filter((a): a is Attribute => !isRaw(a) && !a.static);
+const operationsOf = (m: ClassModel) => m.operations.filter((o): o is Operation => !isRaw(o));
+
+/**
+ * A getter for each attribute (`isX` for a bool) and a setter unless it is
+ * read-only, where the class has none yet. The code export gives them bodies
+ * (link_accessors in read.rs).
+ */
+export function withAccessors(m: ClassModel): ClassModel {
+  const names = new Set(operationsOf(m).map((o) => o.name.toLowerCase()));
+  const add: Operation[] = [];
+  for (const a of attributesOf(m)) {
+    const getter = `${a.type === "bool" ? "is" : "get"}${cap(a.name)}`;
+    if (!names.has(getter.toLowerCase())) add.push({ vis: "+", name: getter, params: [], returns: a.type, static: false, abstract: false });
+    const setter = `set${cap(a.name)}`;
+    if (!a.readOnly && !names.has(setter.toLowerCase())) {
+      add.push({ vis: "+", name: setter, params: [[a.name, a.type]], returns: null, static: false, abstract: false });
+    }
+  }
+  return { ...m, operations: [...m.operations, ...add] };
+}
+
+/** A constructor (an operation named after the class) taking every attribute, unless it has one. */
+export function withConstructor(m: ClassModel): ClassModel {
+  if (!m.name || operationsOf(m).some((o) => o.name === m.name)) return m;
+  const ctor: Operation = { vis: "+", name: m.name, params: attributesOf(m).map((a) => [a.name, a.type] as Param), returns: null, static: false, abstract: false };
+  // First among the operations, as is usual
+  return { ...m, operations: [ctor, ...m.operations] };
+}
+
+/**
+ * The operations this class must still write itself: all of the interfaces it
+ * implements, and the abstract ones of the classes it extends, that it does not
+ * have yet (by name).
+ */
+export function missingOperations(m: ClassModel, supers: ClassModel[]): Operation[] {
+  const have = new Set(operationsOf(m).map((o) => o.name));
+  const out: Operation[] = [];
+  for (const s of supers) {
+    for (const o of operationsOf(s)) {
+      if ((s.kind === "interface" || o.abstract) && !have.has(o.name) && o.name !== s.name) {
+        have.add(o.name);
+        out.push({ ...o, abstract: false, vis: o.vis || "+" });
+      }
+    }
+  }
+  return out;
 }

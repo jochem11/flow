@@ -27,10 +27,11 @@ export const ROW_NAMES = ["", "attribute", "operation"];
 // `static` / `{static}` and `{abstract}` may be added. An operation returning one of
 // the class's attributes (`getName(): name`) becomes a getter in the code.
 
-export type ClassKind = "class" | "abstract" | "interface" | "enum";
+export type ClassKind = "class" | "abstract" | "interface" | "enum" | "record";
 
 const STEREOTYPES: Record<Exclude<ClassKind, "class">, string> = {
   abstract: "«abstract»",
+  record: "«record»",
   interface: "«interface»",
   enum: "«enum»",
 };
@@ -40,6 +41,7 @@ export function classKind(text: string): ClassKind {
   const first = classParts(text)[0].map((l) => l.trim().toLowerCase().replace(/<<(.*)>>/, "«$1»"));
   if (first.includes("«interface»")) return "interface";
   if (first.includes("«abstract»")) return "abstract";
+  if (first.includes("«record»")) return "record";
   if (first.includes("«enum»") || first.includes("«enumeration»")) return "enum";
   return "class";
 }

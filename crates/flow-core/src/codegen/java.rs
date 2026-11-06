@@ -33,6 +33,9 @@ pub(super) fn java_package(c: &Class, classes: &[Class]) -> Option<String> {
 pub(super) fn java(c: &Class, classes: &[Class]) -> String {
     let mut imports: BTreeSet<&'static str> = BTreeSet::new();
     let over = inherited(classes, c);
+    // Subclasses call super() without arguments: a superclass with a constructor
+    // that takes some also gets one that takes none
+    let is_super = supertypes(classes).contains(&c.name);
     let own_package = java_package(c, classes);
     // Classes from another package that this one uses
     let used: BTreeSet<String> = c
@@ -56,6 +59,12 @@ pub(super) fn java(c: &Class, classes: &[Class]) -> String {
             format!("public interface {}{ext}", c.name)
         }
         Kind::Enum => format!("public enum {}", c.name),
+        // Its attributes are its components; a record cannot extend a class
+        Kind::Record => {
+            let comps: Vec<String> = c.fields.iter().filter(|f| !f.is_static).map(|f| format!("{} {}", java_ty(&f.ty, &mut imports), camel(&f.name))).collect();
+            let imp = if c.implements.is_empty() { String::new() } else { format!(" implements {}", c.implements.join(", ")) };
+            format!("public record {}({}){imp}", c.name, comps.join(", "))
+        }
         _ => {
             let abs = if c.kind == Kind::Abstract { "abstract " } else { "" };
             let ext = c.extends.as_ref().map_or(String::new(), |e| format!(" extends {e}"));
@@ -67,7 +76,16 @@ pub(super) fn java(c: &Class, classes: &[Class]) -> String {
         let values: Vec<String> = c.values.iter().map(|v| snake(v).to_uppercase()).collect();
         body.push_str(&format!("    {}\n", values.join(",\n    ")));
     }
-    for f in &c.fields {
+    // Attributes a constructor sets
+    let set_by_constructor: BTreeSet<&str> = c
+        .methods
+        .iter()
+        .filter_map(|m| if let Body::Init(sets) = &m.body { Some(sets) } else { None })
+        .flatten()
+        .map(|(f, _)| f.as_str())
+        .collect();
+    // A record's attributes are its components (in its header), only static ones stay here
+    for f in c.fields.iter().filter(|f| c.kind != Kind::Record || f.is_static) {
         let t = java_ty(&f.ty, &mut imports);
         let st = if f.is_static { "static " } else { "" };
         let init = match &f.default {
@@ -86,13 +104,28 @@ pub(super) fn java(c: &Class, classes: &[Class]) -> String {
             }
             None => String::new(),
         };
-        body.push_str(&format!("    {} {st}{t} {}{init};\n", vis_word(field_vis(f), "private"), camel(&f.name)));
+        // Read-only: final, when it gets a value (a default, or every constructor sets it)
+        let fin = if f.read_only && (f.default.is_some() || (set_by_constructor.contains(f.name.as_str()) && !is_super)) { "final " } else { "" };
+        body.push_str(&format!("    {} {st}{fin}{t} {}{init};\n", vis_word(field_vis(f), "private"), camel(&f.name)));
     }
     if !c.fields.is_empty() && !c.methods.is_empty() {
         body.push('\n');
     }
     for m in &c.methods {
         let params: Vec<String> = m.params.iter().map(|(n, t)| format!("{} {}", java_ty(t, &mut imports), camel(n))).collect();
+        if let Body::Init(sets) = &m.body {
+            // A record already has a constructor with all its components
+            if c.kind == Kind::Record {
+                body.push_str(&format!("    // {}(...): a record's constructor takes all its components\n", c.name));
+                continue;
+            }
+            let set: String = sets.iter().map(|(f, p)| format!("\n        this.{} = {};", camel(f), camel(p))).collect();
+            if is_super && !params.is_empty() {
+                body.push_str(&format!("    protected {}() {{\n    }}\n\n", c.name));
+            }
+            body.push_str(&format!("    {} {}({}) {{{set}\n    }}\n", vis_word(method_vis(m), "public"), c.name, params.join(", ")));
+            continue;
+        }
         let ret = m.ret.as_deref().map_or("void".into(), |t| java_ty(t, &mut imports));
         let sig = format!("{ret} {}({})", camel(&m.name), params.join(", "));
         let st = if m.is_static { "static " } else { "" };
@@ -105,7 +138,7 @@ pub(super) fn java(c: &Class, classes: &[Class]) -> String {
             let code = match &m.body {
                 Body::Get(f) => format!("return this.{};", camel(f)),
                 Body::Set(f, p) => format!("this.{} = {};", camel(f), camel(p)),
-                Body::Todo => "throw new UnsupportedOperationException(\"Not implemented\");".into(),
+                Body::Todo | Body::Init(_) => "throw new UnsupportedOperationException(\"Not implemented\");".into(),
             };
             body.push_str(&format!("{at}    {} {st}{sig} {{\n        {code}\n    }}\n", vis_word(method_vis(m), "public")));
         }

@@ -119,7 +119,22 @@ pub(super) fn go(classes: &[Class]) -> String {
                         Some(format!("{}: {v}", go_name(&f.name, field_vis(f) == Vis::Public)))
                     })
                     .collect();
-                if !defaults.is_empty() {
+                // The constructor from the diagram sets its parameters too
+                if let Some((m, sets)) = c.methods.iter().find_map(|m| if let Body::Init(s) = &m.body { Some((m, s)) } else { None }) {
+                    let mut values = defaults.clone();
+                    for (f, p) in sets {
+                        if let Some(x) = c.fields.iter().find(|x| &x.name == f) {
+                            values.push(format!("{}: {}", go_name(&x.name, field_vis(x) == Vis::Public), go_name(p, false)));
+                        }
+                    }
+                    body.push_str(&format!(
+                        "\n// New{n} makes {a} {n}.\nfunc New{n}({}) *{n} {{\n\treturn &{n}{{{}}}\n}}\n",
+                        params(m),
+                        values.join(", "),
+                        n = c.name,
+                        a = if c.name.starts_with(['A', 'E', 'I', 'O', 'U']) { "an" } else { "a" }
+                    ));
+                } else if !defaults.is_empty() {
                     body.push_str(&format!(
                         "\n// New{n} makes a {n} with the default values from the diagram.\nfunc New{n}() *{n} {{\n\treturn &{n}{{{}}}\n}}\n",
                         defaults.join(", "),
@@ -139,6 +154,8 @@ pub(super) fn go(classes: &[Class]) -> String {
                         }),
                         Body::Todo if m.is_abstract => "panic(\"abstract: implement in a type that embeds this one\")".into(),
                         Body::Todo => "panic(\"not implemented\")".into(),
+                        // Made above, as NewX
+                        Body::Init(_) => continue,
                     };
                     let name = go_name(&m.name, method_vis(m) == Vis::Public);
                     if m.is_static {

@@ -47,7 +47,8 @@ pub(super) fn python(classes: &[Class]) -> String {
         body.push_str("\n\n");
         if c.kind != Kind::Interface {
             imports.insert("from dataclasses import dataclass, field".to_string());
-            body.push_str("@dataclass\n");
+            // A record cannot change once made
+            body.push_str(if c.kind == Kind::Record { "@dataclass(frozen=True)\n" } else { "@dataclass\n" });
         }
         body.push_str(&format!("class {}{bases}:\n", c.name));
         let mut empty = true;
@@ -73,6 +74,10 @@ pub(super) fn python(classes: &[Class]) -> String {
             empty = false;
         }
         for m in &c.methods {
+            if matches!(m.body, Body::Init(_)) {
+                body.push_str(&format!("    # {}(...): the dataclass's own __init__ takes the fields\n", c.name));
+                continue;
+            }
             let mut params: Vec<String> = if m.is_static { vec![] } else { vec!["self".into()] };
             for (n, t) in &m.params {
                 params.push(format!("{}: {}", snake(n), python_ty(t, &mut imports)));
@@ -95,7 +100,7 @@ pub(super) fn python(classes: &[Class]) -> String {
                 let code = match &m.body {
                     Body::Get(f) => format!("return {}", attr(f)),
                     Body::Set(f, p) => format!("{} = {}", attr(f), snake(p)),
-                    Body::Todo => "raise NotImplementedError".into(),
+                    Body::Todo | Body::Init(_) => "raise NotImplementedError".into(),
                 };
                 body.push_str(&format!("    def {name}({}) -> {ret}:\n        {code}\n", params.join(", ")));
             }

@@ -58,3 +58,26 @@ describe("rows in a programming language", () => {
     expect(rowFrom(2, "class", "+ all(): []Order", "go")).toBe("+ all(): List<Order>");
   });
 });
+
+describe("generating members", () => {
+  it("getters and setters, not twice, and no setter for read-only", async () => {
+    const { formatClass, parseClass, withAccessors } = await import("./classModel");
+    const c = parseClass("Order\n--\n- id: int {readOnly}\n- paid: bool\n- static count: int\n--\n+ getId(): int");
+    expect(formatClass(withAccessors(c))).toBe("Order\n--\n- id: int {readOnly}\n- paid: bool\n- static count: int\n--\n+ getId(): int\n+ isPaid(): bool\n+ setPaid(paid: bool)");
+  });
+
+  it("a constructor with every attribute, first, once", async () => {
+    const { formatClass, parseClass, withConstructor } = await import("./classModel");
+    const c = withConstructor(parseClass("Order\n--\n- id: int\n- lines: List<OrderLine>\n--\n+ total(): decimal"));
+    expect(formatClass(c)).toBe("Order\n--\n- id: int\n- lines: List<OrderLine>\n--\n+ Order(id: int, lines: List<OrderLine>)\n+ total(): decimal");
+    expect(withConstructor(c)).toBe(c);
+  });
+
+  it("what an interface or abstract class asks for", async () => {
+    const { missingOperations, parseClass } = await import("./classModel");
+    const shape = parseClass("«abstract»\nShape\n--\n--\n+ area(): double {abstract}\n+ name(): string");
+    const drawable = parseClass("«interface»\nDrawable\n--\n--\n+ draw(): void");
+    const circle = parseClass("Circle\n--\n- r: double\n--\n+ name(): string");
+    expect(missingOperations(circle, [shape, drawable]).map((o) => `${o.name}:${o.abstract}`)).toEqual(["area:false", "draw:false"]);
+  });
+});

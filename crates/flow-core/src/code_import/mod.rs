@@ -291,6 +291,7 @@ fn class_text(c: &Class) -> String {
         Kind::Interface => "«interface»\n".to_string(),
         Kind::Abstract => "«abstract»\n".to_string(),
         Kind::Enum => "«enum»\n".to_string(),
+        Kind::Record => "«record»\n".to_string(),
         Kind::Class => String::new(),
     };
     s.push_str(&c.name);

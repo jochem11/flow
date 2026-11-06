@@ -8,6 +8,8 @@ pub enum Kind {
     Abstract,
     Interface,
     Enum,
+    /// `«record»`: a value type (Java and C# records, a Kotlin data class, a frozen dataclass)
+    Record,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq)]
@@ -51,6 +53,9 @@ pub enum Body {
     Get(String),
     /// Sets this attribute to this parameter
     Set(String, String),
+    /// A constructor (an operation named after the class): sets these
+    /// attributes (first) to these parameters (second)
+    Init(Vec<(String, String)>),
 }
 
 #[derive(Debug, Clone)]
@@ -217,6 +222,7 @@ pub fn read_class(n: &Node) -> Class {
             "«interface»" | "<<interface>>" => kind = Kind::Interface,
             "«abstract»" | "<<abstract>>" => kind = Kind::Abstract,
             "«enum»" | "<<enum>>" | "«enumeration»" => kind = Kind::Enum,
+            "«record»" | "<<record>>" => kind = Kind::Record,
             _ if name.is_empty() => name = line.to_string(),
             _ => {}
         }
@@ -257,7 +263,23 @@ pub fn read_class(n: &Node) -> Class {
         class.unreadable.push(format!("Not in UML notation, skipped: {row}"));
     }
     link_accessors(&mut class);
+    link_constructors(&mut class);
     class
+}
+
+/// An operation named after the class is its constructor: it sets the attributes
+/// whose names its parameters have (`+ Order(id: int, customer: Customer)`).
+pub(super) fn link_constructors(c: &mut Class) {
+    let fields: Vec<String> = c.fields.iter().filter(|f| !f.is_static).map(|f| f.name.clone()).collect();
+    for m in c.methods.iter_mut().filter(|m| pascal(&m.name) == c.name && !m.is_static) {
+        let sets = m
+            .params
+            .iter()
+            .filter_map(|(p, _)| fields.iter().find(|f| f.eq_ignore_ascii_case(p)).map(|f| (f.clone(), p.clone())))
+            .collect();
+        m.ret = None;
+        m.body = Body::Init(sets);
+    }
 }
 
 /// Generic types that are lists, sets and maps of their arguments (not classes)

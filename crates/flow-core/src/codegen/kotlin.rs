@@ -44,19 +44,36 @@ pub(super) fn kotlin(classes: &[Class]) -> String {
             continue;
         }
         let over = inherited(classes, c);
-        let mut bases: Vec<String> = c.extends.iter().map(|e| format!("{e}()")).collect();
+        // With a constructor of its own, the superclass is called from that constructor
+        let has_constructor = c.methods.iter().any(|m| matches!(m.body, Body::Init(_)));
+        let call = if has_constructor { "" } else { "()" };
+        let mut bases: Vec<String> = c.extends.iter().map(|e| format!("{e}{call}")).collect();
         bases.extend(c.implements.iter().cloned());
         let bases = if bases.is_empty() { String::new() } else { format!(" : {}", bases.join(", ")) };
         let open = supers.contains(&c.name) && c.kind == Kind::Class;
         let head = match c.kind {
             Kind::Interface => format!("interface {}", c.name),
             Kind::Abstract => format!("abstract class {}", c.name),
+            // A record: a data class with its attributes as `val`s in its constructor
+            Kind::Record => {
+                let props: Vec<String> = c
+                    .fields
+                    .iter()
+                    .filter(|f| !f.is_static)
+                    .map(|f| {
+                        let ft = t(&f.ty);
+                        let init = f.default.as_ref().map_or(String::new(), |d| format!(" = {}", default_value(l, &ft, d)));
+                        format!("val {}: {ft}{init}", camel(&f.name))
+                    })
+                    .collect();
+                format!("data class {}({})", c.name, props.join(", "))
+            }
             _ if open => format!("open class {}", c.name),
             _ => format!("class {}", c.name),
         };
         s.push_str(&format!("{head}{bases} {{\n"));
         let mut field_types: HashMap<String, String> = HashMap::new();
-        for f in &c.fields {
+        for f in c.fields.iter().filter(|f| c.kind != Kind::Record || f.is_static) {
             let mut ft = t(&f.ty);
             let init = match &f.default {
                 Some(d) => format!(" = {}", default_value(l, &ft, d)),
@@ -77,11 +94,32 @@ pub(super) fn kotlin(classes: &[Class]) -> String {
                 Vis::Protected => "protected ",
                 _ => "",
             };
-            s.push_str(&format!("    {vis}var {}: {ft}{init}\n", camel(&f.name)));
+            // Read-only: a val when it has its value, else only this class sets it
+            if f.read_only && f.default.is_some() {
+                s.push_str(&format!("    {vis}val {}: {ft}{init}\n", camel(&f.name)));
+            } else if f.read_only && vis != "private " {
+                s.push_str(&format!("    {vis}var {}: {ft}{init}\n        private set\n", camel(&f.name)));
+            } else {
+                s.push_str(&format!("    {vis}var {}: {ft}{init}\n", camel(&f.name)));
+            }
             field_types.insert(f.name.clone(), ft);
         }
         for m in &c.methods {
             let params: Vec<String> = m.params.iter().map(|(n, pt)| format!("{}: {}", camel(n), t(pt))).collect();
+            if let Body::Init(sets) = &m.body {
+                if c.kind == Kind::Record {
+                    s.push_str(&format!("    // {}(...): a data class's constructor takes all its properties\n", c.name));
+                    continue;
+                }
+                let sup = if c.extends.is_some() { " : super()" } else { "" };
+                let set: String = sets.iter().map(|(f, p)| format!("\n        this.{} = {}", camel(f), camel(p))).collect();
+                // Subclasses call super() without arguments
+                if supers.contains(&c.name) && !params.is_empty() {
+                    s.push_str(&format!("    constructor(){sup}\n"));
+                }
+                s.push_str(&format!("    constructor({}){sup} {{{set}\n    }}\n", params.join(", ")));
+                continue;
+            }
             let ret = match &m.body {
                 Body::Get(f) => field_types.get(f).cloned().unwrap_or_else(|| m.ret.as_deref().map_or("Unit".into(), t)),
                 _ => m.ret.as_deref().map_or("Unit".into(), t),
@@ -105,7 +143,7 @@ pub(super) fn kotlin(classes: &[Class]) -> String {
                 // A public property already has getX()/setX() on the JVM: a second one would clash
                 let accessor_of = match &m.body {
                     Body::Get(f) | Body::Set(f, _) => c.fields.iter().find(|x| &x.name == f),
-                    Body::Todo => None,
+                    Body::Todo | Body::Init(_) => None,
                 };
                 if let Some(f) = accessor_of.filter(|f| field_vis(f) != Vis::Private) {
                     s.push_str(&format!("    // {}(): the property `{}` provides it\n", camel(&m.name), camel(&f.name)));
@@ -114,7 +152,7 @@ pub(super) fn kotlin(classes: &[Class]) -> String {
                 let code = match &m.body {
                     Body::Get(f) => format!(" = {}", camel(f)),
                     Body::Set(f, p) => format!(" {{\n        this.{} = {}\n    }}", camel(f), camel(p)),
-                    Body::Todo => " = TODO(\"Not implemented\")".into(),
+                    Body::Todo | Body::Init(_) => " = TODO(\"Not implemented\")".into(),
                 };
                 s.push_str(&format!("    {modifier}{sig}{code}\n"));
             }

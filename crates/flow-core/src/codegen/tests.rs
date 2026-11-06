@@ -251,3 +251,68 @@ fn rows_in_a_language() {
     assert_eq!(row_in(1, true, "Paid", L::Java), "Paid");
     assert_eq!(row_in(1, false, "not uml", L::Go), "not uml");
 }
+
+/// Constructors, a record, read-only attributes, sets and maps, and subclasses
+/// with and without a constructor of their own.
+pub(crate) fn members() -> FlowDoc {
+    let json = r#"{ "camera": { "x": 0, "y": 0, "zoom": 1 },
+      "nodes": [
+        { "id": "o", "kind": "class", "x": 0, "y": 0, "w": 1, "h": 1, "color": "white",
+          "text": "Order\n--\n- id: int {readOnly}\n- lines: List<OrderLine>\n- tags: Set<string>\n- prices: Map<string, decimal>\n- note: string = \"x\"\n--\n+ Order(id: int)\n+ getId(): int\n+ total(): decimal" },
+        { "id": "s", "kind": "class", "x": 0, "y": 0, "w": 1, "h": 1, "color": "white",
+          "text": "SpecialOrder\n--\n- discount: decimal\n--\n+ SpecialOrder(discount: decimal)" },
+        { "id": "g", "kind": "class", "x": 0, "y": 0, "w": 1, "h": 1, "color": "white", "text": "Gift\n--\n- message: string\n--\n" },
+        { "id": "l", "kind": "class", "x": 0, "y": 0, "w": 1, "h": 1, "color": "white",
+          "text": "«record»\nOrderLine\n--\n- quantity: int\n- price: decimal\n--\n+ subtotal(): decimal" }
+      ],
+      "edges": [
+        { "id": "e1", "from": "s", "to": "o", "endCap": "triangle" },
+        { "id": "e2", "from": "g", "to": "o", "endCap": "triangle" }
+      ] }"#;
+    serde_json::from_str(json).unwrap()
+}
+
+/// `cargo test write_members_code -- --ignored`: the code for `members()` in
+/// `<temp>/flow-members/<language>/`, to compile with the real compilers.
+#[test]
+#[ignore]
+fn write_members_code() {
+    let root = std::env::temp_dir().join("flow-members");
+    for (l, dir) in [
+        (CodeLanguage::TypeScript, "typescript"),
+        (CodeLanguage::Java, "java"),
+        (CodeLanguage::CSharp, "csharp"),
+        (CodeLanguage::Python, "python"),
+        (CodeLanguage::Kotlin, "kotlin"),
+        (CodeLanguage::Rust, "rust"),
+        (CodeLanguage::Go, "go"),
+    ] {
+        let d = root.join(dir);
+        let _ = std::fs::remove_dir_all(&d);
+        std::fs::create_dir_all(&d).unwrap();
+        for f in generate(&members(), l, "Members") {
+            std::fs::write(d.join(&f.name), f.content).unwrap();
+        }
+    }
+}
+
+/// What `members()` must make in each language (compiled for real with
+/// `write_members_code`: TypeScript, Java, Python and Rust compile).
+#[test]
+fn constructors_records_and_read_only() {
+    let code = |l: CodeLanguage| generate(&members(), l, "Members").into_iter().map(|f| f.content).collect::<Vec<_>>().join("\n");
+    let has = |l: CodeLanguage, parts: &[&str]| {
+        let c = code(l);
+        for p in parts {
+            assert!(c.contains(p), "{l:?} lacks {p:?}:\n{c}");
+        }
+    };
+    use CodeLanguage as L;
+    has(L::TypeScript, &["constructor(id?: number) {\n    if (id !== undefined) this.id = id;", "constructor(discount: number) {\n    super();", "private readonly id!: number;", "private readonly quantity!: number;", "constructor(quantity: number, price: number)"]);
+    has(L::Java, &["protected Order() {", "public Order(int id) {\n        this.id = id;", "public record OrderLine(int quantity, BigDecimal price)", "private Set<String> tags = new HashSet<>();"]);
+    has(L::CSharp, &["protected Order()", "public Order(int id)\n    {\n        Id = id;", "private int Id { get; init; }", "public record OrderLine(int Quantity, decimal Price)", "HashSet<string> Tags { get; set; } = new();"]);
+    has(L::Kotlin, &["open class Order {", "    constructor()\n    constructor(id: Int) {", "class SpecialOrder : Order {", "constructor(discount: BigDecimal) : super() {", "class Gift : Order() {", "data class OrderLine(val quantity: Int, val price: BigDecimal)"]);
+    has(L::Python, &["@dataclass(frozen=True)\nclass OrderLine:", "# Order(...): the dataclass's own __init__ takes the fields"]);
+    has(L::Rust, &["pub fn new(id: i32) -> Self {\n        Self { id, ..Default::default() }", "#[derive(Debug, Clone, PartialEq, Default)]\npub struct OrderLine", "use std::collections::{HashMap, HashSet};"]);
+    has(L::Go, &["func NewOrder(id int) *Order {\n\treturn &Order{note: \"x\", id: id}", "func NewSpecialOrder(discount float64) *SpecialOrder", "tags map[string]bool"]);
+}

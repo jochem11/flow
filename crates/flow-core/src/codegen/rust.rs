@@ -69,7 +69,14 @@ pub(super) fn rust(classes: &[Class]) -> String {
                 if c.kind == Kind::Abstract {
                     s.push_str("/// Abstract in the diagram; Rust has no abstract types, so this is a plain struct\n");
                 }
-                let derive = if dyn_structs.contains(&c.name) { "Default" } else { "Debug, Clone, Default" };
+                let derive = if dyn_structs.contains(&c.name) {
+                    "Default"
+                } else if c.kind == Kind::Record {
+                    // A value: compared by what it holds
+                    "Debug, Clone, PartialEq, Default"
+                } else {
+                    "Debug, Clone, Default"
+                };
                 s.push_str(&format!("#[derive({derive})]\npub struct {} {{\n", c.name));
                 // Rust has no inheritance: the supertype becomes a field
                 if let Some(e) = &c.extends {
@@ -101,6 +108,29 @@ pub(super) fn rust(classes: &[Class]) -> String {
                             continue;
                         }
                         let field_of = |f: &str| c.fields.iter().find(|x| x.name == f);
+                        // The constructor: new(), taking each attribute as the struct holds it
+                        if let Body::Init(sets) = &m.body {
+                            let ps: Vec<String> = m
+                                .params
+                                .iter()
+                                .map(|(p, pt)| match sets.iter().find(|(_, sp)| sp == p) {
+                                    Some((f, _)) => format!("{}: {}", snake(p), field_of(f).map_or_else(|| t(pt), |x| field_ty(&x.ty))),
+                                    None => format!("_{}: {}", snake(p), t(pt)),
+                                })
+                                .collect();
+                            let mut set: Vec<String> =
+                                sets.iter().map(|(f, p)| if snake(f) == snake(p) { snake(f) } else { format!("{}: {}", snake(f), snake(p)) }).collect();
+                            if sets.len() < c.fields.iter().filter(|f| !f.is_static).count() || c.extends.is_some() {
+                                set.push("..Default::default()".into());
+                            }
+                            s.push_str(&format!(
+                                "    {}fn new({}) -> Self {{\n        Self {{ {} }}\n    }}\n",
+                                vis(method_vis(m)),
+                                ps.join(", "),
+                                set.join(", ")
+                            ));
+                            continue;
+                        }
                         let (params, ret, code) = match &m.body {
                             // A reference: works for every type, also ones that cannot be cloned
                             Body::Get(f) => (
@@ -115,7 +145,7 @@ pub(super) fn rust(classes: &[Class]) -> String {
                                 let v = if optional { format!("Some({})", snake(p)) } else { snake(p) };
                                 (params(m).replacen("&self", "&mut self", 1), ret(m), format!("self.{} = {v};", snake(f)))
                             }
-                            Body::Todo => (params(m), ret(m), "todo!()".into()),
+                            Body::Todo | Body::Init(_) => (params(m), ret(m), "todo!()".into()),
                         };
                         s.push_str(&format!("    {}fn {}({params}){ret} {{\n        {code}\n    }}\n", vis(method_vis(m)), snake(&m.name)));
                     }

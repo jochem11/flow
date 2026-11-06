@@ -176,6 +176,7 @@ export function ContextBar() {
                     <option value="abstract">Abstract class</option>
                     <option value="interface">Interface</option>
                     <option value="enum">Enum</option>
+                    <option value="record">Record</option>
                   </select>
                   <For each={classKind(n().text) === "enum" ? [1] : [1, 2]}>
                     {(part) => (
