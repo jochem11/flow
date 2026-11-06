@@ -3,6 +3,7 @@
 // come from the server (server/src/routes/templates.rs).
 
 import { createNode, uid } from "../lib/store";
+import { fishbone, funnel, journey, layers, orgChart, pyramid, quadrant, serviceBlueprint, timeline, venn } from "./diagrams";
 import type { Attribute, DiagramType, DocContent, DocumentKind, Entity, FlowEdge, FlowNode, KanbanCard, KanbanColumn, NodeColor, Relation } from "../lib/types";
 
 export interface BuiltIn {
@@ -283,6 +284,16 @@ export const BUILT_IN: BuiltIn[] = [
   { id: "login", kind: "flow", diagram: "sequence", name: "Logging in", description: "A user, an app and a server, with replies", make: loginSequence },
   { id: "order-states", kind: "flow", diagram: "state", name: "Order states", description: "From new to delivered, or cancelled", make: orderStates },
   { id: "retro", kind: "flow", diagram: "whiteboard", name: "Retrospective", description: "Went well, to improve, actions", make: retrospective },
+  { id: "org-chart", kind: "flow", diagram: "flowchart", name: "Org chart", description: "Who reports to whom, as a tree", make: orgChart },
+  { id: "timeline", kind: "flow", diagram: "whiteboard", name: "Timeline", description: "Milestones along a line", make: timeline },
+  { id: "fishbone", kind: "flow", diagram: "whiteboard", name: "Fishbone", description: "Causes of a problem, by kind", make: fishbone },
+  { id: "quadrant", kind: "flow", diagram: "whiteboard", name: "2×2 matrix", description: "Effort and impact, four answers", make: quadrant },
+  { id: "pyramid", kind: "flow", diagram: "whiteboard", name: "Pyramid", description: "Layers narrowing to the top", make: pyramid },
+  { id: "funnel", kind: "flow", diagram: "whiteboard", name: "Funnel", description: "Where people drop off, step by step", make: funnel },
+  { id: "venn", kind: "flow", diagram: "whiteboard", name: "Venn diagram", description: "Three sets and what they share", make: venn },
+  { id: "journey", kind: "flow", diagram: "whiteboard", name: "Customer journey", description: "Doing, thinking, feeling per stage", make: journey },
+  { id: "blueprint", kind: "flow", diagram: "whiteboard", name: "Service blueprint", description: "What customers see, and what is behind it", make: serviceBlueprint },
+  { id: "layers", kind: "flow", diagram: "whiteboard", name: "Layered architecture", description: "A system in layers, each using the one below", make: layers },
   { id: "shop", kind: "eer", name: "Web shop", description: "Customers, orders, order lines and products", make: shop },
   { id: "scrum", kind: "kanban", name: "Scrum board", description: "Backlog to done, with labels and priorities", make: scrum },
   { id: "bugs", kind: "kanban", name: "Bug tracker", description: "From new to closed, labelled by severity", make: bugs },

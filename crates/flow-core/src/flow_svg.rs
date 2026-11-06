@@ -1118,11 +1118,13 @@ fn node_svg(n: &Node, seq: &Sequence, paint: bool, lang: Option<CodeLanguage>, d
         NodeKind::Chart => chart_block_svg(n),
         NodeKind::Topic => rect(h / 2.0) + &centered(w - 28.0),
         NodeKind::Circle => {
-            format!(r#"<ellipse cx="{cx}" cy="{cy}" rx="{}" ry="{}" {border}/>"#, w / 2.0, h / 2.0)
+            // See-through, as in the app: overlapping circles show it
+            format!(r#"<ellipse cx="{cx}" cy="{cy}" rx="{}" ry="{}" fill-opacity="0.55" {border}/>"#, w / 2.0, h / 2.0)
                 + &centered(w - 4.0)
         }
         NodeKind::UseCase => {
-            format!(r#"<ellipse cx="{cx}" cy="{cy}" rx="{}" ry="{}" {border}/>"#, w / 2.0, h / 2.0)
+            // See-through, as in the app: overlapping circles show it
+            format!(r#"<ellipse cx="{cx}" cy="{cy}" rx="{}" ry="{}" fill-opacity="0.55" {border}/>"#, w / 2.0, h / 2.0)
                 + &centered(w * 0.75)
         }
         NodeKind::Actor | NodeKind::TimeEvent => figure_svg(n, fill),

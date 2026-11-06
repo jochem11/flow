@@ -774,6 +774,14 @@ button:disabled {
 .node-circle .node-body {
   padding: 0;
 }
+/* a circle without text says nothing until it is selected (a Venn diagram's circles) */
+.node-circle:not(.selected) .node-text.placeholder {
+  visibility: hidden;
+}
+/* see-through, so circles that overlap show it (a Venn diagram) */
+.node-circle > .node-body {
+  background: color-mix(in srgb, var(--fill) 55%, transparent);
+}
 .node-sendsignal .node-body {
   padding-right: 18%;
 }
