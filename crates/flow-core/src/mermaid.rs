@@ -158,7 +158,8 @@ fn sequence_diagram(flow: &FlowDoc) -> String {
     for n in &lifelines {
         let name = n.text.lines().next().unwrap_or("").trim();
         let name = if name.is_empty() { "Lifeline" } else { name };
-        s.push_str(&format!("  participant {} as {}\n", ids[n.id.as_str()], label(name)));
+        let kind = if n.person == Some(true) { "actor" } else { "participant" };
+        s.push_str(&format!("  {kind} {} as {}\n", ids[n.id.as_str()], label(name)));
     }
 
     let by_id: HashMap<&str, _> = flow.nodes.iter().map(|n| (n.id.as_str(), n)).collect();
@@ -174,10 +175,32 @@ fn sequence_diagram(flow: &FlowDoc) -> String {
         .collect();
     messages.sort_by(|a, b| a.0.total_cmp(&b.0));
 
+    // Fragments (alt, loop, …): where they open, where a next part starts, where they end
+    let events = fragment_events(flow, &messages.iter().map(|(y, _)| *y).collect::<Vec<_>>());
+    let mut next_event = 0;
+    let mut depth = 0usize;
+    let mut flush = |s: &mut String, depth: &mut usize, until: f64| {
+        while let Some(ev) = events.get(next_event).filter(|ev| ev.0 < until) {
+            match &ev.1 {
+                FragmentEvent::Open(line) => {
+                    s.push_str(&format!("{}{line}\n", "  ".repeat(*depth + 1)));
+                    *depth += 1;
+                }
+                FragmentEvent::Part(line) => s.push_str(&format!("{}{line}\n", "  ".repeat(*depth))),
+                FragmentEvent::End => {
+                    *depth = depth.saturating_sub(1);
+                    s.push_str(&format!("{}end\n", "  ".repeat(*depth + 1)));
+                }
+            }
+            next_event += 1;
+        }
+    };
+
     // A call activates the lifeline it reaches (`+`); its return ends that (`-`)
     let mut active: HashMap<&str, usize> = HashMap::new();
     let called: HashSet<&str> = messages.iter().filter(|(_, e)| !returns.contains(&e.id) && e.from != e.to).map(|(_, e)| e.id.as_str()).collect();
-    for (_, e) in &messages {
+    for (y, e) in &messages {
+        flush(&mut s, &mut depth, *y);
         let (a, b) = (&ids[e.from.as_str()], &ids[e.to.as_str()]);
         let is_return = returns.contains(&e.id);
         let arrow = if is_return || e.pattern == Some(LinePattern::Dashed) {
@@ -197,9 +220,86 @@ fn sequence_diagram(flow: &FlowDoc) -> String {
             ""
         };
         let text = e.label.as_deref().map_or(String::new(), label);
-        s.push_str(&format!("  {a}{arrow}{mark}{b}: {text}\n"));
+        s.push_str(&format!("{}{a}{arrow}{mark}{b}: {text}\n", "  ".repeat(depth + 1)));
     }
+    flush(&mut s, &mut depth, f64::INFINITY);
     s
+}
+
+enum FragmentEvent {
+    /// `alt paid`, `loop every item`, …
+    Open(String),
+    /// `else failed`, `and …`, `option …`: the next part of the fragment
+    Part(String),
+    End,
+}
+
+/// The fragments with messages in them, as Mermaid writes them: opened before the
+/// first message in them, ended after the last. A fragment that only partly
+/// overlaps another (Mermaid can only nest them) is left out.
+fn fragment_events(flow: &FlowDoc, message_ys: &[f64]) -> Vec<(f64, FragmentEvent)> {
+    let has_message = |top: f64, bottom: f64| message_ys.iter().any(|y| *y >= top && *y <= bottom);
+    let mut frags: Vec<_> = flow.nodes.iter().filter(|n| n.kind == NodeKind::Fragment && has_message(n.y, n.y + n.h)).collect();
+    // Outer ones first, so an inner one is checked against the ones it sits in
+    frags.sort_by(|a, b| a.y.total_cmp(&b.y).then(b.h.total_cmp(&a.h)));
+    let mut kept: Vec<&crate::models::Node> = vec![];
+    for f in frags {
+        let (t, b) = (f.y, f.y + f.h);
+        let fits = kept.iter().all(|k| {
+            let (kt, kb) = (k.y, k.y + k.h);
+            b <= kt || t >= kb || (t >= kt && b <= kb)
+        });
+        if fits {
+            kept.push(f);
+        }
+    }
+
+    let mut events = vec![];
+    for f in kept {
+        let title = f.text.lines().next().unwrap_or("").trim();
+        let word = title.split_whitespace().next().unwrap_or("").to_lowercase();
+        let rest = title.get(word.len()..).unwrap_or("").trim();
+        // Mermaid's keywords; anything else (ref, neg, …) is written as an optional
+        // part with its title as the condition
+        let (keyword, divider, first) = match word.as_str() {
+            "alt" => ("alt", Some("else"), rest),
+            "par" => ("par", Some("and"), rest),
+            "critical" => ("critical", Some("option"), rest),
+            "loop" | "opt" | "break" => (word.as_str(), None, rest),
+            _ => ("opt", None, title),
+        };
+        let keyword = keyword.to_string();
+        let parts = f.lanes.as_deref().unwrap_or(&[]);
+        let cond = |i: usize| parts.get(i).map(|p| p.title.trim().trim_start_matches('[').trim_end_matches(']').trim().to_string()).filter(|c| !c.is_empty());
+        let open = match cond(0).or_else(|| (!first.is_empty()).then(|| first.to_string())) {
+            Some(c) => format!("{keyword} {c}"),
+            None => keyword,
+        };
+        // Opened just above the fragment, ended just below it: before and after the
+        // messages on its edges
+        events.push((f.y - 1e-6, FragmentEvent::Open(open)));
+        if let Some(divider) = divider {
+            let mut top = f.y;
+            for i in 1..parts.len() {
+                top += parts[i - 1].size;
+                let line = match cond(i) {
+                    // `[else]` is the divider itself
+                    Some(c) if !c.eq_ignore_ascii_case(divider) => format!("{divider} {c}"),
+                    _ => divider.to_string(),
+                };
+                events.push((top, FragmentEvent::Part(line)));
+            }
+        }
+        events.push((f.y + f.h + 1e-6, FragmentEvent::End));
+    }
+    // In order down the board; at one height an end before an open (one after the other)
+    let rank = |e: &FragmentEvent| match e {
+        FragmentEvent::End => 0,
+        FragmentEvent::Part(_) => 1,
+        FragmentEvent::Open(_) => 2,
+    };
+    events.sort_by(|a, b| a.0.total_cmp(&b.0).then(rank(&a.1).cmp(&rank(&b.1))));
+    events
 }
 
 // ---------- ER diagram ----------
@@ -314,6 +414,30 @@ mod tests {
         assert!(seq.contains("  participant P1 as :Client\n"));
         assert!(seq.contains("  P1->>+P2: request()\n"));
         assert!(seq.contains("  P2-->>-P1: answer\n"));
+    }
+
+    #[test]
+    fn sequence_fragments() {
+        let doc = flow(
+            r#"{ "camera": { "x": 0, "y": 0, "zoom": 1 },
+              "nodes": [
+                { "id": "a", "kind": "lifeline", "x": 0, "y": 0, "w": 140, "h": 500, "color": "white", "text": "Customer", "person": true },
+                { "id": "b", "kind": "lifeline", "x": 300, "y": 0, "w": 140, "h": 500, "color": "white", "text": "Shop" },
+                { "id": "f", "kind": "fragment", "x": -20, "y": 150, "w": 500, "h": 200, "color": "white", "text": "alt",
+                  "lanes": [{ "id": "p1", "title": "paid", "size": 100 }, { "id": "p2", "title": "else", "size": 100 }] },
+                { "id": "l", "kind": "fragment", "x": -20, "y": 400, "w": 500, "h": 80, "color": "white", "text": "loop every day" }
+              ],
+              "edges": [
+                { "id": "m1", "from": "a", "to": "b", "messageY": 100, "label": "Order" },
+                { "id": "m2", "from": "b", "to": "a", "messageY": 200, "label": "Confirmation", "pattern": "dashed" },
+                { "id": "m3", "from": "b", "to": "a", "messageY": 300, "label": "Failed", "pattern": "dashed" },
+                { "id": "m4", "from": "a", "to": "b", "messageY": 440, "label": "Remind" }
+              ] }"#,
+        );
+        let seq = &blocks(&doc)[0].content;
+        assert!(seq.contains("  actor P1 as Customer\n"), "{seq}");
+        assert!(seq.contains("  alt paid\n    P2-->>-P1: Confirmation\n  else\n    P2-->>P1: Failed\n  end\n"), "{seq}");
+        assert!(seq.contains("  loop every day\n    P1->>+P2: Remind\n  end\n"), "{seq}");
     }
 
     #[test]

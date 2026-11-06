@@ -23,6 +23,10 @@ import { openDocumentById } from "../lib/workspace";
 import { NEST } from "../lib/sequence";
 import { beginConnect, beginLaneResize, beginLine, beginNodeDrag, beginResize, blurActive } from "../lib/interactions";
 import {
+  checkpoint,
+  moveDivider,
+  partBounds,
+  setPartCondition,
   activationsOf,
   callColorOf,
   board,
@@ -232,7 +236,16 @@ export function NodeView(p: { node: FlowNode }) {
           <IconDrawing class="icon-drawing" parts={(n.icon ?? []) as IconParts} />
         </Match>
         <Match when={n.kind === "lifeline"}>
-          <div class="node-body">{text()}</div>
+          {/* A person: a stick figure above the name instead of a box */}
+          <div class="node-body" classList={{ person: !!n.person }}>
+            <Show when={n.person}>
+              <svg class="person-figure" viewBox="0 0 40 64" aria-hidden="true">
+                <circle cx="20" cy="9" r="7" />
+                <path d="M 20 16 V 40 M 5 25 H 35 M 20 40 L 8 62 M 20 40 L 32 62" />
+              </svg>
+            </Show>
+            {text()}
+          </div>
           {/* Dragging from the dashed line draws a message at that height */}
           <div
             class="lifeline-line"
@@ -264,6 +277,9 @@ export function NodeView(p: { node: FlowNode }) {
             </Show>
             {text()}
           </div>
+          <Show when={n.kind === "fragment" && (n.lanes?.length ?? 0) > 1}>
+            <FragmentParts node={n} />
+          </Show>
         </Match>
         <Match when={n.kind === "lanes"}>
           <div class="node-body" />
@@ -670,5 +686,57 @@ export function TextEditor(p: {
         }
       }}
     />
+  );
+}
+
+/**
+ * A fragment's parts (alt, par, ...): a dashed line above each but the first,
+ * which can be dragged, and each part's condition (fragments.ts).
+ */
+function FragmentParts(p: { node: FlowNode }) {
+  const parts = () => p.node.lanes ?? [];
+  const bounds = () => partBounds(parts(), p.node.h);
+  const startDrag = (e: PointerEvent, index: number) => {
+    if (!canEdit() || e.button !== 0) return;
+    e.stopPropagation();
+    e.preventDefault();
+    checkpoint();
+    const startY = e.clientY;
+    const startTop = bounds()[index].top;
+    const move = (ev: PointerEvent) => moveDivider(p.node.id, index, startTop + (ev.clientY - startY) / board.camera.zoom);
+    const up = () => {
+      window.removeEventListener("pointermove", move);
+      window.removeEventListener("pointerup", up);
+    };
+    window.addEventListener("pointermove", move);
+    window.addEventListener("pointerup", up);
+  };
+  return (
+    <Index each={parts()}>
+      {(part, i) => (
+        <>
+          <Show when={i > 0}>
+            <div class="fragment-divider" style={{ top: `${bounds()[i]?.top ?? 0}px` }} title="Drag to move" onPointerDown={(e) => startDrag(e, i)} />
+          </Show>
+          <div class="fragment-condition" classList={{ first: i === 0 }} style={{ top: `${(bounds()[i]?.top ?? 0) + (i === 0 ? 4 : 6)}px` }}>
+            <span>[</span>
+            <span class="grow" data-value={part().title || "condition"}>
+            <input
+              value={part().title}
+              placeholder="condition"
+              readOnly={!canEdit()}
+              size={1}
+              onInput={(e) => (e.currentTarget.parentElement!.dataset.value = e.currentTarget.value || "condition")}
+              onPointerDown={(e) => e.stopPropagation()}
+              onDblClick={(e) => e.stopPropagation()}
+              onChange={(e) => setPartCondition(p.node.id, part().id, e.currentTarget.value.trim().replace(/^\[|\]$/g, ""))}
+              onKeyDown={(e) => e.key === "Enter" && e.currentTarget.blur()}
+            />
+            </span>
+            <span>]</span>
+          </div>
+        </>
+      )}
+    </Index>
   );
 }

@@ -374,6 +374,13 @@ export function replaceBoard(b: FlowDoc) {
   resetHistory();
 }
 
+/** Lifelines as people (UML actors: a stick figure) or as boxes. One undo step. */
+export function setPerson(ids: string[], on: boolean) {
+  checkpoint();
+  setBoard("nodes", (n) => ids.includes(n.id) && n.kind === "lifeline", "person", on || undefined);
+  touch();
+}
+
 /**
  * A chart block's drawing, refreshed from its chart board. Not an undo step;
  * saved (with `save`) when the one looking may change the board.

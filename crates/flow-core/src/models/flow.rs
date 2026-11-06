@@ -180,6 +180,10 @@ pub struct Node {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     #[specta(optional)]
     pub chart: Option<ChartBlock>,
+    /// Only for `Lifeline`: a person (UML actor), drawn as a stick figure instead of a box
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[specta(optional)]
+    pub person: Option<bool>,
 }
 
 /// A chart board on another board.

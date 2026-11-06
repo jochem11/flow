@@ -8,7 +8,8 @@ import { nodeById, setBoard, touch } from "./state";
 
 export function resizeNode(id: string, w: number, h: number) {
   const n = nodeById(id);
-  if (!n?.lanes?.length) {
+  // A fragment's parts are rows: it resizes as any block (its last part takes the change)
+  if (!n?.lanes?.length || n.kind === "fragment") {
     setBoard("nodes", (x) => x.id === id, { w, h });
   } else {
     // Swimlanes: the width comes from the lanes, so resizing changes the rightmost lane

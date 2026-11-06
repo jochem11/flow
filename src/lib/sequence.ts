@@ -159,13 +159,17 @@ export const callColor = (colors: Map<string, number>, id: string | null) => {
 /** Activation bars per lifeline (see `analyze`). */
 export const activations = (nodes: FlowNode[], edges: FlowEdge[]) => analyze(nodes, edges).bars;
 
-/** Where a message meets node `n` at height `y`, coming from the side of `towardX`. */
-function attachX(n: FlowNode, bars: Bar[], y: number, towardX: number): number {
+/**
+ * Where a message meets node `n` at height `y`, coming from the side of `towardX`:
+ * the bar it belongs to (`own`) when there is one, else the top bar active there.
+ */
+function attachX(n: FlowNode, bars: Bar[], y: number, towardX: number, own?: (bar: Bar) => boolean): number {
   const c = n.x + n.w / 2;
   const right = towardX >= c;
   if (n.kind === "lifeline") {
-    // The top bar that is active there
-    const level = Math.max(-1, ...bars.filter(([a, b]) => y >= a && y <= b).map((bar) => bar[2]));
+    const active = bars.filter(([a, b]) => y >= a && y <= b);
+    const mine = own && active.find(own);
+    const level = mine ? mine[2] : Math.max(-1, ...active.map((bar) => bar[2]));
     return level < 0 ? c : c + level * NEST + (right ? BAR_W / 2 : -BAR_W / 2);
   }
   // An activation placed by hand, or any other block: its side
@@ -189,8 +193,9 @@ export function messageLine(edge: FlowEdge, a: FlowNode, b: FlowNode, bars: Map<
   }
   const ca = a.x + a.w / 2;
   const cb = b.x + b.w / 2;
-  const p1 = { x: attachX(a, barsA, y, cb), y };
-  const p2 = { x: attachX(b, bars.get(b.id) ?? [], y, ca), y };
+  // A return leaves the bar that ends with it (its call's); a call arrives at the bar it starts
+  const p1 = { x: attachX(a, barsA, y, cb, (bar) => bar[1] === y), y };
+  const p2 = { x: attachX(b, bars.get(b.id) ?? [], y, ca, (bar) => bar[3] === edge.id), y };
   return { d: `M ${p1.x} ${p1.y} L ${p2.x} ${p2.y}`, points: [p1, p2] };
 }
 

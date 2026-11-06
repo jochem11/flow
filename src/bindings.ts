@@ -629,6 +629,8 @@ export type Node = {
 	 *  as last seen (refreshed when the board opens), so exports need nothing else
 	 */
 	chart?: ChartBlock | null,
+	/**  Only for `Lifeline`: a person (UML actor), drawn as a stick figure instead of a box */
+	person?: boolean | null,
 };
 
 export type NodeColor = "white" | "yellow" | "green" | "blue" | "purple" | "pink";

@@ -1045,6 +1045,7 @@ mod tests {
             image: None,
             icon: None,
             chart: None,
+            person: None,
         }
     }
 

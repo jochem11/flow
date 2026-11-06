@@ -20,6 +20,8 @@ import {
   distributeSelection,
   setSelectionLocked,
   setCallColors,
+  setPerson,
+  addPart,
 } from "../lib/store";
 import { AlignMenu } from "./AlignMenu";
 import { deleteSelectionTidy } from "../lib/mindmap";
@@ -202,7 +204,26 @@ export function ContextBar() {
               )}
             </Show>
             <Show when={selectedNodes().some((n) => n.kind === "lifeline")}>
+              <button
+                class="icon-btn"
+                classList={{ pressed: selectedNodes().filter((n) => n.kind === "lifeline").every((n) => n.person) }}
+                title="A person (UML actor): a stick figure instead of a box"
+                onClick={() => {
+                  const lifelines = selectedNodes().filter((n) => n.kind === "lifeline");
+                  setPerson(lifelines.map((n) => n.id), !lifelines.every((n) => n.person));
+                }}
+              >
+                <span>Person</span>
+              </button>
               <CallColorsButton />
+            </Show>
+            {/* A fragment: another part, with its own condition */}
+            <Show when={selectedNodes().length === 1 && selectedNodes()[0].kind === "fragment"}>
+              <button class="icon-btn" title="Another part (alt / else, par): split by a dashed line" onClick={() => addPart(selectedNodes()[0].id)}>
+                <IconPlus />
+                <span>Part</span>
+              </button>
+              <span class="divider" />
             </Show>
             <Show when={pool()}>
               {(n) => (

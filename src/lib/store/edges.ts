@@ -1,6 +1,7 @@
 // Edges: connecting, line style, free ends, labels, and messages in sequence diagrams.
 
 import { batch } from "solid-js";
+import { produce } from "solid-js/store";
 import { containsPt, edgeGeom, type EdgeGeom, type Pt, type Shape } from "../geometry";
 import { analyze, messageLine, messageYAt, SEQUENCE_KINDS } from "../sequence";
 import type { FlowEdge } from "../types";
@@ -45,8 +46,59 @@ export function connect(from: string, to: string, extra?: Partial<FlowEdge>) {
   checkpoint();
   const id = uid();
   setBoard("edges", (es) => [...es, { id, from, to, style: ui.edgeStyle, ...umlDefaults(from, to), ...extra }]);
-  if (extra?.messageY != null) styleIfReturn(id);
+  if (extra?.messageY != null) {
+    styleIfReturn(id);
+    makeRoomBelow(id);
+  }
   touch();
+}
+
+/** Room a message needs below the one before it */
+const MESSAGE_GAP = 40;
+
+/**
+ * A message put in between others, too close above the next one: that one and
+ * every message below it move down (lifelines grow when they would run out, and
+ * fragments move or grow along), so the diagram keeps its spacing. Part of the same undo step.
+ */
+function makeRoomBelow(id: string) {
+  const at = (e: FlowEdge) => (nodeById(e.from)?.y ?? 0) + (e.messageY ?? 0);
+  const added = board.edges.find((e) => e.id === id);
+  if (!added) return;
+  const y = at(added);
+  const below = board.edges.filter((e) => e.id !== id && e.messageY != null && at(e) >= y - 0.5);
+  if (!below.length) return;
+  const nearest = Math.min(...below.map(at)) - y;
+  if (nearest >= MESSAGE_GAP) return;
+  const push = MESSAGE_GAP - nearest;
+  const moved = new Set(below.map((e) => e.id));
+  setBoard("edges", (e) => moved.has(e.id), "messageY", (m) => (m ?? 0) + push);
+  // Fragments keep holding the same messages: the ones below the new message move
+  // down with them, one around it grows (the part it is in)
+  const cut = y + nearest / 2;
+  setBoard("nodes", (n) => n.kind === "fragment" && n.y >= cut, "y", (v) => v + push);
+  setBoard(
+    "nodes",
+    (n) => n.kind === "fragment" && n.y < cut && n.y + n.h > cut,
+    produce((n) => {
+      n.h += push;
+      let top = n.y;
+      const parts = n.lanes ?? [];
+      for (let i = 0; i < parts.length; i++) {
+        if (cut < top + parts[i].size || i === parts.length - 1) {
+          parts[i].size += push;
+          break;
+        }
+        top += parts[i].size;
+      }
+    }),
+  );
+  // Lifelines that would end above their last message grow
+  const lowest = new Map<string, number>();
+  for (const e of board.edges.filter((x) => x.messageY != null)) {
+    for (const n of [e.from, e.to]) lowest.set(n, Math.max(lowest.get(n) ?? 0, at(e) + 30));
+  }
+  setBoard("nodes", (n) => n.kind === "lifeline" && (lowest.get(n.id) ?? 0) > n.y + n.h, "h", (h) => h + push);
 }
 
 /**

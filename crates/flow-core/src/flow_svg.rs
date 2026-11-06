@@ -814,18 +814,16 @@ fn levels(mut spans: Vec<Own>) -> Vec<Bar> {
     out
 }
 
-/// Where a message meets node `n` at height `y`, coming from the side of `toward_x`.
-fn attach_x(n: &Node, bars: &[Bar], y: f64, toward_x: f64) -> f64 {
+/// Where a message meets node `n` at height `y`, coming from the side of `toward_x`:
+/// the bar it belongs to (`own`) when there is one, else the top bar active there
+/// (as attachX in src/lib/sequence.ts).
+fn attach_x(n: &Node, bars: &[Bar], y: f64, toward_x: f64, own: &dyn Fn(&Bar) -> bool) -> f64 {
     let c = n.x + n.w / 2.0;
     let right = toward_x >= c;
     if n.kind == NodeKind::Lifeline {
-        // The top bar that is active there
-        let Some(level) = bars
-            .iter()
-            .filter(|bar| y >= bar.0 && y <= bar.1)
-            .map(|bar| bar.2)
-            .max()
-        else {
+        let active: Vec<&Bar> = bars.iter().filter(|bar| y >= bar.0 && y <= bar.1).collect();
+        let mine = active.iter().find(|bar| own(bar)).map(|bar| bar.2);
+        let Some(level) = mine.or_else(|| active.iter().map(|bar| bar.2).max()) else {
             return c;
         };
         let x = c + f64::from(level) * NEST;
@@ -844,8 +842,8 @@ fn message_line(edge: &Edge, a: &Node, b: &Node, bars: &HashMap<String, Vec<Bar>
     let none = vec![];
     let bars_a = bars.get(&a.id).unwrap_or(&none);
     if a.id == b.id {
-        let x1 = attach_x(a, bars_a, y, f64::INFINITY);
-        let x2 = attach_x(a, bars_a, y + SELF_H, f64::INFINITY);
+        let x1 = attach_x(a, bars_a, y, f64::INFINITY, &|_| false);
+        let x2 = attach_x(a, bars_a, y + SELF_H, f64::INFINITY, &|_| false);
         let out = x1.max(x2) + SELF_W;
         let r = 6.0;
         return Geom {
@@ -863,8 +861,9 @@ fn message_line(edge: &Edge, a: &Node, b: &Node, bars: &HashMap<String, Vec<Bar>
         };
     }
     let (ca, cb) = (a.x + a.w / 2.0, b.x + b.w / 2.0);
-    let p1 = pt(attach_x(a, bars_a, y, cb), y);
-    let p2 = pt(attach_x(b, bars.get(&b.id).unwrap_or(&none), y, ca), y);
+    // A return leaves the bar that ends with it (its call's); a call arrives at the bar it starts
+    let p1 = pt(attach_x(a, bars_a, y, cb, &|bar| bar.1 == y), y);
+    let p2 = pt(attach_x(b, bars.get(&b.id).unwrap_or(&none), y, ca, &|bar| bar.3.as_deref() == Some(edge.id.as_str())), y);
     Geom {
         d: format!("M {} {} L {} {}", p1.x, p1.y, p2.x, p2.y),
         points: vec![p1, p2],
@@ -1093,11 +1092,26 @@ fn node_svg(n: &Node, seq: &Sequence, paint: bool, lang: Option<CodeLanguage>, d
                     )
                 })
                 .collect();
-            format!(
-                r#"<path d="M {cx} {} V {}" stroke="{line}" stroke-width="1.5" stroke-dasharray="5 4"/>{activation}<rect x="{x}" y="{y}" width="{w}" height="{LIFELINE_HEAD}" rx="2" {border}/>"#,
+            let line_svg = format!(
+                r#"<path d="M {cx} {} V {}" stroke="{line}" stroke-width="1.5" stroke-dasharray="5 4"/>{activation}"#,
                 y + LIFELINE_HEAD,
                 y + h
-            ) + &centered_text(&n.text, cx, y + LIFELINE_HEAD / 2.0, w - 20.0, FONT_SIZE, 550)
+            );
+            // A person: a small stick figure with the name beside it, instead of a box
+            if n.person == Some(true) {
+                // As in the app: a 22px figure, the name under it, all inside the head
+                let k = 22.0 / 64.0;
+                let (ox, oy) = (cx - 20.0 * k, y + 3.0);
+                return line_svg
+                    + &format!(
+                        r#"<g transform="translate({ox} {oy}) scale({k})" stroke="{line}" stroke-width="{}"><circle cx="20" cy="9" r="7" fill="{BG}"/><path d="M 20 16 V 40 M 5 25 H 35 M 20 40 L 8 62 M 20 40 L 32 62" fill="none" stroke-linecap="round"/></g>"#,
+                        1.75 / k
+                    )
+                    + &text(cx, y + LIFELINE_HEAD - 5.0, "middle", 13.0, 550, TEXT, &n.text);
+            }
+            line_svg
+                + &format!(r#"<rect x="{x}" y="{y}" width="{w}" height="{LIFELINE_HEAD}" rx="2" {border}/>"#)
+                + &centered_text(&n.text, cx, y + LIFELINE_HEAD / 2.0, w - 20.0, FONT_SIZE, 550)
         }
         NodeKind::Section | NodeKind::Lanes | NodeKind::Boundary | NodeKind::Package | NodeKind::Fragment => {
             frame_svg(n, fill, stroke)
@@ -1218,6 +1232,33 @@ fn chart_block_svg(n: &Node) -> String {
     format!(r#"<svg x="{x}" y="{y}" width="{w}" height="{h}" viewBox="{view}" preserveAspectRatio="xMidYMid meet">{inner}</svg>{frame}"#)
 }
 
+/// A fragment's parts (src/lib/store/fragments.ts): a dashed line above each but
+/// the first, and each part's condition in brackets (the first beside the title).
+fn fragment_parts(n: &Node) -> String {
+    let Some(parts) = n.lanes.as_ref().filter(|p| p.len() > 1) else { return String::new() };
+    let mut s = String::new();
+    let mut top = n.y;
+    for (i, p) in parts.iter().enumerate() {
+        if i > 0 {
+            s.push_str(&format!(
+                r#"<path d="M {} {top} H {}" stroke="{EDGE}" stroke-width="1.5" stroke-dasharray="6 4"/>"#,
+                n.x,
+                n.x + n.w
+            ));
+        }
+        let cond = p.title.trim();
+        if !cond.is_empty() {
+            let cond = if cond.starts_with('[') { cond.to_string() } else { format!("[{cond}]") };
+            // As in the app: the first part's condition at the top right (clear of the
+            // title), the others at the top left of their part
+            let (cx, cy, anchor) = if i == 0 { (n.x + n.w - 10.0, n.y + 18.0, "end") } else { (n.x + 10.0, top + 18.0, "start") };
+            s.push_str(&text(cx, cy, anchor, 12.5, 500, TEXT, &cond));
+        }
+        top += p.size;
+    }
+    s
+}
+
 /// Sections, swimlanes, system boundaries, packages and fragments.
 fn frame_svg(n: &Node, fill: &str, stroke: &str) -> String {
     let (x, y, w, h) = (n.x, n.y, n.w, n.h);
@@ -1269,6 +1310,7 @@ fn frame_svg(n: &Node, fill: &str, stroke: &str) -> String {
                     y + th
                 )
                 + &title.map_or(String::new(), |t| text(x + 10.0, y + 18.0, "start", FONT_SIZE, 700, TEXT, t))
+                + &fragment_parts(n)
         }
         NodeKind::Lanes => {
             let mut s = body(6.0, "");

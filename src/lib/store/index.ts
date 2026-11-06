@@ -7,6 +7,7 @@ export * from "./state";
 export * from "./history";
 export * from "./frames";
 export * from "./lanes";
+export * from "./fragments";
 export * from "./edges";
 export * from "./edit";
 export * from "./clipboard";
