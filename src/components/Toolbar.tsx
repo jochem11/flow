@@ -2,11 +2,12 @@ import { createSignal, For, onCleanup, Show, type JSX } from "solid-js";
 import { IconPanel } from "./IconPanel";
 import { addImages } from "../lib/files";
 import { pastePoint } from "../lib/camera";
-import { openDoc } from "../lib/workspace";
+import { addChartBlock, addNewChartBlock, docsOf, openDoc } from "../lib/workspace";
 import type { NodeKind } from "../lib/types";
 import { board, setUi, ui, type Tool } from "../lib/store";
 import { boardTypeOf, offersTool, type BoardType } from "../lib/boardTypes";
 import {
+  IconChart,
   IconUml,
   IconTopic,
   IconImage,
@@ -176,6 +177,45 @@ function typedGroups(type: BoardType): ToolDef[][] {
   ];
 }
 
+/** A chart board shown on this board: one of the project's, or a new one */
+function ChartButton() {
+  const [open, setOpen] = createSignal(false);
+  let wrap!: HTMLDivElement;
+  const onDoc = (e: PointerEvent) => open() && !wrap.contains(e.target as Node) && setOpen(false);
+  document.addEventListener("pointerdown", onDoc);
+  onCleanup(() => document.removeEventListener("pointerdown", onDoc));
+  const charts = () => {
+    const d = openDoc();
+    return d ? docsOf(d.projectId).filter((x) => x.kind === "chart") : [];
+  };
+  const place = (fn: (at: { x: number; y: number }) => Promise<void>) => {
+    setOpen(false);
+    void fn(pastePoint());
+  };
+  return (
+    <div class="uml-wrap" ref={wrap}>
+      <button class="tool-btn" classList={{ active: open() }} title="Chart (a chart board of this project, shown here)" onClick={() => setOpen(!open())}>
+        <IconChart />
+      </button>
+      <Show when={open()}>
+        <div class="uml-panel panel chart-picker">
+          <div class="menu-title">Charts in this project</div>
+          <button class="menu-item" onClick={() => place(addNewChartBlock)}>
+            <span>New chart…</span>
+          </button>
+          <For each={charts()} fallback={<p class="uml-hint">No chart boards yet: a new one is made in this project.</p>}>
+            {(c) => (
+              <button class="menu-item" onClick={() => place((at) => addChartBlock(c.id, at))}>
+                <span>{c.name}</span>
+              </button>
+            )}
+          </For>
+        </div>
+      </Show>
+    </div>
+  );
+}
+
 /** Pictures and icons: an image from the computer, or one from the icon set */
 function ContentButtons() {
   const [icons, setIcons] = createSignal(false);
@@ -207,6 +247,7 @@ function ContentButtons() {
       <Show when={icons()}>
         <IconPanel onClose={() => setIcons(false)} />
       </Show>
+      <ChartButton />
     </div>
   );
 }

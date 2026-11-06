@@ -375,6 +375,15 @@ export function replaceBoard(b: FlowDoc) {
 }
 
 /**
+ * A chart block's drawing, refreshed from its chart board. Not an undo step;
+ * saved (with `save`) when the one looking may change the board.
+ */
+export function setChartBlockSvg(id: string, svg: string, save: boolean) {
+  setBoard("nodes", (n) => n.id === id && !!n.chart, "chart", (c) => (c ? { ...c, svg } : c));
+  if (save) touch();
+}
+
+/**
  * Changes from someone else (editing together, see collab/): the board's blocks
  * and lines as they are now, and its settings when the shared state has them.
  * Not a change of ours: no undo step, no autosave.

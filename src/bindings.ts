@@ -137,6 +137,13 @@ export type Cardinality =
 /**  1 or more */
 "oneOrMany";
 
+/**  A chart board on another board. */
+export type ChartBlock = {
+	documentId: string,
+	/**  Its drawing (an SVG, 640×400) when it was last refreshed */
+	svg?: string | null,
+};
+
 export type ChartDoc = {
 	chart: ChartType,
 	title: string,
@@ -617,6 +624,11 @@ export type Node = {
 	 *  the element (`path`, `circle`, ...) and its attributes
 	 */
 	icon?: ([string, { [key in string]: string }])[] | null,
+	/**
+	 *  Only for `Chart`: the chart board it shows (a document id) and its drawing
+	 *  as last seen (refreshed when the board opens), so exports need nothing else
+	 */
+	chart?: ChartBlock | null,
 };
 
 export type NodeColor = "white" | "yellow" | "green" | "blue" | "purple" | "pink";
@@ -675,6 +687,8 @@ export type NodeKind = "box" | "diamond" | "note" | "pill" |
 "image" | 
 /**  A line drawing from the icon set (`icon` has its shapes) */
 "icon" | 
+/**  A chart board shown on this board (`chart`: which, and its drawing) */
+"chart" | 
 /**  A mind map topic: joined to its subtopics, laid out as a tree to the right */
 "topic";
 

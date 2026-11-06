@@ -1044,6 +1044,7 @@ mod tests {
             locked: None,
             image: None,
             icon: None,
+            chart: None,
         }
     }
 

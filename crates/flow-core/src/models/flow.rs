@@ -124,6 +124,8 @@ pub enum NodeKind {
     Image,
     /// A line drawing from the icon set (`icon` has its shapes)
     Icon,
+    /// A chart board shown on this board (`chart`: which, and its drawing)
+    Chart,
     /// A mind map topic: joined to its subtopics, laid out as a tree to the right
     Topic,
 }
@@ -173,6 +175,22 @@ pub struct Node {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     #[specta(optional)]
     pub icon: Option<Vec<(String, std::collections::BTreeMap<String, String>)>>,
+    /// Only for `Chart`: the chart board it shows (a document id) and its drawing
+    /// as last seen (refreshed when the board opens), so exports need nothing else
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[specta(optional)]
+    pub chart: Option<ChartBlock>,
+}
+
+/// A chart board on another board.
+#[derive(Debug, Clone, Serialize, Deserialize, Type)]
+#[serde(rename_all = "camelCase")]
+pub struct ChartBlock {
+    pub document_id: String,
+    /// Its drawing (an SVG, 640×400) when it was last refreshed
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[specta(optional)]
+    pub svg: Option<String>,
 }
 
 /// One lane of a swimlane pool.

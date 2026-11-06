@@ -1055,6 +1055,7 @@ fn node_svg(n: &Node, seq: &Sequence, paint: bool, lang: Option<CodeLanguage>, d
             ) + &centered_text(&format!("Image: {}", n.text), cx, cy, w - 16.0, 13.0, 500)
         }
         NodeKind::Icon => icon_svg(n, dot),
+        NodeKind::Chart => chart_block_svg(n),
         NodeKind::Topic => rect(h / 2.0) + &centered(w - 28.0),
         NodeKind::Circle => {
             format!(r#"<ellipse cx="{cx}" cy="{cy}" rx="{}" ry="{}" {border}/>"#, w / 2.0, h / 2.0)
@@ -1196,6 +1197,25 @@ fn class_svg(n: &Node, border: &str, stroke: &str, lang: Option<CodeLanguage>, d
         top += pad * 2.0 + lines.len().max(1) as f64 * line_h;
     }
     s
+}
+
+/// A chart board on this board: its drawing as last seen (the app draws charts),
+/// scaled into the block, in a hairline frame; a placeholder without one.
+fn chart_block_svg(n: &Node) -> String {
+    let (x, y, w, h) = (n.x, n.y, n.w, n.h);
+    let frame = format!(r##"<rect x="{x}" y="{y}" width="{w}" height="{h}" rx="8" fill="none" stroke="#e7e5e0" stroke-width="1"/>"##);
+    let svg = n.chart.as_ref().and_then(|c| c.svg.as_deref());
+    let Some((view, inner)) = svg.and_then(|s| {
+        let open_end = s.find('>')?;
+        let head = &s[..open_end];
+        let view = head.split("viewBox=\"").nth(1)?.split('"').next()?.to_string();
+        let inner = s[open_end + 1..].trim_end().strip_suffix("</svg>")?;
+        Some((view, inner))
+    }) else {
+        return format!(r##"<rect x="{x}" y="{y}" width="{w}" height="{h}" rx="8" fill="{BG}" stroke="#e7e5e0" stroke-width="1"/>"##)
+            + &centered_text("Chart", x + w / 2.0, y + h / 2.0, w - 20.0, FONT_SIZE, 450);
+    };
+    format!(r#"<svg x="{x}" y="{y}" width="{w}" height="{h}" viewBox="{view}" preserveAspectRatio="xMidYMid meet">{inner}</svg>{frame}"#)
 }
 
 /// Sections, swimlanes, system boundaries, packages and fragments.
@@ -1459,6 +1479,21 @@ mod tests {
 
     /// A solid arrow back to the caller is its return: the caller keeps its
     /// full-length bar, and the callee is active from the call to the return.
+    /// A chart block embeds the drawing it keeps, scaled into the block; a placeholder without one.
+    #[test]
+    fn chart_block() {
+        let json = r##"{ "camera": { "x": 0, "y": 0, "zoom": 1 }, "edges": [],
+          "nodes": [
+            { "id": "c", "kind": "chart", "x": 10, "y": 20, "w": 320, "h": 200, "text": "Revenue", "color": "white",
+              "chart": { "documentId": "d", "svg": "<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 640 400\" width=\"640\" height=\"400\"><rect width=\"640\" height=\"400\" fill=\"#2a78d6\"/></svg>" } },
+            { "id": "e", "kind": "chart", "x": 400, "y": 20, "w": 320, "h": 200, "text": "", "color": "white", "chart": { "documentId": "x" } }
+          ] }"##;
+        let flow: FlowDoc = serde_json::from_str(json).unwrap();
+        let svg = to_svg(&flow);
+        assert!(svg.contains(r##"<svg x="10" y="20" width="320" height="200" viewBox="0 0 640 400" preserveAspectRatio="xMidYMid meet"><rect width="640" height="400" fill="#2a78d6"/></svg>"##), "{svg}");
+        assert!(svg.contains(">Chart<"), "the block without a drawing shows a placeholder");
+    }
+
     /// With "Color calls" on, a call, its bar and its return share a color; off, all is plain.
     #[test]
     fn call_colors() {

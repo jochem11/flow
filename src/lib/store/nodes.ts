@@ -41,6 +41,7 @@ export const SIZES: Record<NodeKind, { w: number; h: number }> = {
   // Content
   image: { w: 240, h: 160 },
   icon: { w: 60, h: 60 },
+  chart: { w: 320, h: 200 },
   topic: { w: 160, h: 48 },
 };
 
@@ -55,7 +56,7 @@ export const MIN_LANE = 60;
 export const LANE_SIZE = 240;
 
 const CONTAINERS: NodeKind[] = ["section", "lanes", "boundary", "package", "fragment"];
-const NO_TEXT: NodeKind[] = ["start", "end", "bar", "flowfinal", "activation", "destroy", "pin", "image", "icon"];
+const NO_TEXT: NodeKind[] = ["start", "end", "bar", "flowfinal", "activation", "destroy", "pin", "image", "icon", "chart"];
 
 /** Frames (sections, swimlanes, ...): drawn behind everything, and they carry the nodes inside them along. */
 export const isContainer = (kind: NodeKind) => CONTAINERS.includes(kind);
@@ -94,6 +95,7 @@ const DEFAULT_COLOR: Record<NodeKind, NodeColor> = {
   destroy: "white",
   image: "white",
   icon: "white",
+  chart: "white",
   topic: "white",
 };
 

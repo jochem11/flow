@@ -75,7 +75,7 @@ export interface Drawing {
   notes: string[];
 }
 
-const esc = (s: string) => s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
+const esc = (s: unknown) => String(s ?? "").replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
 
 const FONT = `font-family="system-ui, -apple-system, 'Segoe UI', sans-serif"`;
 
@@ -139,7 +139,12 @@ export function renderChart(doc: ChartDoc, width: number, height: number, t: The
   if (doc.series.length > 8) notes.push("At most eight series are drawn.");
   const focalIndex = series.findIndex((s) => s.id === doc.focal);
   const colorOf = (i: number) => (focalIndex >= 0 ? (i === focalIndex ? t.series[0] : t.context) : t.series[i]);
-  const value = (r: ChartDoc["rows"][number], i: number) => r.values[i] ?? null;
+  // Only finite numbers are values: the table may come straight from another
+  // browser (editing together), where nothing has checked it
+  const value = (r: ChartDoc["rows"][number], i: number): number | null => {
+    const v: unknown = r.values[i];
+    return typeof v === "number" && Number.isFinite(v) ? v : null;
+  };
 
   out.push(`<rect width="${width}" height="${height}" fill="${t.surface}"/>`);
   let top = 16;
@@ -376,7 +381,7 @@ export function renderChart(doc: ChartDoc, width: number, height: number, t: The
 
   // ---------- one whole, split into parts ----------
   function share(): Drawing {
-    const parts = doc.rows.map((r) => ({ name: r.label, v: Math.max(0, r.values[0] ?? 0) }));
+    const parts = doc.rows.map((r) => ({ name: String(r.label ?? ""), v: Math.max(0, value(r, 0) ?? 0) }));
     // More than six parts: the rest as "Other"
     const shown = parts.length > 6 ? [...parts.slice(0, 5), { name: "Other", v: parts.slice(5).reduce((s, p) => s + p.v, 0) }] : parts;
     if (parts.length > 6) notes.push("Past six parts, the rest are added up as “Other”.");

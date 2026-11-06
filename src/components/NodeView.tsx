@@ -19,6 +19,7 @@ import {
 } from "../lib/umlClass";
 import { parseClass, rowFrom, rowIn, rowShown } from "../lib/classModel";
 import { canEdit } from "../lib/access";
+import { openDocumentById } from "../lib/workspace";
 import { NEST } from "../lib/sequence";
 import { beginConnect, beginLaneResize, beginLine, beginNodeDrag, beginResize, blurActive } from "../lib/interactions";
 import {
@@ -159,6 +160,8 @@ export function NodeView(p: { node: FlowNode }) {
       onDblClick={(e) => {
         e.stopPropagation();
         select([n.id]);
+        // A chart block: its chart board
+        if (n.kind === "chart" && n.chart) return void openDocumentById(n.chart.documentId);
         if (hasText(n.kind) && !n.locked) setUi("editingNode", n.id);
       }}
     >
@@ -214,6 +217,14 @@ export function NodeView(p: { node: FlowNode }) {
           <div class="image-body">
             <Show when={n.image && imageUrl(n.image)} fallback={<span class="image-loading">{n.text || "Image"}</span>}>
               {(src) => <img src={src()} alt={n.text} draggable={false} />}
+            </Show>
+          </div>
+        </Match>
+        <Match when={n.kind === "chart"}>
+          {/* A chart board's drawing: as an image, so nothing in it can run */}
+          <div class="chart-block" title="Double-click to open the chart">
+            <Show when={n.chart?.svg} fallback={<span class="image-loading">Chart</span>}>
+              {(svg) => <img src={`data:image/svg+xml;charset=utf-8,${encodeURIComponent(svg())}`} alt={n.text || "Chart"} draggable={false} />}
             </Show>
           </div>
         </Match>

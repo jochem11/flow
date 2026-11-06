@@ -8,14 +8,14 @@ import { get, ServerError, useShareToken } from "./server";
 import { ROLE_LABEL, roleCanEdit } from "./roles";
 import { fitView } from "./camera";
 import { kanbanRev, kanbanSnapshot, replaceKanban } from "./kanban";
-import { chartRev, chartSnapshot, replaceChart } from "./chart/store";
+import { chartRev, chartSnapshot, emptyChart, replaceChart } from "./chart/store";
 import { storedSvg } from "./chart/render";
 import { eerRev, eerSnapshot, replaceEer } from "./eer";
 import { loadPersonal, loadTrash, noteOpened } from "./personal";
-import { applyLayout, board, boardSnapshot, replaceBoard, rev, setDiagram } from "./store";
+import { addNode, applyLayout, board, boardSnapshot, createNode, replaceBoard, rev, setChartBlockSvg, setDiagram } from "./store";
 import { WELCOME } from "../templates";
 import { toast } from "./toast";
-import type { DiagramType, DocContent, Document, DocumentKind, DocumentMeta, ExportFormat, FlowDoc, Project, Role, SharedBoard } from "./types";
+import type { ChartDoc, DiagramType, DocContent, Document, DocumentKind, DocumentMeta, ExportFormat, FlowDoc, Project, Role, SharedBoard } from "./types";
 
 // ---------- state ----------
 
@@ -256,11 +256,63 @@ export async function openDocument(projectId: string, docId: string, shared?: { 
     // "Recent" in the sidebar (not for a board seen through its link only)
     if (!shared) noteOpened({ documentId: docId, projectId, name: rest.name, kind: content.kind, diagram: content.kind === "flow" ? content.data.diagram : undefined });
     if (content.kind === "flow") requestAnimationFrame(() => fitIfNeeded());
+    if (content.kind === "flow") void refreshChartBlocks(docId);
     // A chart not drawn yet (made from a template, or before charts kept their drawing):
     // saved once, so exports and chart blocks have its drawing
     if (content.kind === "chart" && !content.data.svg) markDirty();
   } catch (e) {
     toast(`Could not open document: ${errMsg(e)}`, "error");
+  }
+}
+
+/** A chart board's drawing: the one it keeps, or drawn now (not drawn yet). */
+const chartDrawing = (data: ChartDoc) => data.svg ?? storedSvg(data);
+
+/**
+ * The chart blocks on the open board show their chart boards as they are now:
+ * each is loaded, and a drawing that changed is put on the block (saved when
+ * the one looking may edit the board; a chart they cannot see stays as it was).
+ */
+async function refreshChartBlocks(boardId: string) {
+  const blocks = board.nodes.filter((n) => n.kind === "chart" && n.chart);
+  await Promise.all(
+    blocks.map(async (n) => {
+      try {
+        const doc = await api.loadDocument("", n.chart!.documentId);
+        if (doc.content.kind !== "chart" || openDoc()?.id !== boardId) return;
+        const svg = chartDrawing(doc.content.data);
+        if (svg !== n.chart!.svg) setChartBlockSvg(n.id, svg, roleCanEdit(openDoc()?.role));
+      } catch {
+        /* deleted, or not shared with this person: keep the drawing it has */
+      }
+    }),
+  );
+}
+
+/** Puts a chart board on the open board, as a block showing its drawing (at the middle of the view). */
+export async function addChartBlock(chartId: string, at: { x: number; y: number }) {
+  try {
+    const doc = await api.loadDocument("", chartId);
+    if (doc.content.kind !== "chart") return;
+    const node = createNode("chart", at.x, at.y, { text: doc.name, chart: { documentId: chartId, svg: chartDrawing(doc.content.data) } });
+    addNode(node);
+  } catch (e) {
+    toast(errMsg(e), "error");
+  }
+}
+
+/** A new chart board in the open board's project, put on the board straight away. */
+export async function addNewChartBlock(at: { x: number; y: number }) {
+  const d = openDoc();
+  if (!d) return;
+  try {
+    const data = emptyChart();
+    const doc = await api.createDocument(d.projectId, d.folderId, "Chart", "chart", { kind: "chart", data: { ...data, svg: storedSvg(data) } });
+    await refreshDocs(d.projectId);
+    await addChartBlock(doc.id, at);
+    toast("A new chart board, in the sidebar: double-click the block to change its data");
+  } catch (e) {
+    toast(errMsg(e), "error");
   }
 }
 
