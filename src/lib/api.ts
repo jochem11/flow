@@ -16,6 +16,7 @@ import type { DocContent,
   DocumentMeta,
   CodeFile,
   CodeImport,
+  DiagramImport,
   CodeLanguage,
   EerDoc,
   ExportFormat,
@@ -71,6 +72,8 @@ export interface Api {
   importDbml(dbml: string): Promise<SqlImport>;
   /** UML classes from source code; without a language it is guessed */
   importCode(code: string, language: CodeLanguage | null): Promise<CodeImport>;
+  /** Blocks and lines from a Mermaid diagram, a draw.io file or an Excalidraw drawing */
+  importDiagram(text: string): Promise<DiagramImport>;
 }
 
 type CmdResult<T> = { status: "ok"; data: T } | { status: "error"; error: string };
@@ -116,6 +119,7 @@ export const localFiles: Api = {
   eerDbml: (doc) => commands.eerDbml(doc),
   importDbml: (dbml) => commands.importDbml(dbml),
   importCode: (code, language) => commands.importCode(code, language),
+  importDiagram: (text) => commands.importDiagram(text),
 };
 
 // ---------------------------------------------------------------------------
@@ -135,7 +139,7 @@ async function download(res: Response): Promise<string> {
 
 type Tools = Pick<
   Api,
-  "autoLayout" | "exportDocument" | "eerSql" | "classCode" | "mermaidPreview" | "importSql" | "importCode" | "eerDbml" | "importDbml"
+  "autoLayout" | "exportDocument" | "eerSql" | "classCode" | "mermaidPreview" | "importSql" | "importCode" | "eerDbml" | "importDbml" | "importDiagram"
 >;
 
 /** In the desktop app: Rust, locally (exports go to Downloads). */
@@ -149,6 +153,7 @@ const localTools: Tools = {
   eerDbml: localFiles.eerDbml,
   importDbml: localFiles.importDbml,
   importCode: localFiles.importCode,
+  importDiagram: localFiles.importDiagram,
 };
 
 /** In the web version: the same Rust, on the server (exports download in the browser). */
@@ -162,6 +167,7 @@ const webTools: Tools = {
   eerDbml: (doc) => post("/tools/dbml", { doc }),
   importDbml: (dbml) => post("/tools/import-dbml", { dbml }),
   importCode: (code, language) => post("/tools/import-code", { code, language }),
+  importDiagram: (text) => post("/tools/import-diagram", { text }),
 };
 
 const httpApi: Api = {

@@ -691,7 +691,8 @@ export function TextEditor(p: {
 
 /**
  * A fragment's parts (alt, par, ...): a dashed line above each but the first,
- * which can be dragged, and each part's condition (fragments.ts).
+ * which can be dragged (fragments.ts). Their conditions are on the top layer
+ * (FragmentConditions), so no lifeline or activation bar hides them.
  */
 function FragmentParts(p: { node: FlowNode }) {
   const parts = () => p.node.lanes ?? [];
@@ -713,30 +714,61 @@ function FragmentParts(p: { node: FlowNode }) {
   };
   return (
     <Index each={parts()}>
-      {(part, i) => (
-        <>
-          <Show when={i > 0}>
-            <div class="fragment-divider" style={{ top: `${bounds()[i]?.top ?? 0}px` }} title="Drag to move" onPointerDown={(e) => startDrag(e, i)} />
-          </Show>
-          <div class="fragment-condition" classList={{ first: i === 0 }} style={{ top: `${(bounds()[i]?.top ?? 0) + (i === 0 ? 4 : 6)}px` }}>
-            <span>[</span>
-            <span class="grow" data-value={part().title || "condition"}>
-            <input
-              value={part().title}
-              placeholder="condition"
-              readOnly={!canEdit()}
-              size={1}
-              onInput={(e) => (e.currentTarget.parentElement!.dataset.value = e.currentTarget.value || "condition")}
-              onPointerDown={(e) => e.stopPropagation()}
-              onDblClick={(e) => e.stopPropagation()}
-              onChange={(e) => setPartCondition(p.node.id, part().id, e.currentTarget.value.trim().replace(/^\[|\]$/g, ""))}
-              onKeyDown={(e) => e.key === "Enter" && e.currentTarget.blur()}
-            />
-            </span>
-            <span>]</span>
-          </div>
-        </>
+      {(_, i) => (
+        <Show when={i > 0}>
+          <div class="fragment-divider" style={{ top: `${bounds()[i]?.top ?? 0}px` }} title="Drag to move" onPointerDown={(e) => startDrag(e, i)} />
+        </Show>
       )}
     </Index>
+  );
+}
+
+/**
+ * The conditions of the fragments' parts (`[paid]`, `[else]`), on the board's top
+ * layer: the first part's at the top right (clear of the title), the others' at
+ * the top left of their part. Typing in one changes it.
+ */
+export function FragmentConditions() {
+  const fragments = createMemo(() => board.nodes.filter((n) => n.kind === "fragment" && (n.lanes?.length ?? 0) > 0));
+  return (
+    <For each={fragments()}>
+      {(n) => {
+        const bounds = () => partBounds(n.lanes ?? [], n.h);
+        return (
+          <Index each={n.lanes ?? []}>
+            {(part, i) => (
+              <div
+                class="fragment-condition"
+                classList={{ first: i === 0 }}
+                data-fragment={n.id}
+                style={{
+                  left: `${i === 0 ? n.x + n.w - 10 : n.x + 10}px`,
+                  top: `${n.y + (bounds()[i]?.top ?? 0) + (i === 0 ? 4 : 6)}px`,
+                }}
+              >
+                <span>[</span>
+                <span class="grow" data-value={part().title || "condition"}>
+                  <input
+                    value={part().title}
+                    placeholder="condition"
+                    readOnly={!canEdit()}
+                    size={1}
+                    onInput={(e) => (e.currentTarget.parentElement!.dataset.value = e.currentTarget.value || "condition")}
+                    onPointerDown={(e) => e.stopPropagation()}
+                    onDblClick={(e) => e.stopPropagation()}
+                    onChange={(e) => setPartCondition(n.id, part().id, e.currentTarget.value.trim().replace(/^\[|\]$/g, ""))}
+                    onKeyDown={(e) => {
+                      e.stopPropagation();
+                      if (e.key === "Enter" || e.key === "Escape") e.currentTarget.blur();
+                    }}
+                  />
+                </span>
+                <span>]</span>
+              </div>
+            )}
+          </Index>
+        );
+      }}
+    </For>
   );
 }

@@ -10,6 +10,7 @@ import { MermaidDialog } from "./MermaidDialog";
 import { currentFlowType } from "./Toolbar";
 import { SqlImportDialog } from "./SqlImportDialog";
 import { CodeImportDialog } from "./CodeImportDialog";
+import { DiagramImportDialog } from "./DiagramImportDialog";
 import { CardLinksMenu } from "./CardLinksMenu";
 import type { CodeLanguage, ExportFormat, Folder } from "../lib/types";
 import {
@@ -157,6 +158,7 @@ function EerActions() {
 
 const [codePreview, setCodePreview] = createSignal<CodeLanguage | null>(null);
 const [codeImport, setCodeImport] = createSignal(false);
+const [diagramImport, setDiagramImport] = createSignal(false);
 
 export function TopBar() {
   return (
@@ -251,12 +253,42 @@ export function TopBar() {
                     <IconLayout />
                     <span>Arrange</span>
                   </button>
-                  <Show when={currentFlowType().code}>
-                    <button class="text-btn" title="Add UML classes from source code" onClick={() => setCodeImport(true)}>
-                      <IconImport />
-                      <span>Import code</span>
-                    </button>
-                  </Show>
+                  <Menu
+                    align="right"
+                    button={(toggle) => (
+                      <button class="text-btn" title="Add a diagram from Mermaid, draw.io or Excalidraw, or classes from code" onClick={toggle}>
+                        <IconImport />
+                        <span>Import</span>
+                      </button>
+                    )}
+                  >
+                    {(close) => (
+                      <>
+                        <button
+                          class="menu-item"
+                          onClick={() => {
+                            setDiagramImport(true);
+                            close();
+                          }}
+                        >
+                          <span>Diagram…</span>
+                          <small>Mermaid, draw.io, Excalidraw</small>
+                        </button>
+                        <Show when={currentFlowType().code || board.nodes.some((n) => n.kind === "class")}>
+                          <button
+                            class="menu-item"
+                            onClick={() => {
+                              setCodeImport(true);
+                              close();
+                            }}
+                          >
+                            <span>Classes from code…</span>
+                            <small>TypeScript, Java, C#, Python, Kotlin, Rust, Go</small>
+                          </button>
+                        </Show>
+                      </>
+                    )}
+                  </Menu>
                 </Show>
                 <Menu
                   align="right"
@@ -316,6 +348,9 @@ export function TopBar() {
                 </Show>
                 <Show when={codeImport()}>
                   <CodeImportDialog onClose={() => setCodeImport(false)} />
+                </Show>
+                <Show when={diagramImport()}>
+                  <DiagramImportDialog onClose={() => setDiagramImport(false)} />
                 </Show>
               </div>
             </Show>

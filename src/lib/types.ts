@@ -49,6 +49,8 @@ export type {
   CodeLanguage,
   CodeFile,
   CodeImport,
+  DiagramImport,
+  ImportFormat,
   NodeColor,
   NodeKind,
   Position,

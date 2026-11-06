@@ -5,9 +5,9 @@ use std::path::{Path, PathBuf};
 
 use flow_core::flow::{self, safe_file_name};
 use flow_core::models::{
-    Arranged, CodeFile, CodeImport, CodeLanguage, Document, Edge, EerDoc, ExportFormat, FlowDoc, Node, SqlDialect, SqlImport,
+    Arranged, CodeFile, CodeImport, CodeLanguage, DiagramImport, Document, Edge, EerDoc, ExportFormat, FlowDoc, Node, SqlDialect, SqlImport,
 };
-use flow_core::{arrange, code_import, codegen, dbml, eer, mermaid, sql_import};
+use flow_core::{arrange, code_import, codegen, dbml, eer, import, mermaid, sql_import};
 use tauri::{AppHandle, Manager};
 
 use crate::CmdResult;
@@ -103,4 +103,11 @@ pub fn import_dbml(dbml: String) -> SqlImport {
 #[specta::specta]
 pub fn import_code(code: String, language: Option<CodeLanguage>) -> CodeImport {
     code_import::import_guessing(&code, language)
+}
+
+/// A Mermaid diagram, a draw.io file or an Excalidraw drawing, as blocks and lines.
+#[tauri::command]
+#[specta::specta]
+pub fn import_diagram(text: String) -> DiagramImport {
+    import::import_diagram(&text)
 }

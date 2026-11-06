@@ -227,7 +227,7 @@ fn optional(t: String) -> String {
 }
 
 /// A plain type name as a UML type: built-in types by their UML name, classes as they are.
-fn named(t: &str, l: L) -> String {
+pub(crate) fn named(t: &str, l: L) -> String {
     let lower = t.to_lowercase();
     let uml = match lower.as_str() {
         "number" if l == L::TypeScript => "double",
@@ -312,7 +312,7 @@ fn vis_mark(v: Vis) -> &'static str {
 }
 
 /// The class as node text in the editor's notation (see `read_class`).
-fn class_text(c: &Class) -> String {
+pub(crate) fn class_text(c: &Class) -> String {
     let mut s = match c.kind {
         Kind::Interface => "«interface»\n".to_string(),
         Kind::Abstract => "«abstract»\n".to_string(),
@@ -434,8 +434,11 @@ fn diagram(classes: &[Class]) -> (Vec<Node>, Vec<Edge>) {
     (nodes, edges)
 }
 
+/// How wide a row of classes gets before it goes on below
+const ROW_WIDTH: f64 = 1600.0;
+
 /// Rows: supertypes on top, the classes that extend or implement them below.
-fn layout(classes: &[Class], ids: &HashMap<&str, String>) -> Vec<Node> {
+pub(crate) fn layout(classes: &[Class], ids: &HashMap<&str, String>) -> Vec<Node> {
     let by_name: HashMap<&str, &Class> = classes.iter().map(|c| (c.name.as_str(), c)).collect();
     fn level<'a>(c: &'a Class, by_name: &HashMap<&str, &'a Class>, seen: &mut Vec<&'a str>) -> usize {
         if seen.contains(&c.name.as_str()) {
@@ -465,6 +468,12 @@ fn layout(classes: &[Class], ids: &HashMap<&str, String>) -> Vec<Node> {
         let mut x = 0.0;
         let mut tallest: f64 = 0.0;
         for (c, text, w, h) in row {
+            // A long row goes on below itself
+            if x > 0.0 && x + w > ROW_WIDTH {
+                x = 0.0;
+                y += tallest + 60.0;
+                tallest = 0.0;
+            }
             out.push(
                 serde_json::from_value(serde_json::json!({
                     "id": ids[c.name.as_str()], "kind": "class", "x": x, "y": y, "w": w, "h": h, "text": text, "color": "white"

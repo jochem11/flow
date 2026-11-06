@@ -42,6 +42,7 @@ fn specta_builder() -> Builder<tauri::Wry> {
             tools::eer_dbml,
             tools::import_dbml,
             tools::import_code,
+            tools::import_diagram,
             session::get_session_token,
             session::set_session_token,
             session::clear_session_token,

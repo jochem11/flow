@@ -10,8 +10,8 @@ use axum::http::{HeaderValue, header};
 use axum::response::{IntoResponse, Response};
 use axum::routing::post;
 use flow_core::flow::{self, ExportFile, safe_file_name};
-use flow_core::models::{Arranged, CodeFile, CodeImport, CodeLanguage, Document, Edge, EerDoc, ExportFormat, FlowDoc, Node, SqlDialect, SqlImport};
-use flow_core::{arrange, code_import, codegen, dbml, eer, mermaid, sql_import};
+use flow_core::models::{Arranged, CodeFile, CodeImport, CodeLanguage, DiagramImport, Document, Edge, EerDoc, ExportFormat, FlowDoc, Node, SqlDialect, SqlImport};
+use flow_core::{arrange, code_import, codegen, dbml, eer, import, mermaid, sql_import};
 use serde::Deserialize;
 
 use crate::auth::Caller;
@@ -29,6 +29,7 @@ pub fn routes() -> Router<AppState> {
         .route("/tools/dbml", post(to_dbml))
         .route("/tools/import-dbml", post(import_dbml))
         .route("/tools/import-code", post(import_code))
+        .route("/tools/import-diagram", post(import_diagram))
 }
 
 fn allowed(caller: &Caller) -> ApiResult<()> {
@@ -163,4 +164,20 @@ struct ImportCode {
 async fn import_code(caller: Caller, Json(i): Json<ImportCode>) -> ApiResult<Json<CodeImport>> {
     allowed(&caller)?;
     Ok(Json(code_import::import_guessing(&i.code, i.language)))
+}
+
+#[derive(Deserialize)]
+struct ImportDiagram {
+    text: String,
+}
+
+/// At most this much text (a big draw.io file is a few MB)
+const MAX_IMPORT: usize = 20 * 1024 * 1024;
+
+async fn import_diagram(caller: Caller, Json(i): Json<ImportDiagram>) -> ApiResult<Json<DiagramImport>> {
+    allowed(&caller)?;
+    if i.text.len() > MAX_IMPORT {
+        return Err(AppError::bad("This file is too big to import"));
+    }
+    Ok(Json(import::import_diagram(&i.text)))
 }

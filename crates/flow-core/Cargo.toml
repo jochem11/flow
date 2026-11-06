@@ -11,3 +11,7 @@ specta = { workspace = true }
 uuid = { workspace = true }
 resvg = "0.49.0"
 sqlparser = "0.63.0"
+# Importing draw.io files: XML, and the compressed form of their diagrams
+roxmltree = "0.21"
+flate2 = "1"
+base64 = "0.22"

@@ -22,6 +22,7 @@ import {
   setCallColors,
   setPerson,
   addPart,
+  addCondition,
 } from "../lib/store";
 import { AlignMenu } from "./AlignMenu";
 import { deleteSelectionTidy } from "../lib/mindmap";
@@ -219,6 +220,12 @@ export function ContextBar() {
             </Show>
             {/* A fragment: another part, with its own condition */}
             <Show when={selectedNodes().length === 1 && selectedNodes()[0].kind === "fragment"}>
+              <Show when={!selectedNodes()[0].lanes?.length}>
+                <button class="icon-btn" title="A condition for it ([every item], [x > 0])" onClick={() => addCondition(selectedNodes()[0].id)}>
+                  <IconPlus />
+                  <span>Condition</span>
+                </button>
+              </Show>
               <button class="icon-btn" title="Another part (alt / else, par): split by a dashed line" onClick={() => addPart(selectedNodes()[0].id)}>
                 <IconPlus />
                 <span>Part</span>

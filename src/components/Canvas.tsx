@@ -8,7 +8,7 @@ import { addNode, board, createNode, isContainer, select, setUi, ui } from "../l
 import { EdgeEnds, EdgeLabels, EdgesLayer, MessagesLayer } from "./Edges";
 import { currentFlowType } from "./Toolbar";
 import { MOD } from "../lib/shortcuts";
-import { FRAMES, NodeView } from "./NodeView";
+import { FragmentConditions, FRAMES, NodeView } from "./NodeView";
 import { addImages } from "../lib/files";
 import { ContextBar } from "./ContextBar";
 
@@ -146,6 +146,7 @@ export function Canvas() {
       */}
       <div class="world" style={{ transform: worldTransform() }}>
         <EdgeLabels />
+        <FragmentConditions />
         <EdgeEnds />
         <FlowCommentPins />
         <FlowPresence />

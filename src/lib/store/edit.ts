@@ -3,7 +3,7 @@
 import { batch } from "solid-js";
 import { produce, reconcile, unwrap } from "solid-js/store";
 import { alignRects, bounds, distributeRects, intersects, portAt, type AlignTo, type Pt } from "../geometry";
-import type { Arranged, CodeImport, FlowDoc, FlowEdge, FlowNode, NodeColor } from "../types";
+import type { Arranged, CodeImport, DiagramType, FlowDoc, FlowEdge, FlowNode, NodeColor } from "../types";
 import { freeEndsIn, isBetweenLifelines, makeMessage, moveFreeEnds } from "./edges";
 import { assignParents, frameAt, growFrames, updateFrames, withContents } from "./frames";
 import { checkpoint, resetHistory } from "./history";
@@ -75,6 +75,33 @@ export function insertClasses(imp: CodeImport, title: string): FlowNode | null {
   });
   touch();
   return frame;
+}
+
+/**
+ * A diagram from another tool (`api.importDiagram`), as one undo step: on an
+ * empty board where it starts (and the board takes its type), else to the right
+ * of what is there. Returns the bounds of what was added, selected.
+ */
+export function insertDiagram(imp: { nodes: FlowNode[]; edges: FlowEdge[]; diagram: DiagramType | null }) {
+  if (!imp.nodes.length && !imp.edges.length) return null;
+  const empty = !board.nodes.length;
+  const dx = empty ? 0 : snap(Math.max(...board.nodes.map((n) => n.x + n.w)) + 160);
+  const dy = empty ? 0 : snap(Math.min(...board.nodes.map((n) => n.y)));
+  const nodes = imp.nodes.map((n) => ({ ...n, x: n.x + dx, y: n.y + dy }));
+  const move = (p: { x: number; y: number } | null | undefined) => (p ? { x: p.x + dx, y: p.y + dy } : p);
+  const edges = imp.edges.map((e) => ({ ...e, fromPoint: move(e.fromPoint), toPoint: move(e.toPoint) }));
+  checkpoint();
+  batch(() => {
+    setBoard("nodes", (ns) => [...ns, ...nodes]);
+    setBoard("edges", (es) => [...es, ...edges]);
+    if (empty && imp.diagram && board.diagram !== imp.diagram) setBoard("diagram", imp.diagram);
+    select(nodes.map((n) => n.id));
+  });
+  touch();
+  const pts = [...nodes.map((n) => [n.x, n.y, n.x + n.w, n.y + n.h]), ...edges.flatMap((e) => [e.fromPoint, e.toPoint].filter((p) => !!p).map((p) => [p!.x, p!.y, p!.x, p!.y]))];
+  const x = Math.min(...pts.map((p) => p[0]));
+  const y = Math.min(...pts.map((p) => p[1]));
+  return { x, y, w: Math.max(...pts.map((p) => p[2])) - x, h: Math.max(...pts.map((p) => p[3])) - y };
 }
 
 /** Adds a node plus an edge to it, as a single undo step. */

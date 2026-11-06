@@ -446,3 +446,28 @@ pub struct CodeImport {
     pub package: Option<String>,
     pub skipped: Vec<String>,
 }
+
+/// Where an imported diagram came from.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, Type)]
+#[serde(rename_all = "lowercase")]
+pub enum ImportFormat {
+    Mermaid,
+    Drawio,
+    Excalidraw,
+}
+
+/// What `import_diagram` read from a Mermaid diagram, a draw.io file or an
+/// Excalidraw drawing: blocks (laid out from (0, 0)) and the lines between them,
+/// the kind of board they are for, and notes on what it could not use. A Mermaid
+/// ER diagram has tables instead (`eer`), for an EER board.
+#[derive(Debug, Clone, Serialize, Deserialize, Type)]
+#[serde(rename_all = "camelCase")]
+pub struct DiagramImport {
+    /// None when the text is none of these
+    pub format: Option<ImportFormat>,
+    pub diagram: Option<DiagramType>,
+    pub nodes: Vec<Node>,
+    pub edges: Vec<Edge>,
+    pub eer: Option<super::SqlImport>,
+    pub skipped: Vec<String>,
+}

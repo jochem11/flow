@@ -53,6 +53,8 @@ export const commands = {
 	importDbml: (dbml: string) => __TAURI_INVOKE<SqlImport>("import_dbml", { dbml }),
 	/**  The classes in source code, as a class diagram. Without a language it is guessed. */
 	importCode: (code: string, language: CodeLanguage | null) => __TAURI_INVOKE<CodeImport>("import_code", { code, language }),
+	/**  A Mermaid diagram, a draw.io file or an Excalidraw drawing, as blocks and lines. */
+	importDiagram: (text: string) => __TAURI_INVOKE<DiagramImport>("import_diagram", { text }),
 	getSessionToken: () => typedError<string | null, string>(__TAURI_INVOKE("get_session_token")),
 	setSessionToken: (token: string) => typedError<null, string>(__TAURI_INVOKE("set_session_token", { token })),
 	clearSessionToken: () => typedError<null, string>(__TAURI_INVOKE("clear_session_token")),
@@ -266,6 +268,22 @@ export type DataType = "smallint" | "int" | "bigint" | "decimal" | "float" | "bo
 /**  Date and time with time zone */
 "timestamp" | "uuid" | "json" | "blob";
 
+/**
+ *  What `import_diagram` read from a Mermaid diagram, a draw.io file or an
+ *  Excalidraw drawing: blocks (laid out from (0, 0)) and the lines between them,
+ *  the kind of board they are for, and notes on what it could not use. A Mermaid
+ *  ER diagram has tables instead (`eer`), for an EER board.
+ */
+export type DiagramImport = {
+	/**  None when the text is none of these */
+	format: ImportFormat | null,
+	diagram: DiagramType | null,
+	nodes: Node[],
+	edges: Edge[],
+	eer: SqlImport | null,
+	skipped: string[],
+};
+
 /**  The type of a flow board (see src/lib/boardTypes.ts for what each shows). */
 export type DiagramType = "flowchart" | "mindmap" | "sequence" | "class" | "usecase" | "activity" | "state" | "whiteboard";
 
@@ -467,6 +485,9 @@ export type Folder = {
 	 */
 	order: number,
 };
+
+/**  Where an imported diagram came from. */
+export type ImportFormat = "mermaid" | "drawio" | "excalidraw";
 
 /**  An invitation that has not been accepted yet. */
 export type Invite = {

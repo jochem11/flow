@@ -1235,7 +1235,7 @@ fn chart_block_svg(n: &Node) -> String {
 /// A fragment's parts (src/lib/store/fragments.ts): a dashed line above each but
 /// the first, and each part's condition in brackets (the first beside the title).
 fn fragment_parts(n: &Node) -> String {
-    let Some(parts) = n.lanes.as_ref().filter(|p| p.len() > 1) else { return String::new() };
+    let Some(parts) = n.lanes.as_ref().filter(|p| !p.is_empty()) else { return String::new() };
     let mut s = String::new();
     let mut top = n.y;
     for (i, p) in parts.iter().enumerate() {

@@ -41,6 +41,18 @@ export function addPart(id: string) {
   });
 }
 
+/** A condition for a fragment without parts (loop, opt, break): one part, all of it. */
+export function addCondition(id: string) {
+  const n = nodeById(id);
+  if (!n || n.lanes?.length) return;
+  checkpoint();
+  setParts(id, (parts, h) => {
+    parts.push({ id: uid(), title: "", size: h });
+  });
+  // Ready to type
+  requestAnimationFrame(() => (document.querySelector(`.fragment-condition.first[data-fragment="${id}"] input`) as HTMLInputElement | null)?.focus());
+}
+
 export function removePart(id: string, partId: string) {
   checkpoint();
   setParts(id, (parts) => {
@@ -50,8 +62,8 @@ export function removePart(id: string, partId: string) {
     const [gone] = parts.splice(i, 1);
     const other = parts[Math.max(0, i - 1)];
     if (other) other.size += gone.size;
-    // One part left: no dividers
-    if (parts.length === 1) parts.length = 0;
+    // One part left without a condition: nothing to show
+    if (parts.length === 1 && !parts[0].title) parts.length = 0;
   });
 }
 

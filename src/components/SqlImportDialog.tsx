@@ -1,13 +1,13 @@
-// Import SQL or DBML into the open EER diagram: paste a script (or open / drop a
-// .sql or .dbml file), see which tables it has, and add them as one undo step.
-// Reading it happens in Rust (flow-core's sql_import.rs and dbml.rs).
+// Import SQL, DBML or a Mermaid ER diagram into the open EER diagram: paste it
+// (or open / drop a file), see which tables it has, and add them as one undo step.
+// Reading it happens in Rust (flow-core's sql_import.rs, dbml.rs and import/).
 
 import { createResource, createSignal, For, onCleanup, Show } from "solid-js";
 import { Portal } from "solid-js/web";
 import { api, errMsg } from "../lib/api";
 import { eer, ENTITY_W, entityHeight, insertImport, setEerCamera } from "../lib/eer";
 import { toast } from "../lib/toast";
-import type { Entity } from "../lib/types";
+import type { Entity, SqlImport } from "../lib/types";
 import { IconClose } from "./icons";
 
 /** Brings the new tables into view, zoomed out if they do not fit. */
@@ -25,6 +25,17 @@ function showTables(tables: Entity[]) {
 /** DBML (`Table x {`, `Ref:`) rather than SQL (no CREATE TABLE) */
 const isDbml = (s: string) => /^\s*(Table|Ref|TableGroup|Enum)\b/im.test(s) && !/\bCREATE\s+TABLE\b/i.test(s);
 
+/** A Mermaid ER diagram (`erDiagram`, also in a ```mermaid block) */
+const isMermaid = (s: string) => /^\s*erDiagram\b/m.test(s);
+
+/** The tables in a Mermaid ER diagram, as an SQL import */
+async function mermaidTables(s: string): Promise<SqlImport> {
+  const r = await api.importDiagram(s);
+  return r.eer ?? { entities: [], relations: [], sections: [], skipped: r.skipped.length ? r.skipped : ["No ER diagram found"] };
+}
+
+const formatName = (s: string) => (isMermaid(s) ? "Mermaid" : isDbml(s) ? "DBML" : "SQL");
+
 export function SqlImportDialog(p: { onClose: () => void }) {
   const [sql, setSql] = createSignal("");
   // Read while typing, but not on every key
@@ -40,7 +51,7 @@ export function SqlImportDialog(p: { onClose: () => void }) {
 
   const [result] = createResource(settled, (s) =>
     s.trim()
-      ? (isDbml(s) ? api.importDbml(s) : api.importSql(s)).then((r) => ({ ok: r, error: null }), (e) => ({ ok: null, error: errMsg(e) }))
+      ? (isMermaid(s) ? mermaidTables(s) : isDbml(s) ? api.importDbml(s) : api.importSql(s)).then((r) => ({ ok: r, error: null }), (e) => ({ ok: null, error: errMsg(e) }))
       : null,
   );
   const imported = () => result()?.ok;
@@ -68,9 +79,9 @@ export function SqlImportDialog(p: { onClose: () => void }) {
       <div class="dialog-backdrop" onPointerDown={(e) => e.target === e.currentTarget && p.onClose()}>
         <div class="sql-dialog import-dialog panel" onKeyDown={(e) => e.key === "Escape" && p.onClose()}>
           <div class="sql-dialog-head">
-            <strong>Import {isDbml(sql()) ? "DBML" : "SQL"}</strong>
+            <strong>Import {formatName(sql())}</strong>
             <span class="import-hint">
-              SQL from PostgreSQL, MySQL, SQLite, SQL Server or Oracle, or DBML (dbdiagram.io): table groups become sections
+              SQL from PostgreSQL, MySQL, SQLite, SQL Server or Oracle, DBML (dbdiagram.io: table groups become sections) or a Mermaid ER diagram
             </span>
             <button class="icon-btn" title="Close" onClick={p.onClose}>
               <IconClose />
@@ -78,7 +89,7 @@ export function SqlImportDialog(p: { onClose: () => void }) {
           </div>
           <textarea
             class="import-sql"
-            placeholder="Paste SQL or DBML here, or drop a .sql or .dbml file"
+            placeholder="Paste SQL, DBML or a Mermaid erDiagram here, or drop a .sql, .dbml or .mmd file"
             spellcheck={false}
             value={sql()}
             onInput={(e) => type(e.currentTarget.value)}
@@ -114,9 +125,9 @@ export function SqlImportDialog(p: { onClose: () => void }) {
             </Show>
           </div>
           <div class="sql-dialog-foot">
-            <input type="file" accept=".sql,.dbml,.txt,text/plain" hidden ref={fileInput} onChange={(e) => void open(e.currentTarget.files?.[0])} />
+            <input type="file" accept=".sql,.dbml,.mmd,.mermaid,.md,.txt,text/plain" hidden ref={fileInput} onChange={(e) => void open(e.currentTarget.files?.[0])} />
             <button class="text-btn" onClick={() => fileInput.click()}>
-              Open .sql file…
+              Open file…
             </button>
             <span class="spacer" />
             <button class="text-btn" onClick={p.onClose}>
