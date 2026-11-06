@@ -11,6 +11,7 @@ import { currentFlowType } from "./Toolbar";
 import { SqlImportDialog } from "./SqlImportDialog";
 import { CodeImportDialog } from "./CodeImportDialog";
 import { DiagramImportDialog } from "./DiagramImportDialog";
+import { DesignChecks } from "./DesignChecks";
 import { CardLinksMenu } from "./CardLinksMenu";
 import type { CodeLanguage, ExportFormat, Folder } from "../lib/types";
 import {
@@ -249,6 +250,7 @@ export function TopBar() {
                     <IconRedo />
                   </button>
                   <span class="divider" />
+                  <DesignChecks />
                   <button class="text-btn" title="Arrange automatically" onClick={runAutoLayout}>
                     <IconLayout />
                     <span>Arrange</span>
