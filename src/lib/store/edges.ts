@@ -195,6 +195,28 @@ export function addEdge(edge: FlowEdge) {
   touch();
 }
 
+/**
+ * The other way round: from becomes to. What belongs to each end (its pinned
+ * spot, its multiplicity) moves with it; the arrowheads stay, so the arrow now
+ * points at the other block (a subclass becomes the superclass, and so on).
+ */
+export function reverseEdge(id: string) {
+  const e = board.edges.find((x) => x.id === id);
+  if (!e) return;
+  checkpoint();
+  setBoard("edges", (x) => x.id === id, {
+    from: e.to,
+    to: e.from,
+    fromPoint: e.toPoint,
+    toPoint: e.fromPoint,
+    fromAngle: e.toAngle,
+    toAngle: e.fromAngle,
+    startLabel: e.endLabel,
+    endLabel: e.startLabel,
+  });
+  touch();
+}
+
 /** Removes an edge without a checkpoint (e.g. a line that was drawn without moving). */
 export function dropEdge(id: string) {
   setBoard("edges", (es) => es.filter((e) => e.id !== id));

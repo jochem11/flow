@@ -21,7 +21,9 @@ import {
   type Raw,
   type Vis,
 } from "../lib/classModel";
-import { board, ensureRelation, nodeById, selectedNodes, setCodeLanguage, setNodeText } from "../lib/store";
+import { board, ensureRelation, nodeById, reverseEdge, selectedNodes, setCodeLanguage, setEdgeProps, setNodeText, ui } from "../lib/store";
+import { relationMeaning } from "../lib/classRelations";
+import { RELATIONS } from "./EdgeMenus";
 import { sameName, type ClassKind } from "../lib/umlClass";
 import { formatClass } from "../lib/classModel";
 import type { CodeLanguage, FlowNode } from "../lib/types";
@@ -63,21 +65,30 @@ const selectedClass = (): FlowNode | null => {
   return sel.length === 1 && sel[0].kind === "class" ? sel[0] : null;
 };
 
+/** The line the panel is for: one between two classes, selected on its own. */
+const selectedRelation = (): string | null => {
+  const type = boardTypeOf("flow", board.diagram);
+  if ((type.id !== "class" && type.id !== "whiteboard") || !ui.selectedEdge || ui.selected.length) return null;
+  const e = board.edges.find((x) => x.id === ui.selectedEdge);
+  return e && nodeById(e.from)?.kind === "class" && nodeById(e.to)?.kind === "class" ? e.id : null;
+};
+
 export function ClassPanel() {
+  const what = () => selectedClass()?.id ?? (selectedRelation() ? `edge:${selectedRelation()}` : null);
   return (
-    <Show when={canEdit() && !panelOpen() && selectedClass()}>
-      {(node) => (
+    <Show when={canEdit() && !panelOpen() && what()}>
+      {(key) => (
         <Show
           when={!closed()}
           fallback={
             <button class="class-panel-open panel" title="Show the class panel" onClick={() => setPanelClosed(false)}>
-              Class
+              {key().startsWith("edge:") ? "Relation" : "Class"}
             </button>
           }
         >
           <aside class="class-panel panel" onPointerDown={(e) => e.stopPropagation()} onDblClick={(e) => e.stopPropagation()} onKeyDown={(e) => e.stopPropagation()}>
-            <Show when={node().id} keyed>
-              {(id) => <ClassEditor id={id} />}
+            <Show when={key()} keyed>
+              {(k) => (k.startsWith("edge:") ? <RelationEditor id={k.slice(5)} /> : <ClassEditor id={k} />)}
             </Show>
           </aside>
         </Show>
@@ -455,5 +466,81 @@ function RawRow(p: { raw: string; onSave: (t: string) => void; onRemove: () => v
       <Field class="panel-field invalid" value={p.raw} title="Not UML notation: the code export skips it" onSave={(t) => (t ? p.onSave(t) : p.onRemove())} />
       <RemoveButton what="row" onClick={p.onRemove} />
     </div>
+  );
+}
+
+// ---------- a line between two classes ----------
+
+/** Does the line look like this preset? (missing caps and pattern are their defaults) */
+const looksLike = (e: { pattern?: string | null; startCap?: string | null; endCap?: string | null }, p: { pattern?: string | null; startCap?: string | null; endCap?: string | null }) =>
+  (e.pattern ?? "solid") === (p.pattern ?? "solid") && (e.startCap ?? "none") === (p.startCap ?? "none") && (e.endCap ?? "arrow") === (p.endCap ?? "arrow");
+
+const MULTIPLICITIES = ["1", "0..1", "*", "1..*", "0..*"];
+
+/**
+ * The line inspector: what kind of relation, how many at each end, the role
+ * name, which way round, and what it makes in the code.
+ */
+function RelationEditor(p: { id: string }) {
+  const edge = () => board.edges.find((e) => e.id === p.id);
+  const end = (id: string | undefined) => {
+    const m = parseClass(nodeById(id ?? "")?.text ?? "");
+    return { name: m.name || "?", kind: m.kind };
+  };
+  const from = () => end(edge()?.from);
+  const to = () => end(edge()?.to);
+  const kinds = RELATIONS[0];
+  const current = () => kinds.find((r) => edge() && looksLike(edge()!, r.props))?.name ?? "";
+  const setLabel = (which: "startLabel" | "endLabel" | "label", v: string) => setEdgeProps(p.id, { [which]: v || undefined });
+
+  return (
+    <Show when={edge()}>
+      {(e) => (
+        <div class="class-editor">
+          <div class="class-panel-head">
+            <strong>Relation</strong>
+            <span class="spacer" />
+            <button class="icon-btn small" title="Hide the panel" onClick={() => setPanelClosed(true)}>
+              <IconClose />
+            </button>
+          </div>
+          <div class="class-panel-body">
+            <div class="relation-ends">
+              <span class="relation-end">{from().name}</span>
+              <button class="icon-btn small" title="The other way round (the arrow points at the other class)" onClick={() => reverseEdge(p.id)}>
+                ⇄
+              </button>
+              <span class="relation-end">{to().name}</span>
+            </div>
+            <div class="panel-grid">
+              <label>Kind</label>
+              <select
+                class="panel-field"
+                value={current()}
+                onChange={(ev) => {
+                  const r = kinds.find((k) => k.name === ev.currentTarget.value);
+                  if (r) setEdgeProps(p.id, r.props);
+                }}
+              >
+                <Show when={!current()}>
+                  <option value="">Other</option>
+                </Show>
+                <For each={kinds}>{(k) => <option value={k.name}>{`${k.name} (${k.hint})`}</option>}</For>
+              </select>
+              <label title={`How many ${from().name} there are for one ${to().name}`}>At {from().name}</label>
+              <Field value={e().startLabel ?? ""} placeholder="multiplicity" onSave={(v) => setLabel("startLabel", v)} ref={(el) => el.setAttribute("list", "multiplicities")} />
+              <label title={`How many ${to().name} there are for one ${from().name}`}>At {to().name}</label>
+              <Field value={e().endLabel ?? ""} placeholder="multiplicity" onSave={(v) => setLabel("endLabel", v)} ref={(el) => el.setAttribute("list", "multiplicities")} />
+              <label>Role</label>
+              <Field value={e().label ?? ""} placeholder="name on the line" onSave={(v) => setLabel("label", v)} />
+            </div>
+            <datalist id="multiplicities">
+              <For each={MULTIPLICITIES}>{(m) => <option value={m} />}</For>
+            </datalist>
+            <p class="relation-meaning">{relationMeaning(e(), from(), to())}</p>
+          </div>
+        </div>
+      )}
+    </Show>
   );
 }

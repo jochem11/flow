@@ -6437,3 +6437,33 @@ body.presenting .find-bar {
 .type-option.current {
   font-weight: 700;
 }
+
+/* the line inspector (a relation between two classes) */
+.relation-ends {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-bottom: 12px;
+}
+.relation-end {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  padding: 6px 8px;
+  border: 1px solid var(--panel-border);
+  border-radius: 6px;
+  font-weight: 600;
+  font-size: 13px;
+  text-align: center;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.relation-meaning {
+  margin: 12px 0 0;
+  padding: 10px 12px;
+  border-radius: 8px;
+  background: var(--accent-soft);
+  color: var(--text);
+  font-size: 13px;
+  line-height: 1.45;
+}
