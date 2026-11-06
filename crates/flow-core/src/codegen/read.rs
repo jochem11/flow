@@ -66,6 +66,11 @@ pub struct Class {
     pub methods: Vec<Method>,
     /// Enum values
     pub values: Vec<String>,
+    /// What each enum value stands for, when the diagram says (`Paid = 2`), in
+    /// the order of `values` (may be shorter: the rest have none)
+    pub enum_values: Vec<Option<String>>,
+    /// Generic type parameters: `Repository<T>` has ["T"]
+    pub type_params: Vec<String>,
     pub extends: Option<String>,
     pub implements: Vec<String>,
     pub package: Option<String>,
@@ -227,6 +232,14 @@ pub fn read_class(n: &Node) -> Class {
             _ => {}
         }
     }
+    // `Repository<T, K>`: the name, and its type parameters
+    let (name, type_params) = match name.split_once('<') {
+        Some((base, rest)) if rest.trim_end().ends_with('>') => {
+            let params = split_args(rest.trim_end().trim_end_matches('>')).into_iter().filter(|p| is_ident(p)).collect();
+            (base.trim().to_string(), params)
+        }
+        _ => (name, vec![]),
+    };
     let name = pascal(if name.is_empty() { "Unnamed" } else { &name });
     let mut class = Class {
         name,
@@ -234,6 +247,8 @@ pub fn read_class(n: &Node) -> Class {
         fields: vec![],
         methods: vec![],
         values: vec![],
+        enum_values: vec![],
+        type_params,
         extends: None,
         implements: vec![],
         package: None,
@@ -242,8 +257,14 @@ pub fn read_class(n: &Node) -> Class {
     for row in &parts[1] {
         if kind == Kind::Enum {
             let v = row.trim_start_matches(['+', '-', '#', '~']).trim();
+            // `Paid`, or `Paid = 2` / `Paid = "paid"`
+            let (v, value) = match v.split_once('=') {
+                Some((n, val)) => (n.trim(), Some(val.trim().to_string()).filter(|x| !x.is_empty())),
+                None => (v, None),
+            };
             if is_ident(v) {
                 class.values.push(v.to_string());
+                class.enum_values.push(value);
             } else {
                 class.unreadable.push(format!("Not in UML notation, skipped: {row}"));
             }
@@ -349,10 +370,12 @@ pub fn read_classes(flow: &FlowDoc) -> Vec<Class> {
     let index: HashMap<String, usize> = classes.iter().enumerate().map(|(i, (id, _))| (id.clone(), i)).collect();
     let name_of = |i: usize, classes: &[(String, Class)]| classes[i].1.name.clone();
 
-    // A class may use built-in types and the classes on the board
+    // A class may use built-in types, the classes on the board and its own type parameters
     let known: BTreeSet<String> = classes.iter().map(|(_, c)| c.name.clone()).collect();
     for (_, c) in classes.iter_mut() {
-        check_types(c, &known);
+        let mut own = known.clone();
+        own.extend(c.type_params.iter().cloned());
+        check_types(c, &own);
     }
 
     for e in &flow.edges {
@@ -447,5 +470,50 @@ pub fn row_in(part: usize, is_enum: bool, line: &str, lang: CodeLanguage) -> Str
             None => line.to_string(),
         },
         _ => line.to_string(),
+    }
+}
+
+// ---------- enum values and type parameters, as the generators write them ----------
+
+impl Class {
+    /// The value an enum value stands for, if the diagram gives one.
+    pub fn enum_value(&self, i: usize) -> Option<&str> {
+        self.enum_values.get(i).and_then(|v| v.as_deref())
+    }
+
+    /// Do the enum's values stand for numbers (all that are given)? None: no values given.
+    pub fn enum_numbers(&self) -> Option<bool> {
+        let given: Vec<&str> = (0..self.values.len()).filter_map(|i| self.enum_value(i)).collect();
+        (!given.is_empty()).then(|| given.iter().all(|v| v.parse::<i64>().is_ok()))
+    }
+
+    /// Enum value `i` as a literal: its number, or its text in quotes (the name when none is given).
+    pub fn enum_literal(&self, i: usize) -> String {
+        match (self.enum_numbers(), self.enum_value(i)) {
+            (Some(true), Some(v)) => v.to_string(),
+            (Some(true), None) => i.to_string(),
+            (_, Some(v)) if v.starts_with('"') => v.to_string(),
+            (_, Some(v)) => format!("{:?}", v.trim_matches('\'')),
+            (_, None) => format!("{:?}", self.values[i]),
+        }
+    }
+
+    /// `<T, K>` after the name (empty without type parameters).
+    pub fn generics(&self) -> String {
+        if self.type_params.is_empty() { String::new() } else { format!("<{}>", self.type_params.join(", ")) }
+    }
+}
+
+/// Whether a class row is shown at a board's level of detail (as rowShown in
+/// src/lib/classModel.ts): `part` 1 is attributes (or enum values), 2 operations.
+pub fn row_shown(part: usize, is_enum: bool, line: &str, detail: crate::models::ClassDetail) -> bool {
+    use crate::models::ClassDetail as D;
+    match (detail, part) {
+        (D::All, _) | (_, 0) => true,
+        (D::Names, _) => false,
+        (D::Public, 1) if is_enum => true,
+        // Attributes are private, operations public, when not written
+        (D::Public, 1) => parse_attribute(line).is_none_or(|f| f.vis == Vis::Public),
+        (D::Public, _) => parse_operation(line).is_none_or(|m| matches!(m.vis, Vis::Public | Vis::Unset)),
     }
 }

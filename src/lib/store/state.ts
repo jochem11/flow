@@ -4,7 +4,7 @@ import type { Guide } from "../snapping";
 import { createMemo, createRoot, createSignal } from "solid-js";
 import { createStore, unwrap } from "solid-js/store";
 import { analyze, callColor, type Bar } from "../sequence";
-import type { Camera, CodeLanguage, DiagramType, EdgeStyle, FlowDoc, FlowNode, NodeKind } from "../types";
+import type { Camera, ClassDetail, CodeLanguage, DiagramType, EdgeStyle, FlowDoc, FlowNode, NodeKind } from "../types";
 import { emptyFlow } from "./nodes";
 
 // ---------- state ----------
@@ -97,15 +97,22 @@ export function setCodeLanguage(lang: CodeLanguage | null) {
   touch();
 }
 
+/** Class diagrams: which rows the classes show (null: all). */
+export function setClassDetail(detail: ClassDetail | null) {
+  setBoard("classDetail", detail === "all" ? undefined : (detail ?? undefined));
+  touch();
+}
+
 /** The board's settings that are shared with whoever edits it too (see collab/). */
 export interface FlowSettings {
   callColors?: boolean;
   diagram?: DiagramType;
   codeLanguage?: CodeLanguage | null;
+  classDetail?: ClassDetail | null;
 }
 
 /** The settings by their name in the shared document, and what "not set" is. */
-export const FLOW_SETTINGS = { callColors: false, diagram: null, codeLanguage: null } as const;
+export const FLOW_SETTINGS = { callColors: false, diagram: null, codeLanguage: null, classDetail: null } as const;
 
 export const isSelected = (id: string) => derived.selectedSet().has(id);
 export const nodeById = (id: string): FlowNode | undefined => derived.nodeMap().get(id);

@@ -1,5 +1,5 @@
 use super::*;
-use crate::codegen::{generate, read_classes, tests::shop};
+use crate::codegen::{generate, read_classes, tests::{members, shop}};
 use crate::models::{Camera, FlowDoc};
 
 const ALL: [L; 7] = [L::TypeScript, L::Java, L::CSharp, L::Python, L::Kotlin, L::Rust, L::Go];
@@ -176,4 +176,37 @@ fn from_file() {
     let code = std::fs::read_to_string(std::env::var("CODE_FILE").unwrap()).unwrap();
     let imp = import(&code, detect(&code));
     std::fs::write(std::env::var("OUT").unwrap(), serde_json::to_string(&imp).unwrap()).unwrap();
+}
+
+/// Generics, enum values, records and read-only attributes survive the code export
+/// and the import, in each language that can write them.
+#[test]
+fn round_trip_new_notation() {
+    for l in ALL {
+        let code: String = generate(&members(), l, "Members").iter().map(|f| f.content.clone()).collect::<Vec<_>>().join("\n");
+        let got = read_classes(&as_flow(&import(&code, l)));
+        let get = |n: &str| got.iter().find(|c| c.name == n).unwrap_or_else(|| panic!("{l:?}: no {n}\n{code}"));
+        // Generic: every language
+        assert_eq!(get("Repository").type_params, ["T"], "{l:?} generics\n{code}");
+        assert!(get("Repository").unreadable.is_empty(), "{l:?}: {:?}", get("Repository").unreadable);
+        // Enum values that stand for numbers (Go writes them, but reads only the names)
+        if l != L::Go {
+            let status = get("Status");
+            assert_eq!((status.values.len(), status.enum_value(1)), (3, Some("2")), "{l:?} enum values\n{code}");
+            assert!(status.fields.is_empty() && status.methods.is_empty(), "{l:?}: {:?} {:?}", status.fields, status.methods);
+        }
+        // Records, where the language has them
+        if matches!(l, L::Java | L::CSharp | L::Kotlin | L::Python) {
+            assert_eq!(get("OrderLine").kind, Kind::Record, "{l:?} record\n{code}");
+            assert_eq!(get("OrderLine").fields.len(), 2, "{l:?} record fields");
+        }
+        // Read-only, where the code says so
+        if matches!(l, L::TypeScript | L::CSharp) {
+            assert!(get("Order").fields.iter().find(|f| f.name == "id").unwrap().read_only, "{l:?} read-only\n{code}");
+        }
+        // Kotlin: a subclass with its own constructor still extends
+        if l == L::Kotlin {
+            assert_eq!(get("SpecialOrder").extends.as_deref(), Some("Order"), "{code}");
+        }
+    }
 }

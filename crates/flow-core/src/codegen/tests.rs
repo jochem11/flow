@@ -263,7 +263,13 @@ pub(crate) fn members() -> FlowDoc {
           "text": "SpecialOrder\n--\n- discount: decimal\n--\n+ SpecialOrder(discount: decimal)" },
         { "id": "g", "kind": "class", "x": 0, "y": 0, "w": 1, "h": 1, "color": "white", "text": "Gift\n--\n- message: string\n--\n" },
         { "id": "l", "kind": "class", "x": 0, "y": 0, "w": 1, "h": 1, "color": "white",
-          "text": "«record»\nOrderLine\n--\n- quantity: int\n- price: decimal\n--\n+ subtotal(): decimal" }
+          "text": "«record»\nOrderLine\n--\n- quantity: int\n- price: decimal\n--\n+ subtotal(): decimal" },
+        { "id": "r", "kind": "class", "x": 0, "y": 0, "w": 1, "h": 1, "color": "white",
+          "text": "Repository<T>\n--\n- items: List<T>\n--\n+ add(item: T)\n+ all(): List<T>" },
+        { "id": "st", "kind": "class", "x": 0, "y": 0, "w": 1, "h": 1, "color": "white", "text": "«enum»\nStatus\n--\nNew\nPaid = 2\nShipped = 3\n--\n" },
+        { "id": "pr", "kind": "class", "x": 0, "y": 0, "w": 1, "h": 1, "color": "white", "text": "«enum»\nPriority\n--\nLow = \"low\"\nHigh = \"high\"\n--\n" },
+        { "id": "h", "kind": "class", "x": 0, "y": 0, "w": 1, "h": 1, "color": "white",
+          "text": "Shop\n--\n+ lines: Repository<OrderLine>\n+ status: Status\n+ priority: Priority\n--\n" }
       ],
       "edges": [
         { "id": "e1", "from": "s", "to": "o", "endCap": "triangle" },
@@ -315,4 +321,22 @@ fn constructors_records_and_read_only() {
     has(L::Python, &["@dataclass(frozen=True)\nclass OrderLine:", "# Order(...): the dataclass's own __init__ takes the fields"]);
     has(L::Rust, &["pub fn new(id: i32) -> Self {\n        Self { id, ..Default::default() }", "#[derive(Debug, Clone, PartialEq, Default)]\npub struct OrderLine", "use std::collections::{HashMap, HashSet};"]);
     has(L::Go, &["func NewOrder(id int) *Order {\n\treturn &Order{note: \"x\", id: id}", "func NewSpecialOrder(discount float64) *SpecialOrder", "tags map[string]bool"]);
+
+    // Generics and enum values
+    has(L::TypeScript, &["export class Repository<T> {", "Paid = 2,", "High = \"high\","]);
+    has(L::Java, &["public class Repository<T> {", "PAID(2),", "private final int value;", "Status(int value) {", "HIGH(\"high\");", "private final String value;"]);
+    has(L::CSharp, &["public class Repository<T>", "Paid = 2,", "High, // \"high\""]);
+    has(L::Kotlin, &["class Repository<T> {", "enum class Status(val value: Int) {", "PAID(2),", "enum class Priority(val value: String)"]);
+    has(L::Python, &["from typing import Generic, TypeVar", "T = TypeVar(\"T\")", "class Repository(Generic[T]):", "PAID = 2", "HIGH = \"high\""]);
+    has(L::Rust, &["pub struct Repository<T> {", "impl<T> Repository<T> {", "Paid = 2,", "Self::High => \"high\","]);
+    has(L::Go, &["type Repository[T any] struct {", "func (r *Repository[T]) Add(", "StatusPaid Status = 2", "type Priority string", "PriorityHigh Priority = \"high\""]);
+}
+
+/// The same as the level of detail test in src/lib/classModel.test.ts.
+#[test]
+fn rows_at_a_level_of_detail() {
+    use crate::models::ClassDetail as D;
+    assert_eq!([row_shown(1, false, "- id: int", D::Public), row_shown(1, false, "+ name: string", D::Public), row_shown(1, false, "id: int", D::Public)], [false, true, false]);
+    assert_eq!([row_shown(2, false, "- check()", D::Public), row_shown(2, false, "total(): int", D::Public)], [false, true]);
+    assert_eq!([row_shown(1, true, "Paid", D::Public), row_shown(1, false, "+ name: string", D::Names), row_shown(0, false, "Order", D::Names)], [true, false, true]);
 }

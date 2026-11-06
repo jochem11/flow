@@ -25,6 +25,22 @@ pub struct FlowDoc {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     #[specta(optional)]
     pub code_language: Option<CodeLanguage>,
+    /// Class diagrams: which rows the classes show. Missing means all.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[specta(optional)]
+    pub class_detail: Option<ClassDetail>,
+}
+
+/// How much of each class a class diagram shows (the code export always has all).
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, Type)]
+#[serde(rename_all = "camelCase")]
+pub enum ClassDetail {
+    /// Every attribute and operation
+    All,
+    /// Only public ones (an operation without visibility counts as public)
+    Public,
+    /// Only the names of the classes
+    Names,
 }
 
 /// The type of a flow board (see src/lib/boardTypes.ts for what each shows).

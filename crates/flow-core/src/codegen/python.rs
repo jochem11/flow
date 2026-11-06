@@ -24,13 +24,14 @@ pub(super) fn python_ty(t: &str, imports: &mut BTreeSet<String>) -> String {
 
 pub(super) fn python(classes: &[Class]) -> String {
     let mut imports = BTreeSet::new();
+    let mut type_vars: BTreeSet<String> = BTreeSet::new();
     let mut body = String::new();
     for c in classes {
         if c.kind == Kind::Enum {
             imports.insert("from enum import Enum".to_string());
             body.push_str(&format!("\n\nclass {}(Enum):\n", c.name));
-            for v in &c.values {
-                body.push_str(&format!("    {} = \"{}\"\n", snake(v).to_uppercase(), v));
+            for (i, v) in c.values.iter().enumerate() {
+                body.push_str(&format!("    {} = {}\n", snake(v).to_uppercase(), c.enum_literal(i)));
             }
             if c.values.is_empty() {
                 body.push_str("    pass\n");
@@ -39,6 +40,12 @@ pub(super) fn python(classes: &[Class]) -> String {
             continue;
         }
         let mut bases: Vec<String> = c.extends.iter().chain(&c.implements).cloned().collect();
+        // Generic: its type variables are declared once, at the top
+        if !c.type_params.is_empty() {
+            imports.insert("from typing import Generic, TypeVar".to_string());
+            type_vars.extend(c.type_params.iter().cloned());
+            bases.push(format!("Generic[{}]", c.type_params.join(", ")));
+        }
         if matches!(c.kind, Kind::Interface | Kind::Abstract) {
             imports.insert("from abc import ABC, abstractmethod".to_string());
             bases.push("ABC".into());
@@ -114,5 +121,7 @@ pub(super) fn python(classes: &[Class]) -> String {
     // `from __future__` must come first
     let mut lines: Vec<String> = imports.into_iter().collect();
     lines.insert(0, "from __future__ import annotations".into());
-    format!("\n{}\n{body}", lines.join("\n"))
+    // Type variables of generic classes, after the imports
+    let vars: String = type_vars.iter().map(|t| format!("\n{t} = TypeVar(\"{t}\")")).collect();
+    format!("\n{}\n{vars}{body}", lines.join("\n"))
 }

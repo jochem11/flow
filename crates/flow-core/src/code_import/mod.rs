@@ -44,6 +44,8 @@ pub(super) fn class(name: &str, kind: Kind) -> Class {
         fields: vec![],
         methods: vec![],
         values: vec![],
+        enum_values: vec![],
+        type_params: vec![],
         extends: None,
         implements: vec![],
         package: None,
@@ -63,6 +65,30 @@ pub(super) fn method(vis: Vis, name: &str, params: Vec<(String, String)>, ret: O
 /// The class name without type parameters: `Box<T>` → `Box`.
 pub(super) fn bare(name: &str) -> &str {
     name.split(['<', '[', '(', ' ', ':']).next().unwrap_or(name).trim()
+}
+
+/// The type parameters right after a type's name: `Repository<T, K extends X>`
+/// and Go's `Repository[T any]` both give [T, K].
+pub(super) fn type_params_after(decl: &str) -> Vec<String> {
+    let d = decl.trim_start();
+    let after = d[bare(d).len()..].trim_start();
+    let Some(open) = after.chars().next().filter(|c| *c == '<' || *c == '[') else { return vec![] };
+    match scan::group(after, open) {
+        Some((before, inner, _)) if before.is_empty() => scan::split_top(inner, ',')
+            .iter()
+            .filter_map(|p| p.split([' ', ':']).next().map(str::to_string))
+            .filter(|p| crate::codegen::is_ident(p))
+            .collect(),
+        _ => vec![],
+    }
+}
+
+/// What an enum value stands for, as written in code, if it is more than its own
+/// name (`PAID("Paid")` and `Paid = "Paid"` stand for nothing more).
+pub(super) fn enum_value(name: &str, raw: Option<&str>) -> Option<String> {
+    let v = raw?.trim().trim_end_matches(',').trim();
+    let unquoted = v.trim_matches(['"', '\'']);
+    (!v.is_empty() && !unquoted.eq_ignore_ascii_case(name)).then(|| v.to_string())
 }
 
 /// Guesses the language from what is typical for each.
@@ -295,15 +321,20 @@ fn class_text(c: &Class) -> String {
         Kind::Class => String::new(),
     };
     s.push_str(&c.name);
+    s.push_str(&c.generics());
     s.push_str("\n--\n");
     let mut rows: Vec<String> = vec![];
     if c.kind == Kind::Enum {
-        rows.extend(c.values.iter().cloned());
+        rows.extend(c.values.iter().enumerate().map(|(i, v)| match c.enum_value(i) {
+            Some(x) => format!("{v} = {x}"),
+            None => v.clone(),
+        }));
     }
     for f in &c.fields {
         let st = if f.is_static { "{static} " } else { "" };
         let default = f.default.as_deref().map_or(String::new(), |d| format!(" = {d}"));
-        rows.push(format!("{}{st}{}: {}{default}", vis_mark(f.vis), f.name, f.ty));
+        let ro = if f.read_only { " {readOnly}" } else { "" };
+        rows.push(format!("{}{st}{}: {}{default}{ro}", vis_mark(f.vis), f.name, f.ty));
     }
     s.push_str(&rows.join("\n"));
     s.push_str("\n--\n");

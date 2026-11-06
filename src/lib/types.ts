@@ -37,6 +37,7 @@ export type {
   // flowchart
   FlowDoc,
   DiagramType,
+  ClassDetail,
   Camera,
   Point,
   ExportFormat,

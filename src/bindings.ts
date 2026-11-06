@@ -137,6 +137,15 @@ export type Cardinality =
 /**  1 or more */
 "oneOrMany";
 
+/**  How much of each class a class diagram shows (the code export always has all). */
+export type ClassDetail = 
+/**  Every attribute and operation */
+"all" | 
+/**  Only public ones (an operation without visibility counts as public) */
+"public" | 
+/**  Only the names of the classes */
+"names";
+
 /**  One generated source file. */
 export type CodeFile = {
 	name: string,
@@ -391,6 +400,8 @@ export type FlowDoc = {
 	 *  language-neutral (see fixtures/types.json). Missing means UML-neutral.
 	 */
 	codeLanguage?: CodeLanguage | null,
+	/**  Class diagrams: which rows the classes show. Missing means all. */
+	classDetail?: ClassDetail | null,
 };
 
 /**  A folder inside a project. Folders nest via `parent_id`. */

@@ -309,3 +309,17 @@ export function missingOperations(m: ClassModel, supers: ClassModel[]): Operatio
   }
   return out;
 }
+
+/** Whether a class row is shown at a board's level of detail (as `row_shown` in read.rs). */
+export function rowShown(part: number, kind: ClassKind, line: string, detail: "all" | "public" | "names" | null | undefined): boolean {
+  if (!detail || detail === "all" || part === 0) return true;
+  if (detail === "names") return false;
+  if (part === 1 && kind === "enum") return true;
+  // Attributes are private, operations public, when not written
+  if (part === 1) {
+    const a = parseAttribute(line);
+    return !a || a.vis === "+";
+  }
+  const o = parseOperation(line);
+  return !o || o.vis === "+" || o.vis === "";
+}

@@ -187,7 +187,9 @@ function operationTypes(line: string): { params: string[]; ret?: string } {
  */
 export function rowProblem(kind: ClassKind, part: number, line: string, ctx?: ClassContext): string | null {
   if (kind === "enum" && part === 1) {
-    return isIdent(line.trim().replace(/^[+\-#~]\s*/, "")) ? null : "An enum value is a single name, e.g. Paid";
+    // `Paid`, or `Paid = 2` / `Paid = "paid"`
+    const [name, ...value] = line.trim().replace(/^[+\-#~]\s*/, "").split("=");
+    return isIdent(name.trim()) && (value.length === 0 || value.join("=").trim() !== "") ? null : "An enum value is a name, maybe with a value: Paid or Paid = 2";
   }
   if (part === 1 && kind !== "enum") {
     if (!isAttribute(line)) return "Write an attribute as: - name: Type = default (the default is optional)";

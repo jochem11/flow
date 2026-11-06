@@ -49,16 +49,27 @@ pub(super) fn rust(classes: &[Class]) -> String {
             Kind::Enum => {
                 // Default to the first value, so structs with this field can derive Default
                 s.push_str(&format!("#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]\npub enum {} {{\n", c.name));
+                let numbers = c.enum_numbers() == Some(true);
                 for (i, v) in c.values.iter().enumerate() {
                     let def = if i == 0 { "#[default]\n    " } else { "" };
-                    s.push_str(&format!("    {def}{},\n", pascal(v)));
+                    // Numbers: the values themselves
+                    let n = if numbers { format!(" = {}", c.enum_literal(i)) } else { String::new() };
+                    s.push_str(&format!("    {def}{}{n},\n", pascal(v)));
                 }
                 s.push_str(&unreadable(c, "//", "    "));
                 s.push_str("}\n\n");
+                // Texts: what each value stands for
+                if c.enum_numbers() == Some(false) {
+                    let arms: String = c.values.iter().enumerate().map(|(i, v)| format!("            Self::{} => {},\n", pascal(v), c.enum_literal(i))).collect();
+                    s.push_str(&format!(
+                        "impl {} {{\n    pub fn value(&self) -> &'static str {{\n        match self {{\n{arms}        }}\n    }}\n}}\n\n",
+                        c.name
+                    ));
+                }
             }
             Kind::Interface => {
                 let sup = if c.implements.is_empty() { String::new() } else { format!(": {}", c.implements.join(" + ")) };
-                s.push_str(&format!("pub trait {}{sup} {{\n", c.name));
+                s.push_str(&format!("pub trait {}{}{sup} {{\n", c.name, c.generics()));
                 for m in &c.methods {
                     s.push_str(&format!("    fn {}({}){};\n", snake(&m.name), params(m), ret(m)));
                 }
@@ -77,7 +88,7 @@ pub(super) fn rust(classes: &[Class]) -> String {
                 } else {
                     "Debug, Clone, Default"
                 };
-                s.push_str(&format!("#[derive({derive})]\npub struct {} {{\n", c.name));
+                s.push_str(&format!("#[derive({derive})]\npub struct {}{} {{\n", c.name, c.generics()));
                 // Rust has no inheritance: the supertype becomes a field
                 if let Some(e) = &c.extends {
                     s.push_str(&format!("    /// Extends {e} in the diagram\n    pub base: {e},\n"));
@@ -89,7 +100,7 @@ pub(super) fn rust(classes: &[Class]) -> String {
                 s.push_str("}\n");
                 let consts: Vec<&Field> = c.fields.iter().filter(|f| f.is_static).collect();
                 if !c.methods.is_empty() || !consts.is_empty() {
-                    s.push_str(&format!("\nimpl {} {{\n", c.name));
+                    s.push_str(&format!("\nimpl{g} {}{g} {{\n", c.name, g = c.generics()));
                     for f in consts {
                         // A const needs a value that is known when compiling
                         let ft = field_ty(&f.ty);
@@ -153,7 +164,7 @@ pub(super) fn rust(classes: &[Class]) -> String {
                 }
                 for i in &c.implements {
                     let methods = classes.iter().find(|x| &x.name == i).map(|x| x.methods.clone()).unwrap_or_default();
-                    s.push_str(&format!("\nimpl {i} for {} {{\n", c.name));
+                    s.push_str(&format!("\nimpl{g} {i} for {}{g} {{\n", c.name, g = c.generics()));
                     for m in &methods {
                         s.push_str(&format!("    fn {}({}){} {{\n        todo!()\n    }}\n", snake(&m.name), params(m), ret(m)));
                     }

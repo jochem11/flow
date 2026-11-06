@@ -9,7 +9,7 @@
 use std::collections::HashMap;
 
 use crate::models::{
-    CodeLanguage,
+    ClassDetail, CodeLanguage,
     Edge, EdgeCap, EdgeStyle, FlowDoc, LabelSide, LinePattern, Node, NodeColor, NodeKind, Point,
 };
 
@@ -104,7 +104,7 @@ pub fn to_svg(flow: &FlowDoc) -> String {
     let seq = analyze(&flow.nodes, &flow.edges);
     let paint = flow.call_colors == Some(true);
     for n in frames {
-        s.push_str(&node_svg(n, &seq, paint, flow.code_language));
+        s.push_str(&node_svg(n, &seq, paint, flow.code_language, flow.class_detail));
     }
 
     let by_id: HashMap<&str, &Node> = flow.nodes.iter().map(|n| (n.id.as_str(), n)).collect();
@@ -151,7 +151,7 @@ pub fn to_svg(flow: &FlowDoc) -> String {
     }
 
     for n in flow.nodes.iter().filter(|n| !is_frame(n.kind)) {
-        s.push_str(&node_svg(n, &seq, paint, flow.code_language));
+        s.push_str(&node_svg(n, &seq, paint, flow.code_language, flow.class_detail));
     }
     s.push_str(&messages);
     s.push_str(&labels);
@@ -968,7 +968,7 @@ fn edge_labels_svg(edge: &Edge, g: &Geom) -> String {
 // Nodes
 // ---------------------------------------------------------------------------
 
-fn node_svg(n: &Node, seq: &Sequence, paint: bool, lang: Option<CodeLanguage>) -> String {
+fn node_svg(n: &Node, seq: &Sequence, paint: bool, lang: Option<CodeLanguage>, detail: Option<ClassDetail>) -> String {
     let (fill, stroke) = colors(n.color);
     let dot = dot_color(n.color);
     let (x, y, w, h) = (n.x, n.y, n.w, n.h);
@@ -1065,7 +1065,7 @@ fn node_svg(n: &Node, seq: &Sequence, paint: bool, lang: Option<CodeLanguage>) -
                 + &centered(w * 0.75)
         }
         NodeKind::Actor | NodeKind::TimeEvent => figure_svg(n, fill),
-        NodeKind::Class => class_svg(n, &border, stroke, lang),
+        NodeKind::Class => class_svg(n, &border, stroke, lang, detail),
         NodeKind::Lifeline => {
             let line = if n.color == NodeColor::White {
                 EDGE
@@ -1158,7 +1158,7 @@ fn figure_svg(n: &Node, fill: &str) -> String {
 
 /// Class box: the name, then attributes and operations, split on lines that are just `--`.
 /// A class; with the board's language, its types as that language writes them.
-fn class_svg(n: &Node, border: &str, stroke: &str, lang: Option<CodeLanguage>) -> String {
+fn class_svg(n: &Node, border: &str, stroke: &str, lang: Option<CodeLanguage>, detail: Option<ClassDetail>) -> String {
     let (x, y, w, h) = (n.x, n.y, n.w, n.h);
     let is_enum = n.text.lines().any(|l| matches!(l.trim().to_lowercase().as_str(), "«enum»" | "<<enum>>" | "«enumeration»"));
     let mut parts: Vec<Vec<&str>> = vec![vec![]];
@@ -1166,7 +1166,11 @@ fn class_svg(n: &Node, border: &str, stroke: &str, lang: Option<CodeLanguage>) -
         if line.trim() == "--" {
             parts.push(vec![]);
         } else {
-            parts.last_mut().unwrap().push(line);
+            let part = parts.len() - 1;
+            // Only the rows the board's level of detail shows
+            if detail.is_none_or(|d| crate::codegen::row_shown(part, is_enum, line, d)) {
+                parts.last_mut().unwrap().push(line);
+            }
         }
     }
 

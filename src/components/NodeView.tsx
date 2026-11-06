@@ -17,7 +17,7 @@ import {
   rowProblem,
   type ClassContext,
 } from "../lib/umlClass";
-import { parseClass, rowFrom, rowIn } from "../lib/classModel";
+import { parseClass, rowFrom, rowIn, rowShown } from "../lib/classModel";
 import { canEdit } from "../lib/access";
 import { NEST } from "../lib/sequence";
 import { beginConnect, beginLaneResize, beginLine, beginNodeDrag, beginResize, blurActive } from "../lib/interactions";
@@ -413,6 +413,8 @@ function ClassBody(p: { node: FlowNode }) {
                 {(value, index) => (
                   <>
                     <Show when={isRow(part, index, true)}>{newRow(part, index)}</Show>
+                    {/* A row the board's level of detail hides (still there, and edited when shown) */}
+                    <Show when={rowShown(part, classKind(p.node.text), value(), board.classDetail) || isRow(part, index)}>
                     <Show
                       when={isRow(part, index)}
                       fallback={
@@ -445,6 +447,7 @@ function ClassBody(p: { node: FlowNode }) {
                         value={rowIn(part, classKind(p.node.text), value(), board.codeLanguage)}
                         onDone={(t, key) => commitRow(part, index, t, false, key)}
                       />
+                    </Show>
                     </Show>
                   </>
                 )}

@@ -35,11 +35,12 @@ fn type_decl(decl: &str, body: &str, r: &mut Read) -> bool {
     } else if let Some(x) = rest.strip_prefix("enum ") {
         (Kind::Enum, x)
     } else if let Some(x) = rest.strip_prefix("record ") {
-        (Kind::Class, x)
+        (Kind::Record, x)
     } else {
         return false;
     };
     let mut c = class(bare(rest), kind);
+    c.type_params = type_params_after(rest);
     let list = |s: &str| split_top(s, ',').iter().map(|x| pascal(bare(x))).collect::<Vec<_>>();
     if let Some((_, ext)) = rest.split_once(" extends ") {
         let ext = list(ext.split(" implements ").next().unwrap_or(ext));
@@ -64,7 +65,15 @@ fn type_decl(decl: &str, body: &str, r: &mut Read) -> bool {
     if kind == Kind::Enum && !list.is_empty() {
         let first = list.remove(0);
         if first.body.is_none() {
-            c.values = split_top(&first.decl(), ',').iter().map(|v| bare(v).to_string()).filter(|v| !v.is_empty()).collect();
+            // PAID or PAID(2): the name, and what it stands for
+            for v in split_top(&first.decl(), ',') {
+                let name = bare(&v).to_string();
+                if name.is_empty() {
+                    continue;
+                }
+                c.enum_values.push(enum_value(&name, group(&v, '(').map(|g| g.1)));
+                c.values.push(name);
+            }
         }
     }
     for item in list {
@@ -75,6 +84,11 @@ fn type_decl(decl: &str, body: &str, r: &mut Read) -> bool {
             }
         }
         member(&mut c, &decl, item.body.is_some(), r);
+    }
+    // An enum's values with their own field: that field and its getter are how Flow writes it
+    if kind == Kind::Enum && c.enum_values.iter().any(Option::is_some) {
+        c.fields.retain(|f| f.name != "value");
+        c.methods.retain(|m| m.name != "getValue");
     }
     r.classes.push(c);
     true
@@ -117,10 +131,12 @@ fn member(c: &mut Class, decl: &str, has_body: bool, r: &mut Read) {
         };
         let ty = uml_type(ty, L::Java);
         let is_static = is_static || (interface && mods.contains(&"final"));
-        c.fields.push(field(vis, name, ty.clone(), default, is_static));
+        // final (not static): set once
+        let read_only = mods.contains(&"final") && !is_static;
+        c.fields.push(Field { read_only, ..field(vis, name, ty.clone(), default, is_static) });
         for more in parts {
             let (n, d) = split_default(&more);
-            c.fields.push(field(vis, n.trim(), ty.clone(), d, is_static));
+            c.fields.push(Field { read_only, ..field(vis, n.trim(), ty.clone(), d, is_static) });
         }
     }
 }

@@ -105,7 +105,13 @@ fn class_at(all: &[(usize, String)], i: usize, r: &mut Read) -> usize {
     let is_enum = bases.iter().any(|b| matches!(last(b).as_str(), "Enum" | "IntEnum" | "StrEnum" | "Flag" | "IntFlag"));
     let is_abc = bases.iter().any(|b| matches!(last(b).as_str(), "ABC" | "metaclass=ABCMeta" | "metaclass=abc.ABCMeta") || b.contains("ABCMeta"));
     let is_protocol = bases.iter().any(|b| last(b) == "Protocol");
-    let mut c = class(name, if is_enum { Kind::Enum } else { Kind::Class });
+    // @dataclass(frozen=True) on the line above: a record
+    let frozen = i > 0 && all[i - 1].1.starts_with("@dataclass") && all[i - 1].1.contains("frozen=True");
+    let mut c = class(name, if is_enum { Kind::Enum } else if frozen { Kind::Record } else { Kind::Class });
+    // Generic[T, K]: its type parameters
+    if let Some(g) = bases.iter().find(|b| last(bare(b)) == "Generic") {
+        c.type_params = group(g, '[').map(|x| split_top(x.1, ',')).unwrap_or_default().into_iter().map(|t| t.trim().to_string()).collect();
+    }
     let others: Vec<String> = bases
         .iter()
         .filter(|b| !b.contains('=') && !matches!(last(bare(b)).as_str(), "ABC" | "Protocol" | "object" | "Generic" | "Enum" | "IntEnum" | "StrEnum" | "Flag" | "IntFlag" | "NamedTuple" | "TypedDict"))
@@ -137,6 +143,7 @@ fn class_at(all: &[(usize, String)], i: usize, r: &mut Read) -> usize {
             };
             if super::super::codegen::is_ident(&n) {
                 if is_enum {
+                    c.enum_values.push(enum_value(&n, value.as_deref()));
                     c.values.push(n);
                 } else {
                     let is_static = ty.is_none() || ty.as_deref().is_some_and(|t| t.starts_with("ClassVar"));

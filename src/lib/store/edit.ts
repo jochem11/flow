@@ -340,6 +340,7 @@ export function restoreBoard(doc: FlowDoc) {
     setBoard("callColors", doc.callColors ?? undefined);
     setBoard("diagram", doc.diagram ?? undefined);
     setBoard("codeLanguage", doc.codeLanguage ?? undefined);
+    setBoard("classDetail", doc.classDetail ?? undefined);
     setUi({ selected: [], selectedEdge: null, editingNode: null, editingEdge: null });
   });
   touch();
@@ -383,6 +384,7 @@ export function applyRemoteFlow(nodes: FlowNode[], edges: FlowEdge[], settings: 
     if (settings.callColors !== undefined) setBoard("callColors", settings.callColors || undefined);
     if (settings.diagram !== undefined) setBoard("diagram", settings.diagram);
     if (settings.codeLanguage !== undefined) setBoard("codeLanguage", settings.codeLanguage ?? undefined);
+    if (settings.classDetail !== undefined) setBoard("classDetail", settings.classDetail ?? undefined);
     setBoard("nodes", reconcile(nodes, { key: "id" }));
     setBoard("edges", reconcile(edges, { key: "id" }));
     const ids = new Set(nodes.map((n) => n.id));

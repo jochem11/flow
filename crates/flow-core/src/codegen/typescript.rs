@@ -13,13 +13,13 @@ pub(super) fn typescript(classes: &[Class]) -> String {
         match c.kind {
             Kind::Enum => {
                 s.push_str(&format!("export enum {} {{\n", c.name));
-                for v in &c.values {
-                    s.push_str(&format!("  {} = \"{}\",\n", pascal(v), v));
+                for (i, v) in c.values.iter().enumerate() {
+                    s.push_str(&format!("  {} = {},\n", pascal(v), c.enum_literal(i)));
                 }
             }
             Kind::Interface => {
                 let ext = if c.implements.is_empty() { String::new() } else { format!(" extends {}", c.implements.join(", ")) };
-                s.push_str(&format!("export interface {}{ext} {{\n", c.name));
+                s.push_str(&format!("export interface {}{}{ext} {{\n", c.name, c.generics()));
                 for f in &c.fields {
                     s.push_str(&format!("  {}: {};\n", camel(&f.name), t(&f.ty)));
                 }
@@ -31,7 +31,7 @@ pub(super) fn typescript(classes: &[Class]) -> String {
                 let abs = if c.kind == Kind::Abstract { "abstract " } else { "" };
                 let ext = c.extends.as_ref().map_or(String::new(), |e| format!(" extends {e}"));
                 let imp = if c.implements.is_empty() { String::new() } else { format!(" implements {}", c.implements.join(", ")) };
-                s.push_str(&format!("export {abs}class {}{ext}{imp} {{\n", c.name));
+                s.push_str(&format!("export {abs}class {}{}{ext}{imp} {{\n", c.name, c.generics()));
                 for f in &c.fields {
                     let parsed = parse_ty(&f.ty);
                     let init = match (&f.default, &parsed) {

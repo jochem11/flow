@@ -21,12 +21,12 @@ import {
   type Raw,
   type Vis,
 } from "../lib/classModel";
-import { board, ensureRelation, nodeById, reverseEdge, selectedNodes, setCodeLanguage, setEdgeProps, setNodeText, ui } from "../lib/store";
+import { addNode, board, connect, createNode, ensureRelation, nodeById, reverseEdge, selectedNodes, setClassDetail, setCodeLanguage, setEdgeProps, setNodeText, setUi, ui } from "../lib/store";
 import { relationMeaning } from "../lib/classRelations";
 import { RELATIONS } from "./EdgeMenus";
 import { sameName, type ClassKind } from "../lib/umlClass";
 import { formatClass, missingOperations, withAccessors, withConstructor } from "../lib/classModel";
-import type { CodeLanguage, FlowNode } from "../lib/types";
+import type { ClassDetail, CodeLanguage, FlowNode } from "../lib/types";
 import { LANGUAGES as LANGUAGE_NAMES } from "./CodeDialog";
 import { IconClose, IconPlus } from "./icons";
 import { TypePicker } from "./TypePicker";
@@ -162,6 +162,19 @@ function ClassEditor(p: { id: string }) {
   /** The class made anew from what it is (generating members) */
   const replace = (fn: (m: ClassModel) => ClassModel) => setNodeText(p.id, formatClass(fn(model())));
 
+  /** A UML note to the right of the class, with a dashed line to it; its text is edited straight away */
+  const addNote = () => {
+    const n = node();
+    if (!n) return;
+    // createNode takes the centre: then put its corner 60px right of the class, level with its top
+    const note = { ...createNode("comment", 0, 0), text: "Note" };
+    note.x = n.x + n.w + 60;
+    note.y = n.y;
+    addNode(note);
+    connect(note.id, n.id, { pattern: "dashed", endCap: "none", startCap: "none" });
+    setUi("editingNode", note.id);
+  };
+
   /** Changes the class and writes it back to its text (one undo step). */
   const update = (fn: (m: ClassModel) => void) => {
     const m = structuredClone(model());
@@ -277,6 +290,12 @@ function ClassEditor(p: { id: string }) {
             <label>Package</label>
             <span class="panel-note">{pkg()}</span>
           </Show>
+          <label title="What the classes on this board show (the code always has everything)">Board shows</label>
+          <select class="panel-field" value={board.classDetail ?? "all"} onChange={(e) => setClassDetail(e.currentTarget.value as ClassDetail)}>
+            <option value="all">Everything</option>
+            <option value="public">Public members only</option>
+            <option value="names">Class names only</option>
+          </select>
         </div>
 
         {/* ---------- enum values ---------- */}
@@ -480,6 +499,13 @@ function ClassEditor(p: { id: string }) {
             </div>
           </section>
         </Show>
+        <section class="member-section">
+          <div class="generate-row">
+            <button class="text-btn small" title="A note next to this class, joined to it with a dashed line" onClick={addNote}>
+              Add note
+            </button>
+          </div>
+        </section>
         <p class="panel-hint">What is written here is the class's UML text; double-click a row on the board to type it instead.</p>
       </div>
     </div>

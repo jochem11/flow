@@ -31,6 +31,8 @@ fn type_decl(decl: &str, body: Option<&str>, r: &mut Read) -> bool {
     let (kind, rest) = if let Some(x) = rest.strip_prefix("class ") {
         let kind = if mods.contains(&"enum") {
             Kind::Enum
+        } else if mods.contains(&"data") {
+            Kind::Record
         } else if mods.contains(&"abstract") || mods.contains(&"sealed") {
             Kind::Abstract
         } else {
@@ -44,6 +46,7 @@ fn type_decl(decl: &str, body: Option<&str>, r: &mut Read) -> bool {
     };
     let name = bare(rest);
     let mut c = class(name, kind);
+    c.type_params = type_params_after(rest);
     let mut after = rest[name.len()..].trim_start();
     if after.starts_with('<') {
         after = group(after, '<').map_or(after, |g| g.2).trim_start();
@@ -54,10 +57,15 @@ fn type_decl(decl: &str, body: Option<&str>, r: &mut Read) -> bool {
         if let Some((_, params, rest)) = group(after_kw, '(') {
             for p in split_top(params, ',') {
                 let (pm, p) = modifiers(&p, MODS);
+                // An enum's `val value` is what its values stand for (read below), not a field
+                if kind == Kind::Enum {
+                    continue;
+                }
+                let read_only = p.starts_with("val ") && kind != Kind::Record;
                 if let Some(p) = p.strip_prefix("val ").or_else(|| p.strip_prefix("var ")) {
                     let (decl, default) = split_default(p);
                     if let Some((n, t)) = decl.split_once(':') {
-                        c.fields.push(field(vis_of(&pm, false), n.trim(), uml_type(t, L::Kotlin), default, false));
+                        c.fields.push(Field { read_only, ..field(vis_of(&pm, false), n.trim(), uml_type(t, L::Kotlin), default, false) });
                     }
                 }
             }
@@ -79,7 +87,13 @@ fn type_decl(decl: &str, body: Option<&str>, r: &mut Read) -> bool {
         let mut list = items(body, true);
         if kind == Kind::Enum && !list.is_empty() {
             let first = list.remove(0);
-            c.values = split_top(first.decl().trim_end_matches(';'), ',').iter().map(|v| bare(v).to_string()).filter(|v| !v.is_empty()).collect();
+            for v in split_top(first.decl().trim_end_matches(';'), ',') {
+                let name = bare(&v).to_string();
+                if !name.is_empty() {
+                    c.enum_values.push(enum_value(&name, group(&v, '(').map(|g| g.1)));
+                    c.values.push(name);
+                }
+            }
         }
         for item in list {
             let decl = item.decl();
@@ -95,6 +109,10 @@ fn type_decl(decl: &str, body: Option<&str>, r: &mut Read) -> bool {
                 continue;
             }
             member(&mut c, &decl, false, r);
+        }
+        // `class X : Base` with `constructor(...) : super(...)`: Base is the class it extends
+        if c.extends.is_none() && body.contains(": super(") && !c.implements.is_empty() {
+            c.extends = Some(c.implements.remove(0));
         }
     }
     r.classes.push(c);
@@ -125,6 +143,8 @@ fn member(c: &mut Class, decl: &str, in_companion: bool, r: &mut Read) {
     let (mods, rest) = modifiers(decl, MODS);
     let vis = vis_of(&mods, interface);
     let is_static = in_companion || mods.contains(&"const");
+    // A `val` property: read-only
+    let is_val = rest.starts_with("val ");
     if let Some(rest) = rest.strip_prefix("fun ") {
         let rest = if rest.starts_with('<') { group(rest, '<').map_or(rest, |g| g.2.trim()) } else { rest };
         let Some((name, params, after)) = group(rest, '(') else { return };
@@ -158,6 +178,6 @@ fn member(c: &mut Class, decl: &str, in_companion: bool, r: &mut Read) {
         }
         // `x: T? = null` means "not set yet", not that the diagram allows no value
         let ty = if default.as_deref() == Some("null") { ty.trim_end_matches('?').to_string() } else { ty };
-        c.fields.push(field(vis, &name, ty, default, is_static));
+        c.fields.push(Field { read_only: is_val, ..field(vis, &name, ty, default, is_static) });
     }
 }

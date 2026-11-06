@@ -22,12 +22,21 @@ pub fn read(code: &str) -> Read {
         if let Some(p) = decl.strip_prefix("package ") {
             r.package.get_or_insert(p.trim().to_string());
         } else if let Some(t) = decl.strip_prefix("type ") {
-            let (name, rest) = t.split_once(' ').unwrap_or((t, ""));
+            // `Repository[T any] struct`: the name with its type parameters, then the kind
+            let (name, rest) = match t.find('[') {
+                Some(b) if !t[..b].contains(' ') => match super::scan::group(t, '[') {
+                    Some((_, _, after)) => (&t[..t.len() - after.len()], after),
+                    None => t.split_once(' ').unwrap_or((t, "")),
+                },
+                _ => t.split_once(' ').unwrap_or((t, "")),
+            };
+            let type_params = type_params_after(name);
             let name = bare(name);
             let rest = rest.trim();
             match (rest, &item.body) {
                 ("struct", Some(body)) => {
                     let mut c = class(name, Kind::Class);
+                    c.type_params = type_params.clone();
                     for line in body.lines().flat_map(|l| l.split(';')).map(str::trim).filter(|l| !l.is_empty()) {
                         // Struct tags: `json:"name"`
                         let line = line.split('`').next().unwrap_or(line).trim();

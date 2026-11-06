@@ -52,6 +52,7 @@ fn file(list: &[Item], r: &mut Read, impls: &mut Vec<(String, Option<String>, St
             file(&items(body, false), r, impls);
         } else if let Some(x) = rest.strip_prefix("struct ") {
             let mut c = class(bare(x), Kind::Class);
+            c.type_params = type_params_after(x);
             for f in split_top(body, ',') {
                 let (mods, f) = modifiers(&f, &["pub", "pub(crate)", "pub(super)"]);
                 let Some((n, t)) = f.split_once(':') else { continue };
@@ -66,7 +67,15 @@ fn file(list: &[Item], r: &mut Read, impls: &mut Vec<(String, Option<String>, St
             r.classes.push(c);
         } else if let Some(x) = rest.strip_prefix("enum ") {
             let mut c = class(bare(x), Kind::Enum);
-            c.values = split_top(body, ',').iter().map(|v| Item { head: v.clone(), body: None, tail: String::new() }.decl()).map(|v| bare(&v).to_string()).filter(|v| !v.is_empty()).collect();
+            for v in split_top(body, ',') {
+                let v = Item { head: v.clone(), body: None, tail: String::new() }.decl();
+                let name = bare(&v).to_string();
+                if !name.is_empty() {
+                    // `Paid = 2`: what it stands for
+                    c.enum_values.push(enum_value(&name, v.split_once('=').map(|x| x.1)));
+                    c.values.push(name);
+                }
+            }
             r.classes.push(c);
         } else if let Some(x) = rest.strip_prefix("trait ") {
             let mut c = class(bare(x), Kind::Interface);

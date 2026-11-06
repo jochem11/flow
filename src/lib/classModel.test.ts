@@ -81,3 +81,12 @@ describe("generating members", () => {
     expect(missingOperations(circle, [shape, drawable]).map((o) => `${o.name}:${o.abstract}`)).toEqual(["area:false", "draw:false"]);
   });
 });
+
+describe("level of detail (as row_shown in read.rs)", () => {
+  it("public members only, or names only", async () => {
+    const { rowShown } = await import("./classModel");
+    expect([rowShown(1, "class", "- id: int", "public"), rowShown(1, "class", "+ name: string", "public"), rowShown(1, "class", "id: int", "public")]).toEqual([false, true, false]);
+    expect([rowShown(2, "class", "- check()", "public"), rowShown(2, "class", "total(): int", "public")]).toEqual([false, true]);
+    expect([rowShown(1, "enum", "Paid", "public"), rowShown(1, "class", "+ name: string", "names"), rowShown(0, "class", "Order", "names")]).toEqual([true, false, true]);
+  });
+});

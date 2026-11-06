@@ -22,6 +22,7 @@ fn file(list: &[Item], r: &mut Read) {
         } else if let Some(rest) = rest.strip_prefix("class ") {
             let kind = if mods.contains(&"abstract") { Kind::Abstract } else { Kind::Class };
             let mut c = class(bare(rest), kind);
+            c.type_params = type_params_after(rest);
             let (ext, imp) = supers(rest);
             c.extends = ext.first().cloned();
             c.implements = imp;
@@ -29,12 +30,20 @@ fn file(list: &[Item], r: &mut Read) {
             r.classes.push(c);
         } else if let Some(rest) = rest.strip_prefix("interface ") {
             let mut c = class(bare(rest), Kind::Interface);
+            c.type_params = type_params_after(rest);
             c.implements = supers(rest).0;
             members(&mut c, body, r);
             r.classes.push(c);
         } else if let Some(rest) = rest.strip_prefix("enum ").or_else(|| rest.strip_prefix("const enum ")) {
             let mut c = class(bare(rest), Kind::Enum);
-            c.values = split_top(body, ',').iter().map(|v| v.split('=').next().unwrap_or("").trim().trim_matches('"').to_string()).filter(|v| !v.is_empty()).collect();
+            for v in split_top(body, ',') {
+                let (name, value) = v.split_once('=').map_or((v.as_str(), None), |(n, x)| (n, Some(x)));
+                let name = name.trim().trim_matches('"').to_string();
+                if !name.is_empty() {
+                    c.enum_values.push(enum_value(&name, value));
+                    c.values.push(name);
+                }
+            }
             r.classes.push(c);
         }
     }
@@ -97,7 +106,7 @@ fn members(c: &mut Class, body: &str, r: &mut Read) {
                 r.skipped.push(format!("{}: could not read `{decl}`", c.name));
                 continue;
             }
-            c.fields.push(field(vis, &name, ty, default, is_static));
+            c.fields.push(Field { read_only: mods.contains(&"readonly"), ..field(vis, &name, ty, default, is_static) });
         }
     }
 }

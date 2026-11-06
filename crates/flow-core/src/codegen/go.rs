@@ -39,7 +39,7 @@ pub(super) fn go(classes: &[Class]) -> String {
                     format!("*{i}")
                 }
             }
-            Ty::Generic(base, _) => pascal(base),
+            Ty::Generic(base, args) => format!("{}[{}]", pascal(base), args.iter().map(|a| go_ty(a, structs)).collect::<Vec<_>>().join(", ")),
         }
     }
     let t = |s: &str| go_ty(&parse_ty(s), &structs);
@@ -62,21 +62,30 @@ pub(super) fn go(classes: &[Class]) -> String {
         }
     };
 
+    // Generic types: declared with their type parameters (`[T any]`), used with them (`[T]`)
+    let decl = |c: &Class| if c.type_params.is_empty() { String::new() } else { format!("[{}]", c.type_params.iter().map(|t| format!("{t} any")).collect::<Vec<_>>().join(", ")) };
+    let used = |c: &Class| if c.type_params.is_empty() { String::new() } else { format!("[{}]", c.type_params.join(", ")) };
     let mut body = String::new();
     for c in classes {
         let recv = c.name.chars().next().map_or("x".into(), |ch| ch.to_lowercase().to_string());
         match c.kind {
             Kind::Enum => {
-                body.push_str(&format!("\ntype {} int\n\nconst (\n", c.name));
+                // Values that stand for text: a string type; else numbers (counting up, or as given)
+                let base = if c.enum_numbers() == Some(false) { "string" } else { "int" };
+                body.push_str(&format!("\ntype {} {base}\n\nconst (\n", c.name));
                 for (i, v) in c.values.iter().enumerate() {
-                    let tail = if i == 0 { format!(" {} = iota", c.name) } else { String::new() };
+                    let tail = match c.enum_numbers() {
+                        Some(_) => format!(" {} = {}", c.name, c.enum_literal(i)),
+                        None if i == 0 => format!(" {} = iota", c.name),
+                        None => String::new(),
+                    };
                     body.push_str(&format!("\t{}{}{tail}\n", c.name, pascal(v)));
                 }
                 body.push_str(&unreadable(c, "//", "\t"));
                 body.push_str(")\n");
             }
             Kind::Interface => {
-                body.push_str(&format!("\ntype {} interface {{\n", c.name));
+                body.push_str(&format!("\ntype {}{} interface {{\n", c.name, decl(c)));
                 for i in &c.implements {
                     body.push_str(&format!("\t{i}\n"));
                 }
@@ -90,7 +99,7 @@ pub(super) fn go(classes: &[Class]) -> String {
                 if c.kind == Kind::Abstract {
                     body.push_str(&format!("\n// {} is abstract in the diagram: embed it, and implement its abstract methods there.", c.name));
                 }
-                body.push_str(&format!("\ntype {} struct {{\n", c.name));
+                body.push_str(&format!("\ntype {}{} struct {{\n", c.name, decl(c)));
                 // Inheritance: the supertype is embedded, so its fields and methods come along
                 if let Some(e) = &c.extends {
                     body.push_str(&format!("\t{e}\n"));
@@ -128,17 +137,21 @@ pub(super) fn go(classes: &[Class]) -> String {
                         }
                     }
                     body.push_str(&format!(
-                        "\n// New{n} makes {a} {n}.\nfunc New{n}({}) *{n} {{\n\treturn &{n}{{{}}}\n}}\n",
+                        "\n// New{n} makes {a} {n}.\nfunc New{n}{d}({}) *{n}{u} {{\n\treturn &{n}{u}{{{}}}\n}}\n",
                         params(m),
                         values.join(", "),
                         n = c.name,
-                        a = if c.name.starts_with(['A', 'E', 'I', 'O', 'U']) { "an" } else { "a" }
+                        a = if c.name.starts_with(['A', 'E', 'I', 'O', 'U']) { "an" } else { "a" },
+                        d = decl(c),
+                        u = used(c)
                     ));
                 } else if !defaults.is_empty() {
                     body.push_str(&format!(
-                        "\n// New{n} makes a {n} with the default values from the diagram.\nfunc New{n}() *{n} {{\n\treturn &{n}{{{}}}\n}}\n",
+                        "\n// New{n} makes a {n} with the default values from the diagram.\nfunc New{n}{d}() *{n}{u} {{\n\treturn &{n}{u}{{{}}}\n}}\n",
                         defaults.join(", "),
-                        n = c.name
+                        n = c.name,
+                        d = decl(c),
+                        u = used(c)
                     ));
                 }
 
@@ -162,7 +175,7 @@ pub(super) fn go(classes: &[Class]) -> String {
                         let fname = go_name(&format!("{}_{}", c.name, m.name), method_vis(m) == Vis::Public);
                         body.push_str(&format!("\nfunc {fname}({}){} {{\n\t{code}\n}}\n", params(m), ret(m, c)));
                     } else {
-                        body.push_str(&format!("\nfunc ({recv} *{}) {name}({}){} {{\n\t{code}\n}}\n", c.name, params(m), ret(m, c)));
+                        body.push_str(&format!("\nfunc ({recv} *{}{}) {name}({}){} {{\n\t{code}\n}}\n", c.name, used(c), params(m), ret(m, c)));
                     }
                 }
 

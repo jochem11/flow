@@ -39,8 +39,18 @@ pub(super) fn kotlin(classes: &[Class]) -> String {
     for c in classes {
         s.push('\n');
         if c.kind == Kind::Enum {
-            let values: Vec<String> = c.values.iter().map(|v| snake(v).to_uppercase()).collect();
-            s.push_str(&format!("enum class {} {{\n    {},\n{}}}\n", c.name, values.join(",\n    "), unreadable(c, "//", "    ")));
+            match c.enum_numbers() {
+                None => {
+                    let values: Vec<String> = c.values.iter().map(|v| snake(v).to_uppercase()).collect();
+                    s.push_str(&format!("enum class {} {{\n    {},\n{}}}\n", c.name, values.join(",\n    "), unreadable(c, "//", "    ")));
+                }
+                // Values that stand for something: a property
+                Some(numbers) => {
+                    let ty = if numbers { "Int" } else { "String" };
+                    let values: Vec<String> = c.values.iter().enumerate().map(|(i, v)| format!("{}({})", snake(v).to_uppercase(), c.enum_literal(i))).collect();
+                    s.push_str(&format!("enum class {}(val value: {ty}) {{\n    {},\n{}}}\n", c.name, values.join(",\n    "), unreadable(c, "//", "    ")));
+                }
+            }
             continue;
         }
         let over = inherited(classes, c);
@@ -52,8 +62,8 @@ pub(super) fn kotlin(classes: &[Class]) -> String {
         let bases = if bases.is_empty() { String::new() } else { format!(" : {}", bases.join(", ")) };
         let open = supers.contains(&c.name) && c.kind == Kind::Class;
         let head = match c.kind {
-            Kind::Interface => format!("interface {}", c.name),
-            Kind::Abstract => format!("abstract class {}", c.name),
+            Kind::Interface => format!("interface {}{}", c.name, c.generics()),
+            Kind::Abstract => format!("abstract class {}{}", c.name, c.generics()),
             // A record: a data class with its attributes as `val`s in its constructor
             Kind::Record => {
                 let props: Vec<String> = c
@@ -66,10 +76,10 @@ pub(super) fn kotlin(classes: &[Class]) -> String {
                         format!("val {}: {ft}{init}", camel(&f.name))
                     })
                     .collect();
-                format!("data class {}({})", c.name, props.join(", "))
+                format!("data class {}{}({})", c.name, c.generics(), props.join(", "))
             }
-            _ if open => format!("open class {}", c.name),
-            _ => format!("class {}", c.name),
+            _ if open => format!("open class {}{}", c.name, c.generics()),
+            _ => format!("class {}{}", c.name, c.generics()),
         };
         s.push_str(&format!("{head}{bases} {{\n"));
         let mut field_types: HashMap<String, String> = HashMap::new();

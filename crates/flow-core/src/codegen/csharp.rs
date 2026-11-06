@@ -12,8 +12,13 @@ pub(super) fn csharp(classes: &[Class]) -> String {
         s.push('\n');
         if c.kind == Kind::Enum {
             s.push_str(&format!("public enum {}\n{{\n", c.name));
-            for v in &c.values {
-                s.push_str(&format!("    {},\n", pascal(v)));
+            for (i, v) in c.values.iter().enumerate() {
+                match (c.enum_numbers(), c.enum_value(i)) {
+                    (Some(true), _) => s.push_str(&format!("    {} = {},\n", pascal(v), c.enum_literal(i))),
+                    // A C# enum holds numbers only
+                    (Some(false), Some(text)) => s.push_str(&format!("    {}, // {text}\n", pascal(v))),
+                    _ => s.push_str(&format!("    {},\n", pascal(v))),
+                }
             }
             s.push_str(&unreadable(c, "//", "    "));
             s.push_str("}\n");
@@ -34,7 +39,7 @@ pub(super) fn csharp(classes: &[Class]) -> String {
         } else {
             String::new()
         };
-        s.push_str(&format!("{head} {}{comps}{bases}\n{{\n", c.name));
+        s.push_str(&format!("{head} {}{}{comps}{bases}\n{{\n", c.name, c.generics()));
         // Methods that a base class (not an interface) already has
         let base_methods: BTreeSet<String> = c
             .extends

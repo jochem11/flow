@@ -56,25 +56,39 @@ pub(super) fn java(c: &Class, classes: &[Class]) -> String {
     let head = match c.kind {
         Kind::Interface => {
             let ext = if c.implements.is_empty() { String::new() } else { format!(" extends {}", c.implements.join(", ")) };
-            format!("public interface {}{ext}", c.name)
+            format!("public interface {}{}{ext}", c.name, c.generics())
         }
         Kind::Enum => format!("public enum {}", c.name),
         // Its attributes are its components; a record cannot extend a class
         Kind::Record => {
             let comps: Vec<String> = c.fields.iter().filter(|f| !f.is_static).map(|f| format!("{} {}", java_ty(&f.ty, &mut imports), camel(&f.name))).collect();
             let imp = if c.implements.is_empty() { String::new() } else { format!(" implements {}", c.implements.join(", ")) };
-            format!("public record {}({}){imp}", c.name, comps.join(", "))
+            format!("public record {}{}({}){imp}", c.name, c.generics(), comps.join(", "))
         }
         _ => {
             let abs = if c.kind == Kind::Abstract { "abstract " } else { "" };
             let ext = c.extends.as_ref().map_or(String::new(), |e| format!(" extends {e}"));
             let imp = if c.implements.is_empty() { String::new() } else { format!(" implements {}", c.implements.join(", ")) };
-            format!("public {abs}class {}{ext}{imp}", c.name)
+            format!("public {abs}class {}{}{ext}{imp}", c.name, c.generics())
         }
     };
     if c.kind == Kind::Enum {
-        let values: Vec<String> = c.values.iter().map(|v| snake(v).to_uppercase()).collect();
-        body.push_str(&format!("    {}\n", values.join(",\n    ")));
+        match c.enum_numbers() {
+            None => {
+                let values: Vec<String> = c.values.iter().map(|v| snake(v).to_uppercase()).collect();
+                body.push_str(&format!("    {}\n", values.join(",\n    ")));
+            }
+            // Values that stand for something: a field, set by the constructor
+            Some(numbers) => {
+                let ty = if numbers { "int" } else { "String" };
+                let values: Vec<String> = c.values.iter().enumerate().map(|(i, v)| format!("{}({})", snake(v).to_uppercase(), c.enum_literal(i))).collect();
+                body.push_str(&format!(
+                    "    {};\n\n    private final {ty} value;\n\n    {}({ty} value) {{\n        this.value = value;\n    }}\n\n    public {ty} getValue() {{\n        return value;\n    }}\n",
+                    values.join(",\n    "),
+                    c.name
+                ));
+            }
+        }
     }
     // Attributes a constructor sets
     let set_by_constructor: BTreeSet<&str> = c
