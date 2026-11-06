@@ -43,6 +43,7 @@ export const SIZES: Record<NodeKind, { w: number; h: number }> = {
   icon: { w: 60, h: 60 },
   chart: { w: 320, h: 200 },
   topic: { w: 160, h: 48 },
+  callout: { w: 220, h: 80 },
 };
 
 /** Smallest size when resizing. Bars and activations are thin on purpose. */
@@ -62,6 +63,8 @@ const NO_TEXT: NodeKind[] = ["start", "end", "bar", "flowfinal", "activation", "
 export const isContainer = (kind: NodeKind) => CONTAINERS.includes(kind);
 /** Can have arrows to and from it. */
 export const isConnectable = (kind: NodeKind) => !isContainer(kind) && kind !== "label" && kind !== "note";
+/** Can be the block the diagram is about (focal): what is read, not frames or decoration */
+export const canBeFocal = (kind: NodeKind) => !isContainer(kind) && !["label", "note", "callout", "comment", "pin", "image", "icon", "chart"].includes(kind);
 export const hasText = (kind: NodeKind) => !NO_TEXT.includes(kind);
 export const isResizable = (kind: NodeKind) => kind !== "start" && kind !== "end" && kind !== "pin";
 
@@ -97,6 +100,7 @@ const DEFAULT_COLOR: Record<NodeKind, NodeColor> = {
   icon: "white",
   chart: "white",
   topic: "white",
+  callout: "white",
 };
 
 /** Text a new node starts with, so it shows how the shape is meant to be filled in. */

@@ -29,6 +29,20 @@ pub struct FlowDoc {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     #[specta(optional)]
     pub class_detail: Option<ClassDetail>,
+    /// How the board is drawn: clean, or as a sketch (hand-drawn lines and type).
+    /// Missing means clean.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[specta(optional)]
+    pub look: Option<BoardLook>,
+}
+
+/// How a board is drawn.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, Type)]
+#[serde(rename_all = "camelCase")]
+pub enum BoardLook {
+    Clean,
+    /// Wobbly outlines and lines, a handwriting typeface: for ideas, not final
+    Sketch,
 }
 
 /// How much of each class a class diagram shows (the code export always has all).
@@ -128,6 +142,8 @@ pub enum NodeKind {
     Chart,
     /// A mind map topic: joined to its subtopics, laid out as a tree to the right
     Topic,
+    /// An editorial note beside the diagram: text with an accent bar, joined by a thin line to what it is about
+    Callout,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, Type)]
@@ -184,6 +200,11 @@ pub struct Node {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     #[specta(optional)]
     pub person: Option<bool>,
+    /// The block the diagram is about: drawn heavier, in the project's accent color.
+    /// One or two per board at most, or nothing stands out.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[specta(optional)]
+    pub focal: Option<bool>,
 }
 
 /// A chart board on another board.
@@ -396,6 +417,8 @@ pub struct Arranged {
 pub enum ExportFormat {
     Svg,
     Png,
+    /// A one-page PDF of the drawing (vector, with selectable text)
+    Pdf,
     Mermaid,
     /// SQL from an EER diagram, for one of these databases
     Postgres,

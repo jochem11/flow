@@ -6,9 +6,9 @@
 
 use std::collections::HashMap;
 
-use super::flow_svg::to_svg;
+use super::flow_svg::to_svg_with;
 use super::{codegen, eer, mermaid};
-use crate::models::{
+use crate::models::{Brand, 
     CodeLanguage, DocContent, Document, ExportFormat, FlowDoc, Node, NodeKind, SqlDialect,
 };
 
@@ -25,6 +25,11 @@ pub struct ExportFile {
 /// The files for `doc` in `format`: one, or for Java one per class (to keep
 /// together in a folder named after the document).
 pub fn export(doc: &Document, format: ExportFormat) -> Result<Vec<ExportFile>, String> {
+    export_with(doc, format, None)
+}
+
+/// As `export`, in the look of the project the document is in (its brand).
+pub fn export_with(doc: &Document, format: ExportFormat, brand: Option<&Brand>) -> Result<Vec<ExportFile>, String> {
     let named = |ext: &str, bytes: Vec<u8>| {
         vec![ExportFile {
             name: format!("{}.{ext}", safe_file_name(&doc.name)),
@@ -48,7 +53,8 @@ pub fn export(doc: &Document, format: ExportFormat) -> Result<Vec<ExportFile>, S
         return Ok(match format {
             ExportFormat::Svg => named("svg", svg.as_bytes().to_vec()),
             ExportFormat::Png => named("png", svg_to_png(svg)?),
-            _ => return Err("a chart can be exported as SVG or PNG".into()),
+            ExportFormat::Pdf => named("pdf", svg_to_pdf(svg)?),
+            _ => return Err("a chart can be exported as SVG, PNG or PDF".into()),
         });
     }
 
@@ -85,8 +91,9 @@ pub fn export(doc: &Document, format: ExportFormat) -> Result<Vec<ExportFile>, S
                 _ => named("md", mermaid::markdown(&doc.name, &blocks).into_bytes()),
             }
         }
-        ExportFormat::Svg => named("svg", to_svg(flow()?).into_bytes()),
-        ExportFormat::Png => named("png", to_png(flow()?)?),
+        ExportFormat::Svg => named("svg", to_svg_with(flow()?, brand).into_bytes()),
+        ExportFormat::Png => named("png", svg_to_png(&to_svg_with(flow()?, brand))?),
+        ExportFormat::Pdf => named("pdf", svg_to_pdf(&to_svg_with(flow()?, brand))?),
         ExportFormat::Postgres => sql(SqlDialect::Postgres)?,
         ExportFormat::Mysql => sql(SqlDialect::Mysql)?,
         ExportFormat::Sqlite => sql(SqlDialect::Sqlite)?,
@@ -149,6 +156,7 @@ pub fn to_mermaid(flow: &FlowDoc) -> String {
             NodeKind::Note
             | NodeKind::Label
             | NodeKind::Comment
+            | NodeKind::Callout
             | NodeKind::Section
             | NodeKind::Lanes
             | NodeKind::Boundary
@@ -241,47 +249,67 @@ pub(crate) fn bezier_point([p0, p1, p2, p3]: [(f64, f64); 4], t: f64) -> (f64, f
 /// Render at 2x so the image is sharp on high-DPI screens.
 const PNG_SCALE: f32 = 2.0;
 
-fn to_png(flow: &FlowDoc) -> Result<Vec<u8>, String> {
-    svg_to_png(&to_svg(flow))
+/// Points the generic families (`sans-serif`, `serif`, `monospace`, `cursive`) at
+/// the first font this computer has: they mean Arial, Times New Roman and Courier
+/// New unless told otherwise, and a Linux server often has none of them (the
+/// Docker image has DejaVu), so all text would be left out.
+macro_rules! pick_fonts {
+    ($db:expr) => {{
+        let db = $db;
+        db.load_system_fonts();
+        // First what there is, then set it (the lookups borrow the database)
+        let (sans, serif, mono, hand) = {
+            let has = |name: &str| db.faces().any(|f| f.families.iter().any(|(n, _)| n == name));
+            let first = |names: &[&'static str]| names.iter().copied().find(|n| has(n));
+            let sans = first(&["Helvetica Neue", "Helvetica", "Arial", "DejaVu Sans", "Liberation Sans", "Noto Sans"]);
+            let serif = first(&["Georgia", "Times New Roman", "DejaVu Serif", "Liberation Serif", "Noto Serif"]);
+            let mono = first(&["Menlo", "Consolas", "Courier New", "DejaVu Sans Mono", "Liberation Mono", "Noto Sans Mono"]);
+            // A sketch's handwriting, else the plain typeface
+            let hand = first(&["Bradley Hand", "Chalkboard SE", "Segoe Print", "Comic Sans MS", "Comic Neue"]).or(sans);
+            (sans, serif, mono, hand)
+        };
+        if let Some(f) = sans {
+            db.set_sans_serif_family(f);
+        }
+        if let Some(f) = serif {
+            db.set_serif_family(f);
+        }
+        if let Some(f) = mono {
+            db.set_monospace_family(f);
+        }
+        if let Some(f) = hand {
+            db.set_cursive_family(f);
+        }
+    }};
 }
 
 /// An SVG drawing as a PNG, at twice its size.
-fn svg_to_png(svg: &str) -> Result<Vec<u8>, String> {
-
-    // Without fonts all text disappears, so load the system fonts.
+pub(crate) fn svg_to_png(svg: &str) -> Result<Vec<u8>, String> {
     let mut opt = resvg::usvg::Options::default();
-    let db = opt.fontdb_mut();
-    db.load_system_fonts();
-    // "sans-serif" and "monospace" mean Arial and Courier New unless told otherwise,
-    // and a Linux server often has neither (the Docker image has DejaVu): then all
-    // text is left out. Point them at the first font this computer has.
-    let has = |db: &resvg::usvg::fontdb::Database, name: &str| db.faces().any(|f| f.families.iter().any(|(n, _)| n == name));
-    let sans = ["Helvetica Neue", "Helvetica", "Arial", "DejaVu Sans", "Liberation Sans", "Noto Sans"];
-    if let Some(family) = sans.into_iter().find(|n| has(db, n)) {
-        db.set_sans_serif_family(family);
-    }
-    let mono = ["Menlo", "Consolas", "Courier New", "DejaVu Sans Mono", "Liberation Mono", "Noto Sans Mono"];
-    if let Some(family) = mono.into_iter().find(|n| has(db, n)) {
-        db.set_monospace_family(family);
-    }
+    pick_fonts!(opt.fontdb_mut());
+    let tree = resvg::usvg::Tree::from_str(svg, &opt).map_err(|e| format!("cannot parse SVG: {e}"))?;
+    let size = tree.size().to_int_size().scale_by(PNG_SCALE).ok_or("image too large")?;
+    let mut pixmap = resvg::tiny_skia::Pixmap::new(size.width(), size.height()).ok_or("cannot create image")?;
+    resvg::render(&tree, resvg::tiny_skia::Transform::from_scale(PNG_SCALE, PNG_SCALE), &mut pixmap.as_mut());
+    pixmap.encode_png().map_err(|e| format!("cannot encode PNG: {e}"))
+}
 
-    let tree =
-        resvg::usvg::Tree::from_str(&svg, &opt).map_err(|e| format!("cannot parse SVG: {e}"))?;
-    let size = tree
-        .size()
-        .to_int_size()
-        .scale_by(PNG_SCALE)
-        .ok_or("image too large")?;
-    let mut pixmap =
-        resvg::tiny_skia::Pixmap::new(size.width(), size.height()).ok_or("cannot create image")?;
-    resvg::render(
-        &tree,
-        resvg::tiny_skia::Transform::from_scale(PNG_SCALE, PNG_SCALE),
-        &mut pixmap.as_mut(),
-    );
-    pixmap
-        .encode_png()
-        .map_err(|e| format!("cannot encode PNG: {e}"))
+/// An SVG drawing as a one-page PDF, the page the drawing's size. Lines and text
+/// stay vector (the text can be selected and searched).
+pub(crate) fn svg_to_pdf(svg: &str) -> Result<Vec<u8>, String> {
+    use krilla_svg::{SurfaceExt, SvgSettings};
+    let mut opt = usvg47::Options::default();
+    pick_fonts!(opt.fontdb_mut());
+    let tree = usvg47::Tree::from_str(svg, &opt).map_err(|e| format!("cannot parse SVG: {e}"))?;
+    let (w, h) = (tree.size().width(), tree.size().height());
+    let size = krilla::geom::Size::from_wh(w, h).ok_or("the drawing has no size")?;
+    let mut doc = krilla::Document::new();
+    let mut page = doc.start_page_with(krilla::page::PageSettings::new(size));
+    let mut surface = page.surface();
+    surface.draw_svg(&tree, size, SvgSettings::default()).ok_or("cannot draw the drawing")?;
+    surface.finish();
+    page.finish();
+    doc.finish().map_err(|e| format!("cannot write PDF: {e:?}"))
 }
 
 // ===========================================================================
@@ -291,6 +319,11 @@ fn svg_to_png(svg: &str) -> Result<Vec<u8>, String> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::flow_svg::to_svg;
+
+    fn to_png(flow: &FlowDoc) -> Result<Vec<u8>, String> {
+        svg_to_png(&to_svg(flow))
+    }
 
     /// A chart exports the drawing it keeps; it says so when there is none yet.
     #[test]
@@ -332,6 +365,7 @@ mod tests {
             icon: None,
             chart: None,
             person: None,
+            focal: None,
         }
     }
 
@@ -396,6 +430,35 @@ mod tests {
         assert!(svg.contains("&quot;really&quot;"));
         let png = to_png(&flow()).unwrap();
         assert_eq!(&png[1..4], b"PNG");
+    }
+
+    /// A PDF of the drawing, and of a chart's; the brand and the board's look in the drawing.
+    #[test]
+    fn pdf_and_looks() {
+        let doc = |content: DocContent| Document { id: "d".into(), project_id: "p".into(), folder_id: None, order: 1.0, name: "Board".into(), content, updated_at: None };
+        let files = export(&doc(DocContent::Flow(flow())), ExportFormat::Pdf).unwrap();
+        assert_eq!(files[0].name, "Board.pdf");
+        assert!(files[0].bytes.starts_with(b"%PDF"));
+
+        let mut f = flow();
+        f.nodes[0].focal = Some(true);
+        f.nodes.push(Node { kind: NodeKind::Callout, text: "Why this matters".into(), ..f.nodes[0].clone() });
+        f.nodes.last_mut().unwrap().focal = None;
+        f.look = Some(crate::models::BoardLook::Sketch);
+        let brand = Brand { accent: Some("#e34948".into()), font: Some(crate::models::BrandFont::Serif) };
+        let svg = crate::flow_svg::to_svg_with(&f, Some(&brand));
+        // The focal block in the accent, heavier; the callout's bar in the accent
+        assert!(svg.contains(r##"stroke="#e34948" stroke-width="3""##), "{svg}");
+        assert!(svg.contains(r#"width="4""#) && svg.contains(r##"fill="#e34948""##));
+        // A sketch: wobbly shapes, handwriting (it wins over the brand's typeface)
+        assert!(svg.contains(r#"<filter id="rough""#) && svg.contains(r#"filter="url(#rough)""#));
+        assert!(svg.contains("Bradley Hand"));
+        // A color that is not one is not written into the drawing
+        let bad = Brand { accent: Some("red\" onload=\"x".into()), font: None };
+        f.look = None;
+        let svg = crate::flow_svg::to_svg_with(&f, Some(&bad));
+        assert!(!svg.contains("onload") && svg.contains("#5b4cf0"));
+        assert!(svg_to_pdf(&svg).unwrap().starts_with(b"%PDF"));
     }
 
     #[test]

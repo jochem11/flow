@@ -11,7 +11,7 @@ import { del, get, post } from "../lib/server";
 import { toast } from "../lib/toast";
 import type { DocContent, Template, TemplateMeta } from "../lib/types";
 import { changeBoardType, createDocument, openDoc, saveNow } from "../lib/workspace";
-import { board } from "../lib/store";
+import { board, setLook } from "../lib/store";
 import { BOARD_TYPES, boardTypeOf, PICKER_GROUPS, type BoardType } from "../lib/boardTypes";
 import { BUILT_IN } from "../templates";
 import { ConfirmButton } from "./ConfirmButton";
@@ -283,6 +283,26 @@ export function BoardMenu() {
               >
                 Save as template…
               </button>
+            </Show>
+            {/* How a flow board is drawn: clean, or as a sketch */}
+            <Show when={doc()?.kind === "flow" && canEdit()}>
+              <div class="menu-sep" />
+              <div class="menu-title">Look</div>
+              <For each={[{ id: "clean", label: "Clean", hint: "Final" }, { id: "sketch", label: "Sketch", hint: "Hand-drawn, for ideas" }] as const}>
+                {(l) => (
+                  <button
+                    class="menu-item"
+                    classList={{ checked: (board.look ?? "clean") === l.id }}
+                    onClick={() => {
+                      close();
+                      setLook(l.id);
+                    }}
+                  >
+                    <span>{l.label}</span>
+                    <small>{(board.look ?? "clean") === l.id ? "current" : l.hint}</small>
+                  </button>
+                )}
+              </For>
             </Show>
             {/* A flow board's type: what it offers (its blocks stay) */}
             <Show when={doc()?.kind === "flow" && canEdit()}>

@@ -10,7 +10,7 @@ use axum::http::{HeaderValue, header};
 use axum::response::{IntoResponse, Response};
 use axum::routing::post;
 use flow_core::flow::{self, ExportFile, safe_file_name};
-use flow_core::models::{Arranged, CodeFile, CodeImport, CodeLanguage, DiagramImport, Document, Edge, EerDoc, ExportFormat, FlowDoc, Node, SqlDialect, SqlImport};
+use flow_core::models::{Arranged, Brand, CodeFile, CodeImport, CodeLanguage, DiagramImport, Document, Edge, EerDoc, ExportFormat, FlowDoc, Node, SqlDialect, SqlImport};
 use flow_core::{arrange, code_import, codegen, dbml, eer, import, mermaid, sql_import};
 use serde::Deserialize;
 
@@ -54,12 +54,16 @@ async fn layout(caller: Caller, Json(l): Json<Layout>) -> ApiResult<Json<Arrange
 struct Export {
     doc: Document,
     format: ExportFormat,
+    /// The look of the project the document is in
+    #[serde(default)]
+    brand: Option<Brand>,
 }
 
 fn content_type(name: &str) -> &'static str {
     match name.rsplit('.').next().unwrap_or("") {
         "svg" => "image/svg+xml",
         "png" => "image/png",
+        "pdf" => "application/pdf",
         "zip" => "application/zip",
         "md" => "text/markdown; charset=utf-8",
         _ => "text/plain; charset=utf-8",
@@ -69,7 +73,7 @@ fn content_type(name: &str) -> &'static str {
 /// The export as a download: the file, or (several, as for Java) a zip of them.
 async fn export(caller: Caller, Json(e): Json<Export>) -> ApiResult<Response> {
     allowed(&caller)?;
-    let mut files = flow::export(&e.doc, e.format)?;
+    let mut files = flow::export_with(&e.doc, e.format, e.brand.as_ref())?;
     let file = if files.len() == 1 {
         files.remove(0)
     } else {

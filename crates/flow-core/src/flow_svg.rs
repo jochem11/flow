@@ -9,7 +9,7 @@
 use std::collections::HashMap;
 
 use crate::models::{
-    ClassDetail, CodeLanguage,
+    BoardLook, Brand, BrandFont, ClassDetail, CodeLanguage,
     Edge, EdgeCap, EdgeStyle, FlowDoc, LabelSide, LinePattern, Node, NodeColor, NodeKind, Point,
 };
 
@@ -60,7 +60,54 @@ fn is_frame(kind: NodeKind) -> bool {
     )
 }
 
+/// How a drawing looks: the project's accent and typeface (its brand), and the
+/// board's look (clean or a sketch). As the canvas has them (styles.css).
+pub struct Look {
+    accent: String,
+    font: &'static str,
+    sketch: bool,
+}
+
+const ACCENT: &str = "#5b4cf0";
+/// Handwriting, for a sketch: what the system has
+const SKETCH_FONT: &str = "'Segoe Print', 'Bradley Hand', 'Chalkboard SE', 'Comic Sans MS', 'Comic Neue', cursive";
+
+impl Look {
+    pub fn new(flow: &FlowDoc, brand: Option<&Brand>) -> Self {
+        let sketch = flow.look == Some(BoardLook::Sketch);
+        let font = match brand.and_then(|b| b.font) {
+            _ if sketch => SKETCH_FONT,
+            Some(BrandFont::Serif) => "Georgia, 'Times New Roman', serif",
+            Some(BrandFont::Mono) => MONO,
+            Some(BrandFont::Rounded) => "ui-rounded, 'SF Pro Rounded', Nunito, 'Varela Round', sans-serif",
+            _ => FONT,
+        };
+        let accent = brand.and_then(Brand::accent_color).unwrap_or(ACCENT).to_string();
+        Self { accent, font, sketch }
+    }
+    /// What a shape gets in a sketch: wobbly outlines (the filter is in the SVG's defs)
+    fn rough(&self) -> &'static str {
+        if self.sketch { r#" filter="url(#rough)""# } else { "" }
+    }
+}
+
+/// The wobble of a sketch: the outline pushed about by a little noise. Its region
+/// is the whole drawing: one relative to a shape would cut away a straight line,
+/// whose box has no width.
+fn rough_defs(x: f64, y: f64, w: f64, h: f64) -> String {
+    format!(
+        r#"<defs><filter id="rough" filterUnits="userSpaceOnUse" x="{x}" y="{y}" width="{w}" height="{h}"><feTurbulence type="fractalNoise" baseFrequency="0.03" numOctaves="2" seed="7"/><feDisplacementMap in="SourceGraphic" scale="2.4"/></filter></defs>
+"#
+    )
+}
+
 pub fn to_svg(flow: &FlowDoc) -> String {
+    to_svg_with(flow, None)
+}
+
+/// The drawing in the project's look.
+pub fn to_svg_with(flow: &FlowDoc, brand: Option<&Brand>) -> String {
+    let look = Look::new(flow, brand);
     // Bounding box of all nodes (a package tab sticks out above) and free line ends, plus padding.
     let boxes = flow.nodes.iter().map(|n| {
         let top = if n.kind == NodeKind::Package { n.y - 28.0 } else { n.y };
@@ -97,6 +144,9 @@ pub fn to_svg(flow: &FlowDoc) -> String {
 <rect x="{min_x}" y="{min_y}" width="{w}" height="{h}" fill="{BG}"/>
 "##
     );
+    if look.sketch {
+        s.push_str(&rough_defs(min_x, min_y, w, h));
+    }
 
     // Frames at the back, the largest first so nested ones stay visible
     let mut frames: Vec<&Node> = flow.nodes.iter().filter(|n| is_frame(n.kind)).collect();
@@ -104,7 +154,7 @@ pub fn to_svg(flow: &FlowDoc) -> String {
     let seq = analyze(&flow.nodes, &flow.edges);
     let paint = flow.call_colors == Some(true);
     for n in frames {
-        s.push_str(&node_svg(n, &seq, paint, flow.code_language, flow.class_detail));
+        s.push_str(&node_svg(n, &seq, paint, flow.code_language, flow.class_detail, &look));
     }
 
     let by_id: HashMap<&str, &Node> = flow.nodes.iter().map(|n| (n.id.as_str(), n)).collect();
@@ -142,6 +192,7 @@ pub fn to_svg(flow: &FlowDoc) -> String {
             .color(paint && message.is_some(), Some(&edge.id))
             .map_or(EDGE, |c| colors(c).1);
         let svg = edge_svg(edge, &geom, stroke);
+        let svg = if look.sketch { format!(r#"<g filter="url(#rough)">{svg}</g>"#) } else { svg };
         if message.is_some() {
             messages.push_str(&svg)
         } else {
@@ -151,12 +202,13 @@ pub fn to_svg(flow: &FlowDoc) -> String {
     }
 
     for n in flow.nodes.iter().filter(|n| !is_frame(n.kind)) {
-        s.push_str(&node_svg(n, &seq, paint, flow.code_language, flow.class_detail));
+        s.push_str(&node_svg(n, &seq, paint, flow.code_language, flow.class_detail, &look));
     }
     s.push_str(&messages);
     s.push_str(&labels);
     s.push_str("</svg>\n");
-    s
+    // The typeface of the project (or a sketch's handwriting) for all text
+    if look.font != FONT { s.replace(FONT, look.font) } else { s }
 }
 
 // ---------------------------------------------------------------------------
@@ -967,12 +1019,17 @@ fn edge_labels_svg(edge: &Edge, g: &Geom) -> String {
 // Nodes
 // ---------------------------------------------------------------------------
 
-fn node_svg(n: &Node, seq: &Sequence, paint: bool, lang: Option<CodeLanguage>, detail: Option<ClassDetail>) -> String {
+fn node_svg(n: &Node, seq: &Sequence, paint: bool, lang: Option<CodeLanguage>, detail: Option<ClassDetail>, look: &Look) -> String {
     let (fill, stroke) = colors(n.color);
     let dot = dot_color(n.color);
     let (x, y, w, h) = (n.x, n.y, n.w, n.h);
     let (cx, cy) = (x + w / 2.0, y + h / 2.0);
-    let border = format!(r#"fill="{fill}" stroke="{stroke}" stroke-width="1.5""#);
+    // A focal block: a heavier outline in the accent
+    let border = if n.focal == Some(true) {
+        format!(r#"fill="{fill}" stroke="{}" stroke-width="3"{}"#, look.accent, look.rough())
+    } else {
+        format!(r#"fill="{fill}" stroke="{stroke}" stroke-width="1.5"{}"#, look.rough())
+    };
     let rect = |rx: f64| format!(r#"<rect x="{x}" y="{y}" width="{w}" height="{h}" rx="{rx}" {border}/>"#);
     // Text centered in the node, wrapped to `inner` pixels
     let centered = |inner: f64| centered_text(&n.text, cx, cy, inner, FONT_SIZE, 550);
@@ -1020,6 +1077,10 @@ fn node_svg(n: &Node, seq: &Sequence, paint: bool, lang: Option<CodeLanguage>, d
             ) + &left_text(&n.text, x + 12.0, y + 10.0, w - 32.0, FONT_SIZE, 450, TEXT, FONT)
         }
         NodeKind::Label => centered_text(&n.text, cx, cy, w - 16.0, 16.0, 650),
+        NodeKind::Callout => {
+            format!(r#"<rect x="{x}" y="{y}" width="4" height="{h}" rx="2" fill="{}"/>"#, look.accent)
+                + &left_text(&n.text, x + 16.0, y + 4.0, w - 20.0, FONT_SIZE, 500, TEXT, FONT)
+        }
         NodeKind::Start => format!(r#"<circle cx="{cx}" cy="{cy}" r="{}" fill="{dot}"/>"#, w.min(h) / 2.0),
         NodeKind::End => {
             let r = w.min(h) / 2.0;

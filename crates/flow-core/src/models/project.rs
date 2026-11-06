@@ -22,6 +22,42 @@ pub struct Project {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     #[specta(optional)]
     pub role: Option<super::Role>,
+    /// The project's look, for all its boards and their exports
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[specta(optional)]
+    pub brand: Option<Brand>,
+}
+
+/// A project's own look: an accent color (focal blocks, callouts) and a typeface.
+#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize, Type)]
+#[serde(rename_all = "camelCase")]
+pub struct Brand {
+    /// A CSS hex color, `#2a78d6`; missing means the app's own
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[specta(optional)]
+    pub accent: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[specta(optional)]
+    pub font: Option<BrandFont>,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, Type)]
+#[serde(rename_all = "camelCase")]
+pub enum BrandFont {
+    Sans,
+    Serif,
+    Mono,
+    Rounded,
+}
+
+impl Brand {
+    /// The accent when it is a valid `#rgb` / `#rrggbb` color (it goes into SVG and CSS)
+    pub fn accent_color(&self) -> Option<&str> {
+        self.accent.as_deref().filter(|a| {
+            let h = a.strip_prefix('#').unwrap_or("");
+            (h.len() == 3 || h.len() == 6) && h.chars().all(|c| c.is_ascii_hexdigit())
+        })
+    }
 }
 
 /// A folder inside a project. Folders nest via `parent_id`.

@@ -38,7 +38,7 @@ export const commands = {
 	 *  Writes the export to the Downloads folder: one file, or several (Java) in a
 	 *  new folder. Returns the path of the file or folder.
 	 */
-	exportDocument: (doc: Document, format: ExportFormat) => typedError<string, string>(__TAURI_INVOKE("export_document", { doc, format })),
+	exportDocument: (doc: Document, format: ExportFormat, brand: Brand | null) => typedError<string, string>(__TAURI_INVOKE("export_document", { doc, format, brand })),
 	/**  The SQL for a diagram, as a preview in the app. */
 	eerSql: (doc: EerDoc, dialect: SqlDialect) => __TAURI_INVOKE<string>("eer_sql", { doc, dialect }),
 	/**  Code for the UML classes in a flowchart, to preview. */
@@ -101,6 +101,11 @@ export type BoardAccess = {
 	role: Role,
 };
 
+/**  How a board is drawn. */
+export type BoardLook = "clean" | 
+/**  Wobbly outlines and lines, a handwriting typeface: for ideas, not final */
+"sketch";
+
 /**
  *  Someone's access to one board: their project role, and the board's own
  *  setting for them if it has one (which then counts instead).
@@ -110,6 +115,15 @@ export type BoardMember = {
 	projectRole: Role,
 	boardRole: Role | null,
 };
+
+/**  A project's own look: an accent color (focal blocks, callouts) and a typeface. */
+export type Brand = {
+	/**  A CSS hex color, `#2a78d6`; missing means the app's own */
+	accent?: string | null,
+	font?: BrandFont | null,
+};
+
+export type BrandFont = "sans" | "serif" | "mono" | "rounded";
 
 /**  The visible part of a canvas. Also used by EER diagrams. */
 export type Camera = {
@@ -443,7 +457,9 @@ export type Entity = {
 	indexes?: TableIndex[],
 };
 
-export type ExportFormat = "svg" | "png" | "mermaid" | 
+export type ExportFormat = "svg" | "png" | 
+/**  A one-page PDF of the drawing (vector, with selectable text) */
+"pdf" | "mermaid" | 
 /**  SQL from an EER diagram, for one of these databases */
 "postgres" | "mysql" | "sqlite" | "sqlserver" | "oracle" | 
 /**  Code from the UML classes in a flowchart, in one of these languages */
@@ -471,6 +487,11 @@ export type FlowDoc = {
 	codeLanguage?: CodeLanguage | null,
 	/**  Class diagrams: which rows the classes show. Missing means all. */
 	classDetail?: ClassDetail | null,
+	/**
+	 *  How the board is drawn: clean, or as a sketch (hand-drawn lines and type).
+	 *  Missing means clean.
+	 */
+	look?: BoardLook | null,
 };
 
 /**  A folder inside a project. Folders nest via `parent_id`. */
@@ -652,6 +673,11 @@ export type Node = {
 	chart?: ChartBlock | null,
 	/**  Only for `Lifeline`: a person (UML actor), drawn as a stick figure instead of a box */
 	person?: boolean | null,
+	/**
+	 *  The block the diagram is about: drawn heavier, in the project's accent color.
+	 *  One or two per board at most, or nothing stands out.
+	 */
+	focal?: boolean | null,
 };
 
 export type NodeColor = "white" | "yellow" | "green" | "blue" | "purple" | "pink";
@@ -713,7 +739,9 @@ export type NodeKind = "box" | "diamond" | "note" | "pill" |
 /**  A chart board shown on this board (`chart`: which, and its drawing) */
 "chart" | 
 /**  A mind map topic: joined to its subtopics, laid out as a tree to the right */
-"topic";
+"topic" | 
+/**  An editorial note beside the diagram: text with an accent bar, joined by a thin line to what it is about */
+"callout";
 
 /**  A point on the canvas, in world coordinates. */
 export type Point = {
@@ -754,6 +782,8 @@ export type Project = {
 	updatedAt?: number | null,
 	/**  What the logged-in user may do in this project (from the server; None in the desktop app's own files) */
 	role?: Role | null,
+	/**  The project's look, for all its boards and their exports */
+	brand?: Brand | null,
 };
 
 /**  A board someone opened lately (newest first). */

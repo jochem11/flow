@@ -37,6 +37,13 @@ describe("design checks", () => {
     expect(messages(checkDesign(nodes, [line("s", "a"), line("b", "c")], "flowchart"))).toContain("2 blocks can't be reached from the start");
   });
 
+  it("says when too much is in focus", () => {
+    const ns = ["a", "b", "c"].map((id) => node(id, "box", id, { focal: true }));
+    const edges = [line("a", "b"), line("b", "c")];
+    expect(messages(checkDesign(ns, edges, "flowchart"))).toContain("3 blocks are in focus: one or two stand out, more do not");
+    expect(messages(checkDesign(ns.slice(0, 2), edges.slice(0, 1), "flowchart")).some((m) => m.includes("focus"))).toBe(false);
+  });
+
   it("finds lines into a start and out of an end", () => {
     const msgs = messages(checkDesign([node("s", "start", ""), node("e", "end", ""), node("a", "box")], [line("a", "s"), line("e", "a")], "state"));
     expect(msgs).toContain("A line goes into the start");

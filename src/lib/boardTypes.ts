@@ -38,7 +38,7 @@ export interface BoardType {
   hint: string;
 }
 
-const NOTES: TypeTool[] = [{ tool: "note" }, { tool: "label" }];
+const NOTES: TypeTool[] = [{ tool: "note" }, { tool: "label" }, { tool: "callout" }];
 
 export const BOARD_TYPES: BoardType[] = [
   {

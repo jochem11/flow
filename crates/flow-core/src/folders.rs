@@ -165,6 +165,7 @@ mod tests {
             order: 1.0,
             updated_at: None,
             role: None,
+            brand: None,
         };
         assert_eq!(remove_folder(&mut p, "b").unwrap().as_deref(), Some("a"));
         assert_eq!(

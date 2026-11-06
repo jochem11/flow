@@ -115,7 +115,7 @@ pub fn arrange(nodes: &[Node], edges: &[Edge]) -> Arranged {
             NodeKind::Section | NodeKind::Boundary | NodeKind::Package => Role::Frame,
             NodeKind::Lanes => Role::Pool,
             NodeKind::Pin => Role::Pin,
-            NodeKind::Note | NodeKind::Label | NodeKind::Comment => Role::Follower,
+            NodeKind::Note | NodeKind::Label | NodeKind::Comment | NodeKind::Callout => Role::Follower,
             NodeKind::Image | NodeKind::Icon if !linked.contains(&i) => Role::Follower,
             _ => Role::Block,
         }
@@ -1046,6 +1046,7 @@ mod tests {
             icon: None,
             chart: None,
             person: None,
+            focal: None,
         }
     }
 

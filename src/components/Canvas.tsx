@@ -11,6 +11,8 @@ import { MOD } from "../lib/shortcuts";
 import { FragmentConditions, FRAMES, NodeView } from "./NodeView";
 import { addImages } from "../lib/files";
 import { ContextBar } from "./ContextBar";
+import { BRAND_FONTS, isColor } from "../lib/brand";
+import { openDoc, projectById } from "../lib/workspace";
 
 /** The strip at the top of a section where a double-click renames it */
 const FRAME_HEADER = 48;
@@ -103,17 +105,29 @@ export function Canvas() {
     };
   };
 
+  // The project's look (accent, typeface) and the board's (clean or a sketch)
+  const brandStyle = () => {
+    const b = projectById(openDoc()?.projectId ?? "")?.brand;
+    const font = b?.font ? BRAND_FONTS[b.font] : undefined;
+    return {
+      ...grid(),
+      ...(b?.accent && isColor(b.accent) ? { "--brand": b.accent } : {}),
+      ...(font ? { "--brand-font": font } : {}),
+    };
+  };
+
   return (
     <div
       ref={el}
       class="viewport"
       classList={{
+        "look-sketch": board.look === "sketch",
         "tool-place": ui.tool !== "select",
         "can-pan": ui.spaceDown,
         panning: ui.panning,
         connecting: !!ui.connecting,
       }}
-      style={grid()}
+      style={brandStyle()}
       onPointerDown={onPointerDown}
       onPointerMove={(e) => setPointer(toWorld(e.clientX, e.clientY))}
       // Pictures dropped from the computer
@@ -130,6 +144,13 @@ export function Canvas() {
       onDblClick={onDblClick}
       onContextMenu={(e) => e.preventDefault()}
     >
+      {/* A sketch's wobble (styles.css: .look-sketch) */}
+      <svg class="sketch-defs" aria-hidden="true">
+        <filter id="flow-rough" x="-5%" y="-5%" width="110%" height="110%">
+          <feTurbulence type="fractalNoise" baseFrequency="0.035" numOctaves="2" seed="7" />
+          <feDisplacementMap in="SourceGraphic" scale="3.2" />
+        </filter>
+      </svg>
       <div class="world" style={{ transform: worldTransform() }}>
         <For each={containers()}>{(n) => <NodeView node={n} />}</For>
       </div>

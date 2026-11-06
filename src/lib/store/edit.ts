@@ -7,7 +7,7 @@ import type { Arranged, CodeImport, DiagramType, FlowDoc, FlowEdge, FlowNode, No
 import { freeEndsIn, isBetweenLifelines, makeMessage, moveFreeEnds } from "./edges";
 import { assignParents, frameAt, growFrames, updateFrames, withContents } from "./frames";
 import { checkpoint, resetHistory } from "./history";
-import { createNode, hasText, isConnectable, isContainer, isResizable, snap, uid } from "./nodes";
+import { canBeFocal, createNode, hasText, isConnectable, isContainer, isResizable, snap, uid } from "./nodes";
 import { board, derived, nodeById, setBoard, setUi, touch, ui, type FlowSettings } from "./state";
 
 // ---------- selection ----------
@@ -368,6 +368,7 @@ export function restoreBoard(doc: FlowDoc) {
     setBoard("diagram", doc.diagram ?? undefined);
     setBoard("codeLanguage", doc.codeLanguage ?? undefined);
     setBoard("classDetail", doc.classDetail ?? undefined);
+    setBoard("look", doc.look ?? undefined);
     setUi({ selected: [], selectedEdge: null, editingNode: null, editingEdge: null });
   });
   touch();
@@ -408,6 +409,13 @@ export function setPerson(ids: string[], on: boolean) {
   touch();
 }
 
+/** Makes blocks the focal point of the diagram (or not): drawn heavier, in the accent. */
+export function setFocal(ids: string[], on: boolean) {
+  checkpoint();
+  setBoard("nodes", (n) => ids.includes(n.id) && canBeFocal(n.kind), "focal", on || undefined);
+  touch();
+}
+
 /**
  * A chart block's drawing, refreshed from its chart board. Not an undo step;
  * saved (with `save`) when the one looking may change the board.
@@ -428,6 +436,7 @@ export function applyRemoteFlow(nodes: FlowNode[], edges: FlowEdge[], settings: 
     if (settings.diagram !== undefined) setBoard("diagram", settings.diagram);
     if (settings.codeLanguage !== undefined) setBoard("codeLanguage", settings.codeLanguage ?? undefined);
     if (settings.classDetail !== undefined) setBoard("classDetail", settings.classDetail ?? undefined);
+    if (settings.look !== undefined) setBoard("look", settings.look ?? undefined);
     setBoard("nodes", reconcile(nodes, { key: "id" }));
     setBoard("edges", reconcile(edges, { key: "id" }));
     const ids = new Set(nodes.map((n) => n.id));

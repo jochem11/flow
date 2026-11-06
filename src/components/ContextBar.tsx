@@ -23,6 +23,8 @@ import {
   setPerson,
   addPart,
   addCondition,
+  canBeFocal,
+  setFocal,
 } from "../lib/store";
 import { AlignMenu } from "./AlignMenu";
 import { deleteSelectionTidy } from "../lib/mindmap";
@@ -33,7 +35,7 @@ import { classKind, classParts, ROW_NAMES, withClassKind, type ClassKind } from 
 import { isLinkable } from "../lib/links";
 import { FRAMES } from "./NodeView";
 import { currentFlowType } from "./Toolbar";
-import { IconCode, IconCopy, IconLock, IconRename, IconUnlock, IconLabelSide, IconUndo, IconPattern, IconLabel, IconPlus, IconSection, IconTrash } from "./icons";
+import { IconCode, IconCopy, IconLock, IconRename, IconUnlock, IconLabelSide, IconUndo, IconPattern, IconLabel, IconPlus, IconSection, IconTrash, IconFocal } from "./icons";
 import { FloatingBar, grow } from "./FloatingBar";
 import { CardLinksMenu } from "./CardLinksMenu";
 import { CapMenu, EndLabelsMenu, NEXT_PATTERN, NEXT_SIDE, PATTERN_NAMES, RELATIONS, SIDE_NAMES, STYLES } from "./EdgeMenus";
@@ -203,6 +205,22 @@ export function ContextBar() {
                   <span class="divider" />
                 </>
               )}
+            </Show>
+            {/* What the diagram is about: drawn heavier, in the project's accent */}
+            <Show when={selectedNodes().some((n) => canBeFocal(n.kind))}>
+              <button
+                class="icon-btn"
+                classList={{ pressed: selectedNodes().filter((n) => canBeFocal(n.kind)).every((n) => n.focal) }}
+                title="Focus: what this diagram is about (one or two blocks), drawn heavier in the project's accent"
+                onClick={() => {
+                  const ns = selectedNodes().filter((n) => canBeFocal(n.kind));
+                  setFocal(ns.map((n) => n.id), !ns.every((n) => n.focal));
+                }}
+              >
+                <IconFocal />
+                <span>Focus</span>
+              </button>
+              <span class="divider" />
             </Show>
             <Show when={selectedNodes().some((n) => n.kind === "lifeline")}>
               <button

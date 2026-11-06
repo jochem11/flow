@@ -15,7 +15,7 @@ import { loadPersonal, loadTrash, noteOpened } from "./personal";
 import { addNode, applyLayout, board, boardSnapshot, createNode, replaceBoard, rev, setChartBlockSvg, setDiagram } from "./store";
 import { WELCOME } from "../templates";
 import { toast } from "./toast";
-import type { ChartDoc, DiagramType, DocContent, Document, DocumentKind, DocumentMeta, ExportFormat, FlowDoc, Project, Role, SharedBoard } from "./types";
+import type { Brand, ChartDoc, DiagramType, DocContent, Document, DocumentKind, DocumentMeta, ExportFormat, FlowDoc, Project, Role, SharedBoard } from "./types";
 
 // ---------- state ----------
 
@@ -337,6 +337,16 @@ export async function createProject(): Promise<string | null> {
   }
 }
 
+/** The project's look (accent and typeface) for all its boards and exports. */
+export async function setProjectBrand(id: string, brand: Brand) {
+  try {
+    await api.setProjectBrand(id, brand);
+    await refreshProjects();
+  } catch (e) {
+    toast(errMsg(e), "error");
+  }
+}
+
 export async function updateProject(id: string, changes: { name?: string; description?: string }) {
   const p = projectById(id);
   if (!p) return;
@@ -524,7 +534,7 @@ export async function runExport(format: ExportFormat) {
   const doc = currentDocument();
   if (!doc) return;
   try {
-    const path = await api.exportDocument(doc, format);
+    const path = await api.exportDocument(doc, format, projectById(doc.projectId)?.brand);
     toast(`Exported to ${path}`);
   } catch (e) {
     toast(errMsg(e), "error");

@@ -147,6 +147,7 @@ export function NodeView(p: { node: FlowNode }) {
       classList={{
         selected: selected(),
         editing: editing(),
+        focal: !!n.focal,
         target: ui.connecting?.target === n.id,
         "drop-target": ui.dropTarget === n.id,
         // The topic a mind map starts from

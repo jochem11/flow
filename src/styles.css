@@ -6823,3 +6823,138 @@ body.presenting .find-bar {
 .fragment-condition input:focus {
   box-shadow: inset 0 -1px 0 var(--accent);
 }
+
+/* ---------- editorial: focal blocks, callouts, a sketch, the project's look ---------- */
+
+/* the project's typeface (Canvas.tsx sets --brand-font) */
+.viewport .world {
+  font-family: var(--brand-font, inherit);
+}
+/* the block the diagram is about: a heavier outline in the project's accent */
+.node.focal > .node-body {
+  border-width: 3px;
+  border-color: var(--brand, var(--accent));
+}
+.node.focal > .outline-shape > * {
+  stroke: var(--brand, var(--accent));
+  stroke-width: 3;
+}
+.node.focal .node-text {
+  font-weight: 700;
+}
+/* a remark beside the diagram: text with an accent bar */
+.node-callout > .node-body {
+  justify-content: flex-start;
+  align-items: flex-start;
+  padding: 4px 12px 4px 16px;
+  background: none;
+  border: 0;
+  border-left: 4px solid var(--brand, var(--accent));
+  border-radius: 2px;
+}
+.node-callout .node-text {
+  text-align: left;
+  font-weight: 500;
+  line-height: 1.45;
+}
+/* a sketch: wobbly lines and outlines, hand-drawn corners, handwriting */
+.sketch-defs {
+  position: absolute;
+  width: 0;
+  height: 0;
+}
+.look-sketch .world {
+  font-family: "Segoe Print", "Bradley Hand", "Chalkboard SE", "Comic Sans MS", "Comic Neue", cursive;
+}
+/* the lines' layer as a whole: a filter's region is relative to its box, and a
+   single straight line's box has no width (it would be cut away) */
+.look-sketch .outline-shape,
+.look-sketch .edges-layer,
+.look-sketch .activation-bar {
+  filter: url(#flow-rough);
+}
+.look-sketch .node:not(.node-pill, .node-topic, .node-callout, .node-note, .node-label) > .node-body {
+  border-width: 2px;
+  border-radius: 255px 15px 225px 15px / 15px 225px 15px 255px;
+}
+.look-sketch .node.focal > .node-body {
+  border-width: 3px;
+}
+
+/* the project's look, on its page */
+.project-look {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  max-width: 640px;
+}
+.look-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+.look-label {
+  width: 72px;
+  color: var(--text-muted);
+  font-size: 13px;
+}
+.look-swatches {
+  display: flex;
+  gap: 6px;
+  align-items: center;
+}
+.look-swatch {
+  position: relative;
+  width: 24px;
+  height: 24px;
+  padding: 0;
+  border: 2px solid var(--panel);
+  border-radius: 50%;
+  box-shadow: 0 0 0 1px var(--panel-border);
+  cursor: pointer;
+}
+.look-swatch.on {
+  box-shadow: 0 0 0 2px var(--text);
+}
+.look-swatch.app {
+  background: conic-gradient(var(--accent) 0 50%, var(--panel) 0);
+}
+.look-swatch.custom {
+  overflow: hidden;
+  background: conic-gradient(#e34948, #eda100, #1baf7a, #2a78d6, #6250d6, #e34948);
+}
+.look-swatch.custom input {
+  position: absolute;
+  inset: 0;
+  opacity: 0;
+  cursor: pointer;
+}
+.look-swatch:disabled {
+  cursor: default;
+}
+.look-preview {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  padding: 16px;
+  border: 1px solid var(--panel-border);
+  border-radius: 10px;
+  background: var(--bg);
+  font-size: 13px;
+}
+.look-block {
+  padding: 8px 14px;
+  border: 1.5px solid var(--white-stroke);
+  border-radius: 8px;
+  background: var(--panel);
+  font-weight: 550;
+}
+.look-block.focal {
+  border: 3px solid var(--brand, var(--accent));
+  font-weight: 700;
+}
+.look-callout {
+  padding: 2px 10px;
+  border-left: 4px solid var(--brand, var(--accent));
+  font-weight: 500;
+}

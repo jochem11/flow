@@ -7,7 +7,7 @@ use axum::routing::{get, post, put};
 use axum::{Json, Router};
 use chrono::{DateTime, Utc};
 use flow_core::folders;
-use flow_core::models::{Folder, Project, Role};
+use flow_core::models::{Brand, Folder, Project, Role};
 use serde::Deserialize;
 use sqlx::types::Json as Db;
 
@@ -21,6 +21,7 @@ pub fn routes() -> Router<AppState> {
     Router::new()
         .route("/projects", get(list).post(create))
         .route("/projects/{id}", put(update).delete(delete))
+        .route("/projects/{id}/brand", put(set_brand))
         .route("/projects/{id}/folders", post(create_folder))
         .route("/projects/{id}/folders/{folder}", put(rename_folder).delete(delete_folder))
         .route("/projects/{id}/folders/{folder}/move", put(move_folder))
@@ -39,6 +40,7 @@ struct ProjectRow {
     updated_at: DateTime<Utc>,
     role: String,
     sidebar_order: f64,
+    brand: Option<Db<Brand>>,
 }
 
 impl ProjectRow {
@@ -51,13 +53,14 @@ impl ProjectRow {
             order: self.sidebar_order,
             updated_at: Some(ms(self.updated_at) as u64),
             role: Role::parse(&self.role),
+            brand: self.brand.map(|b| b.0),
         }
     }
 }
 
 macro_rules! project_columns {
     () => {
-        "p.id, p.name, p.description, p.folders, p.updated_at, pm.role, pm.sidebar_order"
+        "p.id, p.name, p.description, p.folders, p.updated_at, pm.role, pm.sidebar_order, p.brand"
     };
 }
 
@@ -131,6 +134,18 @@ struct UpdateProject {
 async fn update(State(state): State<AppState>, caller: Caller, Path(id): Path<String>, Json(u): Json<UpdateProject>) -> ApiResult<StatusCode> {
     require_project(&state, &caller, &id, Role::Editor).await?;
     sqlx::query("UPDATE projects SET name = $2, description = $3, updated_at = now() WHERE id = $1").bind(&id).bind(u.name.trim()).bind(u.description).execute(&state.db).await?;
+    crate::events::project_changed(&state, &id).await;
+    Ok(StatusCode::NO_CONTENT)
+}
+
+/// The project's look: an accent color and a typeface (empty: the app's own).
+async fn set_brand(State(state): State<AppState>, caller: Caller, Path(id): Path<String>, Json(b): Json<Brand>) -> ApiResult<StatusCode> {
+    require_project(&state, &caller, &id, Role::Editor).await?;
+    if b.accent.is_some() && b.accent_color().is_none() {
+        return Err(crate::error::AppError::bad("The accent must be a color like #2a78d6"));
+    }
+    let brand = (b != Brand::default()).then_some(Db(b));
+    sqlx::query("UPDATE projects SET brand = $2, updated_at = now() WHERE id = $1").bind(&id).bind(brand).execute(&state.db).await?;
     crate::events::project_changed(&state, &id).await;
     Ok(StatusCode::NO_CONTENT)
 }

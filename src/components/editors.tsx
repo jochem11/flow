@@ -31,6 +31,7 @@ import { MembersDialog } from "./ShareDialog";
 import { ZoomControls } from "./ZoomControls";
 import { ClassPanel } from "./ClassPanel";
 import { FindBar, Minimap } from "./FindAndMap";
+import { ProjectLook } from "./ProjectLook";
 
 export function FlowEditor() {
   return (
@@ -176,6 +177,12 @@ export function ProjectView(p: { projectId: string }) {
                 setEditingDescription(false);
               }}
             />
+          </Show>
+
+          {/* The project's look: only for projects on the server */}
+          <Show when={proj().role}>
+            <h3 class="section-title">Look</h3>
+            <ProjectLook project={proj()} editable={editable()} />
           </Show>
 
           <h3 class="section-title">New in this project</h3>

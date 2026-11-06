@@ -43,6 +43,7 @@ pub fn create_project(app: AppHandle, name: String) -> CmdResult<Project> {
         order,
         updated_at: None,
         role: None,
+        brand: None,
     };
     save_project(&app, &mut project)?;
     Ok(project)

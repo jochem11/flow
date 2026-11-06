@@ -5,7 +5,7 @@ use std::path::{Path, PathBuf};
 
 use flow_core::flow::{self, safe_file_name};
 use flow_core::models::{
-    Arranged, CodeFile, CodeImport, CodeLanguage, DiagramImport, Document, Edge, EerDoc, ExportFormat, FlowDoc, Node, SqlDialect, SqlImport,
+    Arranged, Brand, CodeFile, CodeImport, CodeLanguage, DiagramImport, Document, Edge, EerDoc, ExportFormat, FlowDoc, Node, SqlDialect, SqlImport,
 };
 use flow_core::{arrange, code_import, codegen, dbml, eer, import, mermaid, sql_import};
 use tauri::{AppHandle, Manager};
@@ -22,9 +22,9 @@ pub fn auto_layout(nodes: Vec<Node>, edges: Vec<Edge>) -> CmdResult<Arranged> {
 /// new folder. Returns the path of the file or folder.
 #[tauri::command]
 #[specta::specta]
-pub fn export_document(app: AppHandle, doc: Document, format: ExportFormat) -> CmdResult<String> {
+pub fn export_document(app: AppHandle, doc: Document, format: ExportFormat, brand: Option<Brand>) -> CmdResult<String> {
     let dir = app.path().download_dir().map_err(|e| format!("cannot find the Downloads folder: {e}"))?;
-    let files = flow::export(&doc, format)?;
+    let files = flow::export_with(&doc, format, brand.as_ref())?;
     let write = |path: &Path, bytes: &[u8]| std::fs::write(path, bytes).map_err(|e| format!("cannot write {}: {e}", path.display()));
     if let [file] = files.as_slice() {
         let (stem, ext) = file.name.rsplit_once('.').unwrap_or((&file.name, "txt"));

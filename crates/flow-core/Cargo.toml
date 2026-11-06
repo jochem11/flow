@@ -15,3 +15,8 @@ sqlparser = "0.63.0"
 roxmltree = "0.21"
 flate2 = "1"
 base64 = "0.22"
+# PDF export: a board's SVG drawing as a PDF page
+krilla = "0.8"
+krilla-svg = "0.8"
+# The SVG reader krilla-svg is built on (an older one than resvg's)
+usvg47 = { package = "usvg", version = "0.47" }

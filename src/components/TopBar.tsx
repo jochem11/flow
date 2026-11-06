@@ -58,6 +58,7 @@ export function SaveIndicator() {
 const EXPORTS: { format: ExportFormat; label: string; hint: string }[] = [
   { format: "svg", label: "SVG", hint: "Vector image" },
   { format: "png", label: "PNG", hint: "Image" },
+  { format: "pdf", label: "PDF", hint: "To print or send, text stays sharp" },
   { format: "mermaid", label: "Mermaid", hint: "Text for READMEs, per diagram" },
 ];
 

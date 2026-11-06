@@ -47,6 +47,7 @@ pub fn is_flowchart_node(kind: NodeKind) -> bool {
             | NodeKind::Note
             | NodeKind::Label
             | NodeKind::Comment
+            | NodeKind::Callout
             | NodeKind::Section
             | NodeKind::Lanes
             | NodeKind::Boundary

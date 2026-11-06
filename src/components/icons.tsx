@@ -39,6 +39,18 @@ export const IconNote = () => (
     <path d="M14 20v-5h5" />
   </Svg>
 );
+export const IconCallout = () => (
+  <Svg>
+    <path d="M5 5v14" stroke-width="3" />
+    <path d="M10 8h9M10 12h9M10 16h6" />
+  </Svg>
+);
+export const IconFocal = () => (
+  <Svg>
+    <rect x="4" y="7" width="16" height="10" rx="2" stroke-width="2.6" />
+    <path d="M12 2v2M12 20v2M2 12h0" />
+  </Svg>
+);
 export const IconPill = () => (
   <Svg>
     <rect x="2.5" y="7.5" width="19" height="9" rx="4.5" />

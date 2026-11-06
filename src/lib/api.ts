@@ -10,7 +10,7 @@
 
 import { commands } from "../bindings";
 import { del, get, inTauri, post, put, rawRequest } from "./server";
-import type { DocContent,
+import type { Brand, DocContent,
   Document,
   DocumentKind,
   DocumentMeta,
@@ -37,6 +37,8 @@ export interface Api {
   listProjects(): Promise<Project[]>;
   createProject(name: string): Promise<Project>;
   updateProject(id: string, name: string, description: string): Promise<void>;
+  /** The project's look for all its boards (empty: the app's own) */
+  setProjectBrand(id: string, brand: Brand): Promise<void>;
   deleteProject(id: string): Promise<void>;
   // folders
   createFolder(projectId: string, name: string, parentId: string | null): Promise<Folder>;
@@ -56,7 +58,7 @@ export interface Api {
   /** Arrange: where the nodes go, and how the lines between them attach */
   autoLayout(nodes: FlowNode[], edges: FlowEdge[]): Promise<Arranged>;
   /** Returns the path of the file that was written */
-  exportDocument(doc: Document, format: ExportFormat): Promise<string>;
+  exportDocument(doc: Document, format: ExportFormat, brand?: Brand | null): Promise<string>;
   // EER
   /** The SQL for an EER diagram, to preview */
   eerSql(doc: EerDoc, dialect: SqlDialect): Promise<string>;
@@ -93,6 +95,9 @@ export const localFiles: Api = {
   listProjects: () => unwrap(commands.listProjects()),
   createProject: (name) => unwrap(commands.createProject(name)),
   updateProject: (id, name, description) => done(commands.updateProject(id, name, description)),
+  setProjectBrand: async () => {
+    throw new Error("A look of its own needs a project on the server");
+  },
   deleteProject: (id) => done(commands.deleteProject(id)),
 
   createFolder: (projectId, name, parentId) => unwrap(commands.createFolder(projectId, name, parentId)),
@@ -111,7 +116,7 @@ export const localFiles: Api = {
   deleteDocument: (projectId, id) => done(commands.deleteDocument(projectId, id)),
 
   autoLayout: (nodes, edges) => unwrap(commands.autoLayout(nodes, edges)),
-  exportDocument: (doc, format) => unwrap(commands.exportDocument(doc, format)),
+  exportDocument: (doc, format, brand) => unwrap(commands.exportDocument(doc, format, brand ?? null)),
   eerSql: (doc, dialect) => commands.eerSql(doc, dialect),
   classCode: (flow, language) => commands.classCode(flow, language),
   mermaidPreview: (doc) => commands.mermaidPreview(doc),
@@ -159,7 +164,7 @@ const localTools: Tools = {
 /** In the web version: the same Rust, on the server (exports download in the browser). */
 const webTools: Tools = {
   autoLayout: (nodes, edges) => post("/tools/layout", { nodes, edges }),
-  exportDocument: async (doc, format) => download(await rawRequest("POST", "/tools/export", { doc, format })),
+  exportDocument: async (doc, format, brand) => download(await rawRequest("POST", "/tools/export", { doc, format, brand: brand ?? null })),
   eerSql: (doc, dialect) => post("/tools/sql", { doc, dialect }),
   classCode: (flow, language) => post("/tools/code", { flow, language }),
   mermaidPreview: (doc) => post("/tools/mermaid", { doc }),
@@ -174,6 +179,7 @@ const httpApi: Api = {
   listProjects: () => get("/projects"),
   createProject: (name) => post("/projects", { name }),
   updateProject: (id, name, description) => put(`/projects/${id}`, { name, description }),
+  setProjectBrand: (id, brand) => put(`/projects/${id}/brand`, brand),
   deleteProject: (id) => del(`/projects/${id}`),
 
   createFolder: (projectId, name, parentId) => post(`/projects/${projectId}/folders`, { name, parentId }),

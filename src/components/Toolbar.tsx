@@ -24,6 +24,7 @@ import {
   IconPointer,
   IconSection,
   IconStart,
+  IconCallout,
 } from "./icons";
 
 type ToolDef = { tool: Tool; label: string; key: string; icon: () => JSX.Element };
@@ -41,6 +42,7 @@ const GROUPS: ToolDef[][] = [
   [
     { tool: "label", label: "Label", key: "T", icon: IconLabel },
     { tool: "note", label: "Note", key: "N", icon: IconNote },
+    { tool: "callout", label: "Callout (a remark beside the diagram)", key: "Q", icon: IconCallout },
     { tool: "topic", label: "Mind map topic (then Tab: subtopic, Enter: next topic)", key: "M", icon: IconTopic },
   ],
   [

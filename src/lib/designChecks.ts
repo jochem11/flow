@@ -20,6 +20,9 @@ const STEPS: NodeKind[] = ["box", "diamond", "pill", "start", "end", "bar", "flo
 /** Frames that group blocks */
 const GROUPS: NodeKind[] = ["section", "lanes", "boundary", "package"];
 
+/** More focal blocks than this, and nothing stands out */
+export const MAX_FOCAL = 2;
+
 /** More blocks than this in one group (or on a board without groups) is a lot to take in at once */
 export const MAX_PER_GROUP = 12;
 
@@ -41,6 +44,11 @@ export function checkDesign(nodes: FlowNode[], edges: FlowEdge[], diagram: Diagr
     if (byId.has(e.to)) ins.set(e.to, [...(ins.get(e.to) ?? []), e]);
   }
   const degree = (id: string) => (outs.get(id)?.length ?? 0) + (ins.get(id)?.length ?? 0);
+
+  // Focus works by contrast: with many in focus, none is
+  const focal = nodes.filter((n) => n.focal);
+  if (focal.length > MAX_FOCAL)
+    out.push({ nodeIds: focal.map((n) => n.id), level: "tip", message: `${focal.length} blocks are in focus: one or two stand out, more do not` });
 
   if (type === "class") return checkClasses(nodes, out);
   if (type === "sequence") return checkSequence(nodes, edges, out);
