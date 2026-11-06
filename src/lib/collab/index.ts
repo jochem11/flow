@@ -23,6 +23,7 @@ import { me } from "../auth";
 import { loadComments, guest } from "../comments";
 import { applyRemoteEer, eer, eerHistoryChanged, eerRev, useSharedEerUndo } from "../eer";
 import { applyRemoteKanban, kanban, kanbanRev } from "../kanban";
+import { applyRemoteChart, chartRev, chartSnapshot } from "../chart/store";
 import { currentShareToken, inTauri, serverUrl, sessionToken } from "../server";
 import { applyRemoteFlow, board, FLOW_SETTINGS, type FlowSettings, historyChanged, rev, touch, useSharedUndo, type SharedUndo } from "../store";
 import type { EerSection, Entity, FlowEdge, FlowNode, KanbanCard, KanbanColumn, KanbanLabel, Relation } from "../types";
@@ -170,6 +171,27 @@ function kanbanBinding(doc: Y.Doc): Binding {
   };
 }
 
+/**
+ * A chart: its whole table as one shared value. Two people changing it at the
+ * same moment keep the last change (a chart's table is small).
+ */
+function chartBinding(doc: Y.Doc): Binding {
+  const root = doc.getMap("chart");
+  return {
+    types: [root] as Y.Map<unknown>[],
+    isEmpty: () => !root.has("doc"),
+    write: () => {
+      const { svg: _, ...data } = chartSnapshot();
+      const json = JSON.stringify(data);
+      if (root.get("doc") !== json) root.set("doc", json);
+    },
+    read: () => {
+      const json = root.get("doc");
+      if (typeof json === "string") applyRemoteChart(JSON.parse(json));
+    },
+  };
+}
+
 /** Connects the open board to its room; returns how to disconnect. */
 function connect(open: OpenDoc): () => void {
   const doc = new Y.Doc();
@@ -182,7 +204,8 @@ function connect(open: OpenDoc): () => void {
   const p = provider;
   setStatus("connecting");
 
-  const binding = open.kind === "flow" ? flowBinding(doc) : open.kind === "eer" ? eerBinding(doc) : open.kind === "kanban" ? kanbanBinding(doc) : null;
+  const binding =
+    open.kind === "flow" ? flowBinding(doc) : open.kind === "eer" ? eerBinding(doc) : open.kind === "kanban" ? kanbanBinding(doc) : open.kind === "chart" ? chartBinding(doc) : null;
   let synced = false;
   let mayFill = false;
 
@@ -227,7 +250,7 @@ function connect(open: OpenDoc): () => void {
   });
 
   // Ours into the shared document, right away (so nothing of ours is overwritten by a read)
-  const kindRev = open.kind === "flow" ? rev : open.kind === "eer" ? eerRev : open.kind === "kanban" ? kanbanRev : null;
+  const kindRev = open.kind === "flow" ? rev : open.kind === "eer" ? eerRev : open.kind === "kanban" ? kanbanRev : open.kind === "chart" ? chartRev : null;
   const disposeWrite = createRoot((dispose) => {
     if (kindRev && binding) {
       createEffect(

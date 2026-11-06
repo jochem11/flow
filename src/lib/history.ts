@@ -3,6 +3,7 @@
 // change, so it can be undone and everyone editing together gets it.
 
 import { get, post } from "./server";
+import { restoreChart } from "./chart/store";
 import { restoreEer } from "./eer";
 import { restoreKanban } from "./kanban";
 import { restoreBoard } from "./store";
@@ -37,6 +38,8 @@ function apply(content: DocContent) {
       return restoreKanban(content.data);
     case "text":
       return replaceText?.(content.data.markdown);
+    case "chart":
+      return restoreChart(content.data);
   }
 }
 

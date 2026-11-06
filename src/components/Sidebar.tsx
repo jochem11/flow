@@ -97,6 +97,7 @@ const KIND_CHIPS: { kind: DocumentKind; label: string }[] = [
   { kind: "text", label: "Docs" },
   { kind: "kanban", label: "Kanban" },
   { kind: "eer", label: "EER" },
+  { kind: "chart", label: "Charts" },
 ];
 
 function FilterBar() {

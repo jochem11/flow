@@ -49,6 +49,7 @@ import { Toasts } from "./components/Toasts";
 import { TopBar } from "./components/TopBar";
 import { TOOL_KEYS, toolOffered } from "./components/Toolbar";
 import { CommandPalette, openPalette } from "./components/CommandPalette";
+import { redoChart, undoChart } from "./lib/chart/store";
 import { openShortcuts, ShortcutSheet } from "./components/Shortcuts";
 import "./styles.css";
 // Editing together: joins the room of every board opened from the server
@@ -138,6 +139,18 @@ export default function App() {
     // Viewing only: moving around and selecting, nothing that changes the board
     const edit = canEdit();
     // EER diagram: selecting and grouping as in a flowchart, undo/redo, delete
+    // A chart board: undo and redo (its table's cells are inputs, so not while typing)
+    if (openDoc()?.kind === "chart") {
+      if (mod && e.key.toLowerCase() === "z") {
+        e.preventDefault();
+        if (e.shiftKey) redoChart();
+        else undoChart();
+      } else if (mod && e.key.toLowerCase() === "y") {
+        e.preventDefault();
+        redoChart();
+      }
+      return;
+    }
     if (openDoc()?.kind === "eer") {
       const key = e.key.toLowerCase();
       if (e.key === " ") {

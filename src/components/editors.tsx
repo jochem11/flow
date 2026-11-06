@@ -16,6 +16,7 @@ import {
 import { Canvas } from "./Canvas";
 import { EerEditor } from "./EerEditor";
 import { KanbanEditor } from "./KanbanEditor";
+import { ChartEditor } from "./ChartEditor";
 import { BoardIcon, KIND_LABEL, KindIcon, TypeIcon } from "./kinds";
 import { BOARD_TYPES, boardTypeOf, type BoardType, type BoardTypeId } from "../lib/boardTypes";
 import { NewBoardDialog } from "./BoardDialogs";
@@ -227,6 +228,9 @@ export function DocumentEditor() {
           </Show>
           <Show when={doc().kind === "kanban"}>
             <KanbanEditor />
+          </Show>
+          <Show when={doc().kind === "chart"}>
+            <ChartEditor />
           </Show>
           <Show when={doc().kind === "eer"}>
             <EerEditor />

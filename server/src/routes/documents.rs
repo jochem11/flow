@@ -33,6 +33,7 @@ pub fn kind_str(k: DocumentKind) -> &'static str {
         DocumentKind::Text => "text",
         DocumentKind::Kanban => "kanban",
         DocumentKind::Eer => "eer",
+        DocumentKind::Chart => "chart",
     }
 }
 
@@ -41,6 +42,7 @@ pub fn parse_kind(s: &str) -> DocumentKind {
         "text" => DocumentKind::Text,
         "kanban" => DocumentKind::Kanban,
         "eer" => DocumentKind::Eer,
+        "chart" => DocumentKind::Chart,
         _ => DocumentKind::Flow,
     }
 }

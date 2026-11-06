@@ -8,6 +8,8 @@ import { get, ServerError, useShareToken } from "./server";
 import { ROLE_LABEL, roleCanEdit } from "./roles";
 import { fitView } from "./camera";
 import { kanbanRev, kanbanSnapshot, replaceKanban } from "./kanban";
+import { chartRev, chartSnapshot, replaceChart } from "./chart/store";
+import { storedSvg } from "./chart/render";
 import { eerRev, eerSnapshot, replaceEer } from "./eer";
 import { loadPersonal, loadTrash, noteOpened } from "./personal";
 import { applyLayout, board, boardSnapshot, replaceBoard, rev, setDiagram } from "./store";
@@ -87,6 +89,8 @@ export function currentDocument(): Document | null {
   else if (kind === "text") content = { kind, data: { markdown: text() } };
   else if (kind === "kanban") content = { kind, data: kanbanSnapshot() };
   else if (kind === "eer") content = { kind, data: eerSnapshot() };
+  // A chart keeps its drawing (light) for exports and chart blocks
+  else if (kind === "chart") content = { kind, data: { ...chartSnapshot(), svg: storedSvg(chartSnapshot()) } };
   else if (otherContent) content = otherContent;
   else return null;
   return { ...rest, content };
@@ -123,6 +127,7 @@ createRoot(() => {
   createEffect(on(rev, markDirty, { defer: true }));
   createEffect(on(kanbanRev, markDirty, { defer: true }));
   createEffect(on(eerRev, markDirty, { defer: true }));
+  createEffect(on(chartRev, markDirty, { defer: true }));
 });
 
 // ---------- loading ----------
@@ -240,6 +245,7 @@ export async function openDocument(projectId: string, docId: string, shared?: { 
       if (content.kind === "flow") replaceBoard(content.data);
       else if (content.kind === "text") setTextRaw(content.data.markdown);
       else if (content.kind === "kanban") replaceKanban(content.data);
+      else if (content.kind === "chart") replaceChart(content.data);
       else if (content.kind === "eer") replaceEer(content.data);
       else otherContent = content;
       // From the server's list of this project's boards; boards of the desktop app's own files are the user's own
@@ -365,6 +371,7 @@ const DEFAULT_NAMES: Record<DocumentKind, string> = {
   text: "New document",
   kanban: "New kanban board",
   eer: "New EER diagram",
+  chart: "New chart",
 };
 
 /** A new board, empty or with what `start` gives it (a template: its name and content). */

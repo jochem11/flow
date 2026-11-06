@@ -1,7 +1,7 @@
 import type { JSX } from "solid-js";
 import type { DiagramType, DocumentKind } from "../lib/types";
 import { boardType, boardTypeOf, type BoardTypeId } from "../lib/boardTypes";
-import { IconEer, IconFlow, IconKanban, IconPill, IconSection, IconText, IconTopic, UML_ICONS } from "./icons";
+import { IconChart, IconEer, IconFlow, IconKanban, IconPill, IconSection, IconText, IconTopic, UML_ICONS } from "./icons";
 
 export const KINDS: DocumentKind[] = ["flow", "text", "kanban", "eer"];
 
@@ -10,6 +10,7 @@ export const KIND_LABEL: Record<DocumentKind, string> = {
   text: "Document",
   kanban: "Kanban board",
   eer: "EER diagram",
+  chart: "Chart",
 };
 
 const ICONS: Record<DocumentKind, () => JSX.Element> = {
@@ -17,6 +18,7 @@ const ICONS: Record<DocumentKind, () => JSX.Element> = {
   text: IconText,
   kanban: IconKanban,
   eer: IconEer,
+  chart: IconChart,
 };
 
 export function KindIcon(p: { kind: DocumentKind }) {
@@ -35,6 +37,7 @@ const TYPE_ICONS: Record<BoardTypeId, () => JSX.Element> = {
   text: IconText,
   kanban: IconKanban,
   eer: IconEer,
+  chart: IconChart,
 };
 
 /** The icon of a board type (in the colour of its kind). */

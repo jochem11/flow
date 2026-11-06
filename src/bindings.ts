@@ -137,6 +137,50 @@ export type Cardinality =
 /**  1 or more */
 "oneOrMany";
 
+export type ChartDoc = {
+	chart: ChartType,
+	title: string,
+	series: ChartSeries[],
+	rows: ChartRow[],
+	/**  What the axes show (e.g. "Month", "Revenue (€)") */
+	xLabel?: string | null,
+	yLabel?: string | null,
+	/**  The series the story is about: drawn in the accent, the others in gray */
+	focal?: string | null,
+	/**  The chart as last drawn by the app (light, 640×400), for exports and chart blocks */
+	svg?: string | null,
+};
+
+/**  A row of the table: its label and a value per series (empty cells are none). */
+export type ChartRow = {
+	id: string,
+	label: string,
+	values: (number | null)[],
+};
+
+/**  A column of the table: one series (a line, a set of bars). */
+export type ChartSeries = {
+	id: string,
+	name: string,
+};
+
+/**  How the data is drawn (see src/lib/chart/ for the rules of each). */
+export type ChartType = 
+/**  Vertical bars, one group per row */
+"column" | 
+/**  Horizontal bars (long or many labels) */
+"bar" | 
+/**  Vertical bars with the series stacked */
+"stacked" | 
+/**  A line per series (trend over the rows, in order) */
+"line" | 
+/**  One series as a line with a wash under it */
+"area" | 
+/**  Dots: the row label is x (a number), each series a y */
+"scatter" | 
+/**  One whole split into parts: the first series, as one segmented bar */
+"share";
+
 /**  How much of each class a class diagram shows (the code export always has all). */
 export type ClassDetail = 
 /**  Every attribute and operation */
@@ -226,7 +270,7 @@ export type DiagramType = "flowchart" | "mindmap" | "sequence" | "class" | "usec
  *    { "kind": "text", "data": { "markdown": "..." } }
  *  In TypeScript this becomes a discriminated union on `kind`.
  */
-export type DocContent = { kind: "flow"; data: FlowDoc } | { kind: "text"; data: TextDoc } | { kind: "kanban"; data: KanbanDoc } | { kind: "eer"; data: EerDoc };
+export type DocContent = { kind: "flow"; data: FlowDoc } | { kind: "text"; data: TextDoc } | { kind: "kanban"; data: KanbanDoc } | { kind: "eer"; data: EerDoc } | { kind: "chart"; data: ChartDoc };
 
 /**  A document, stored as `projects/<project_id>/docs/<id>.json`. */
 export type Document = {
@@ -242,7 +286,7 @@ export type Document = {
 };
 
 /**  Just the kind of a document, without its data. */
-export type DocumentKind = "flow" | "text" | "kanban" | "eer";
+export type DocumentKind = "flow" | "text" | "kanban" | "eer" | "chart";
 
 /**  What `list_documents` returns: everything the sidebar needs, without the content. */
 export type DocumentMeta = {

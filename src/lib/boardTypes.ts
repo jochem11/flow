@@ -10,7 +10,7 @@
 import type { DiagramType, DocumentKind } from "./types";
 import type { Tool } from "./store";
 
-export type BoardTypeId = DiagramType | "text" | "kanban" | "eer";
+export type BoardTypeId = DiagramType | "text" | "kanban" | "eer" | "chart";
 
 /** A tool on a typed board, with the name it has there (on a state machine a pill is a "State") */
 export interface TypeTool {
@@ -172,6 +172,16 @@ export const BOARD_TYPES: BoardType[] = [
     label: "Kanban board",
     description: "Cards moving through columns",
     newName: "Kanban board",
+    umlLines: false,
+    code: false,
+    hint: "",
+  },
+  {
+    id: "chart",
+    kind: "chart",
+    label: "Chart",
+    description: "Columns, lines, areas and shares from a table",
+    newName: "Chart",
     umlLines: false,
     code: false,
     hint: "",

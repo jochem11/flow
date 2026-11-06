@@ -1,7 +1,7 @@
 use serde::{Deserialize, Serialize};
 use specta::Type;
 
-use super::{Camera, EerDoc, FlowDoc, KanbanDoc, TextDoc};
+use super::{Camera, ChartDoc, EerDoc, FlowDoc, KanbanDoc, TextDoc};
 
 /// A document, stored as `projects/<project_id>/docs/<id>.json`.
 #[derive(Debug, Clone, Serialize, Deserialize, Type)]
@@ -33,6 +33,7 @@ pub enum DocContent {
     Text(TextDoc),
     Kanban(KanbanDoc),
     Eer(EerDoc),
+    Chart(ChartDoc),
 }
 
 /// Just the kind of a document, without its data.
@@ -43,6 +44,7 @@ pub enum DocumentKind {
     Text,
     Kanban,
     Eer,
+    Chart,
 }
 
 impl DocContent {
@@ -52,6 +54,7 @@ impl DocContent {
             Self::Text(_) => DocumentKind::Text,
             Self::Kanban(_) => DocumentKind::Kanban,
             Self::Eer(_) => DocumentKind::Eer,
+            Self::Chart(_) => DocumentKind::Chart,
         }
     }
 
@@ -67,6 +70,7 @@ impl DocContent {
             DocumentKind::Text => Self::Text(TextDoc::default()),
             DocumentKind::Kanban => Self::Kanban(KanbanDoc::default()),
             DocumentKind::Eer => Self::Eer(EerDoc::default()),
+            DocumentKind::Chart => Self::Chart(ChartDoc::default()),
         }
     }
 }

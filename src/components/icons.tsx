@@ -461,6 +461,11 @@ export const IconEer = () => (
     <path d="M15 14h6M11 9h2v6h2" />
   </Svg>
 );
+export const IconChart = () => (
+  <Svg size={16}>
+    <path d="M4 20V10M10 20V4M16 20v-7M21 20H3" />
+  </Svg>
+);
 export const IconNewFolder = () => (
   <Svg size={16}>
     <path d="M3 7a2 2 0 012-2h4l2 2h8a2 2 0 012 2v8a2 2 0 01-2 2H5a2 2 0 01-2-2z" />

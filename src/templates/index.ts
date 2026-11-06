@@ -286,9 +286,45 @@ export const BUILT_IN: BuiltIn[] = [
   { id: "shop", kind: "eer", name: "Web shop", description: "Customers, orders, order lines and products", make: shop },
   { id: "scrum", kind: "kanban", name: "Scrum board", description: "Backlog to done, with labels and priorities", make: scrum },
   { id: "bugs", kind: "kanban", name: "Bug tracker", description: "From new to closed, labelled by severity", make: bugs },
+  { id: "revenue", kind: "chart", name: "Monthly revenue", description: "Two years side by side, month by month", make: revenueChart },
+  { id: "visitors", kind: "chart", name: "Where visitors come from", description: "One whole split into its parts", make: visitorsChart },
   { id: "meeting", kind: "text", name: "Meeting notes", description: "Agenda, notes, decisions, action items", make: () => text(MEETING) },
   { id: "spec", kind: "text", name: "Feature spec", description: "Problem, goal, proposal, open questions", make: () => text(SPEC) },
 ];
+
+// ---------- charts ----------
+
+function revenueChart(): DocContent {
+  const months = ["Jan", "Feb", "Mar", "Apr", "May", "Jun"];
+  const now = [42, 48, 51, 58, 63, 71];
+  const before = [38, 40, 45, 47, 52, 55];
+  return {
+    kind: "chart",
+    data: {
+      chart: "line",
+      title: "Monthly revenue (k€)",
+      series: [
+        { id: uid(), name: "This year" },
+        { id: uid(), name: "Last year" },
+      ],
+      rows: months.map((label, i) => ({ id: uid(), label, values: [now[i], before[i]] })),
+      yLabel: "k€",
+    },
+  };
+}
+
+function visitorsChart(): DocContent {
+  const parts: [string, number][] = [["Search", 46], ["Direct", 24], ["Social", 17], ["Email", 9], ["Other", 4]];
+  return {
+    kind: "chart",
+    data: {
+      chart: "share",
+      title: "Where visitors come from",
+      series: [{ id: uid(), name: "Visitors (%)" }],
+      rows: parts.map(([label, v]) => ({ id: uid(), label, values: [v] })),
+    },
+  };
+}
 
 // ---------- the first project of a new account ----------
 

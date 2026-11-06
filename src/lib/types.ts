@@ -34,6 +34,11 @@ export type {
   RecentBoard,
   TrashItem,
   SearchHit,
+  // charts
+  ChartDoc,
+  ChartType,
+  ChartSeries,
+  ChartRow,
   // flowchart
   FlowDoc,
   DiagramType,
