@@ -206,6 +206,37 @@ export function TopBar() {
             <Show when={doc().kind === "eer"}>
               <EerActions />
             </Show>
+            {/* A chart: its drawing as an image */}
+            <Show when={doc().kind === "chart"}>
+              <div class="header-actions">
+                <Menu
+                  align="right"
+                  button={(toggle) => (
+                    <button class="text-btn primary" onClick={toggle}>
+                      <IconExport />
+                      <span>Export</span>
+                    </button>
+                  )}
+                >
+                  {(close) => (
+                    <For each={EXPORTS.filter((x) => x.format !== "mermaid")}>
+                      {(x) => (
+                        <button
+                          class="menu-item"
+                          onClick={() => {
+                            void runExport(x.format);
+                            close();
+                          }}
+                        >
+                          <span>{x.label}</span>
+                          <small>{x.hint}</small>
+                        </button>
+                      )}
+                    </For>
+                  )}
+                </Menu>
+              </div>
+            </Show>
             <Show when={doc().kind === "flow"}>
               <div class="header-actions">
                 <Show when={canEdit()}>

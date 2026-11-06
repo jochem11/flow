@@ -42,6 +42,16 @@ pub fn export(doc: &Document, format: ExportFormat) -> Result<Vec<ExportFile>, S
         _ => Err("only flowcharts can be exported as an image or code".to_string()),
     };
 
+    // A chart: the drawing the app keeps with it (the app draws charts, Rust does not)
+    if let DocContent::Chart(chart) = &doc.content {
+        let svg = chart.svg.as_deref().ok_or("this chart has not been drawn yet: open it once")?;
+        return Ok(match format {
+            ExportFormat::Svg => named("svg", svg.as_bytes().to_vec()),
+            ExportFormat::Png => named("png", svg_to_png(svg)?),
+            _ => return Err("a chart can be exported as SVG or PNG".into()),
+        });
+    }
+
     let lang = match format {
         ExportFormat::TypeScript => Some(CodeLanguage::TypeScript),
         ExportFormat::Java => Some(CodeLanguage::Java),
@@ -232,7 +242,11 @@ pub(crate) fn bezier_point([p0, p1, p2, p3]: [(f64, f64); 4], t: f64) -> (f64, f
 const PNG_SCALE: f32 = 2.0;
 
 fn to_png(flow: &FlowDoc) -> Result<Vec<u8>, String> {
-    let svg = to_svg(flow);
+    svg_to_png(&to_svg(flow))
+}
+
+/// An SVG drawing as a PNG, at twice its size.
+fn svg_to_png(svg: &str) -> Result<Vec<u8>, String> {
 
     // Without fonts all text disappears, so load the system fonts.
     let mut opt = resvg::usvg::Options::default();
@@ -277,6 +291,28 @@ fn to_png(flow: &FlowDoc) -> Result<Vec<u8>, String> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// A chart exports the drawing it keeps; it says so when there is none yet.
+    #[test]
+    fn chart_export() {
+        let svg = r##"<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 40" width="64" height="40"><rect width="64" height="40" fill="#ffffff"/><rect x="8" y="10" width="12" height="30" fill="#2a78d6"/></svg>"##;
+        let mut doc = Document {
+            id: "c".into(),
+            project_id: "p".into(),
+            folder_id: None,
+            order: 1.0,
+            name: "Revenue".into(),
+            content: DocContent::Chart(crate::models::ChartDoc { svg: Some(svg.into()), ..Default::default() }),
+            updated_at: None,
+        };
+        let files = export(&doc, ExportFormat::Svg).unwrap();
+        assert_eq!((files[0].name.as_str(), files[0].bytes.as_slice()), ("Revenue.svg", svg.as_bytes()));
+        let png = export(&doc, ExportFormat::Png).unwrap();
+        assert!(png[0].bytes.starts_with(b"\x89PNG"));
+        assert!(export(&doc, ExportFormat::Mermaid).is_err());
+        doc.content = DocContent::Chart(Default::default());
+        assert!(export(&doc, ExportFormat::Svg).err().unwrap().contains("open it once"));
+    }
     use crate::models::{Camera, Edge, NodeColor};
 
     fn node(id: &str, kind: NodeKind, x: f64, y: f64) -> Node {

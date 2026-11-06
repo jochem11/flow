@@ -102,6 +102,9 @@ export function CommandPalette() {
     if (project) out.push({ key: "new-board", label: "New board…", sub: projectById(project)?.name, run: () => setNewBoardIn(project) });
     out.push({ key: "new-project", label: "New project", run: () => void createProject() });
     if (flow || doc?.kind === "eer") out.push({ key: "find", label: "Find on this board", keys: [MOD, "F"], run: openFind });
+    if (doc?.kind === "chart") {
+      for (const f of ["png", "svg"] as ExportFormat[]) out.push({ key: `export-${f}`, label: `Export as ${f.toUpperCase()}`, run: () => void runExport(f) });
+    }
     if (flow) {
       for (const f of ["png", "svg"] as ExportFormat[]) out.push({ key: `export-${f}`, label: `Export as ${f.toUpperCase()}`, run: () => void runExport(f) });
       if (edit) out.push({ key: "arrange", label: "Arrange automatically", run: () => void runAutoLayout() });

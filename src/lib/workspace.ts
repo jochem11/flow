@@ -256,6 +256,9 @@ export async function openDocument(projectId: string, docId: string, shared?: { 
     // "Recent" in the sidebar (not for a board seen through its link only)
     if (!shared) noteOpened({ documentId: docId, projectId, name: rest.name, kind: content.kind, diagram: content.kind === "flow" ? content.data.diagram : undefined });
     if (content.kind === "flow") requestAnimationFrame(() => fitIfNeeded());
+    // A chart not drawn yet (made from a template, or before charts kept their drawing):
+    // saved once, so exports and chart blocks have its drawing
+    if (content.kind === "chart" && !content.data.svg) markDirty();
   } catch (e) {
     toast(`Could not open document: ${errMsg(e)}`, "error");
   }
