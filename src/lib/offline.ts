@@ -39,6 +39,9 @@ export const kvSet = (key: string, value: unknown) => tx("readwrite", (s) => s.p
 export const kvDel = (key: string) => tx("readwrite", (s) => s.delete(key)).catch(() => undefined);
 const kvKeys = () => tx<IDBValidKey[]>("readonly", (s) => s.getAllKeys()).catch(() => [] as IDBValidKey[]);
 
+/** The keys that start with `prefix`, in order (IndexedDB sorts them) */
+export const kvKeysWith = async (prefix: string) => (await kvKeys()).filter((k): k is string => typeof k === "string" && k.startsWith(prefix));
+
 /** Logging out: nothing of this account stays on the device. */
 export const clearOffline = () => tx("readwrite", (s) => s.clear()).catch(() => undefined);
 

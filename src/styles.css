@@ -7320,3 +7320,12 @@ body.presenting .find-bar {
 .save-state.offline .dot {
   background: #eda100;
 }
+
+/* a comment written offline, waiting for the connection */
+.comment-waiting {
+  color: #b77400;
+  font-weight: 600;
+}
+.comment.waiting .comment-body {
+  opacity: 0.7;
+}

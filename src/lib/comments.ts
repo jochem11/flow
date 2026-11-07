@@ -6,6 +6,9 @@
 
 import { batch, createEffect, createMemo, createRoot, createSignal, on, onCleanup } from "solid-js";
 import { get, post, put, del } from "./server";
+import { me } from "./auth";
+import { isOffline, kvDel, kvGet, kvKeysWith, kvSet, online, withCopy } from "./offline";
+import { toast } from "./toast";
 import type { Comment, CommentAnchor } from "./types";
 import { openDoc } from "./workspace";
 
@@ -49,10 +52,114 @@ export async function loadComments() {
   // The desktop app's own files have no comments (only boards on the server do)
   if (!doc.role) return setComments([]);
   try {
-    const list = await get<Comment[]>(`/documents/${doc.id}/comments`);
-    if (openDoc()?.id === doc.id) setComments(list);
+    // Kept on the device too, to read them offline (offline.ts)
+    const list = await withCopy(`comments:${doc.id}`, () => get<Comment[]>(`/documents/${doc.id}/comments`));
+    // With the ones still waiting for the connection
+    const waiting = (await outbox()).filter((o) => o.comment.documentId === doc.id).map((o) => o.comment);
+    if (openDoc()?.id === doc.id) setComments([...list.filter((c) => !waiting.some((w) => w.id === c.id)), ...waiting]);
   } catch {
     /* keep what we have; the board itself shows errors */
+  }
+}
+
+// ---------- comments that wait for the connection ----------
+//
+// Written without a connection, a new comment or reply shows at once, marked as
+// not sent, and is kept on the device ("outbox:…" in offline.ts) until the
+// connection is back; then it goes, in the order written (a reply to a thread
+// that was waiting too goes to that thread once it has its real id).
+
+interface Waiting {
+  key: string;
+  comment: Comment;
+}
+
+const [waitingIds, setWaitingIds] = createSignal<Set<string>>(new Set());
+/** Is this comment still waiting to be sent? */
+export const isWaiting = (id: string) => waitingIds().has(id);
+
+async function outbox(): Promise<Waiting[]> {
+  const keys = await kvKeysWith("outbox:");
+  const items: Waiting[] = [];
+  for (const key of keys) {
+    const comment = await kvGet<Comment>(key);
+    if (comment) items.push({ key, comment });
+  }
+  setWaitingIds(new Set(items.map((i) => i.comment.id)));
+  return items;
+}
+
+/** Keeps a comment for later; shows it now. */
+async function keepForLater(documentId: string, fields: { anchor: CommentAnchor; parentId: string | null; body: string }): Promise<Comment> {
+  const u = me()?.user;
+  const g = guest();
+  const comment: Comment = {
+    id: `local-${crypto.randomUUID()}`,
+    documentId,
+    parentId: fields.parentId,
+    anchor: fields.anchor,
+    body: fields.body,
+    author: { userId: u?.id ?? null, name: u?.name ?? g?.name ?? "You", avatarUrl: u?.avatarUrl ?? null },
+    createdAt: Date.now(),
+    editedAt: null,
+    resolvedAt: null,
+  };
+  // The key sorts in the order written
+  await kvSet(`outbox:${String(Date.now()).padStart(15, "0")}-${comment.id}`, comment);
+  setWaitingIds((s) => new Set([...s, comment.id]));
+  if (openDoc()?.id === documentId) upsert(comment);
+  toast("Not sent yet: it goes when the connection is back");
+  return comment;
+}
+
+/** A waiting comment is not wanted anymore (its replies that wait go too). */
+export async function discardWaiting(c: Comment) {
+  for (const w of await outbox()) {
+    if (w.comment.id === c.id || w.comment.parentId === c.id) await kvDel(w.key);
+  }
+  setComments((all) => all.filter((x) => x.id !== c.id && x.parentId !== c.id));
+  await outbox();
+}
+
+let sending = false;
+
+/** The connection is back: sends what waited, in order. */
+export async function sendWaiting() {
+  if (sending) return;
+  sending = true;
+  try {
+    const real = new Map<string, string>();
+    let sent = 0;
+    for (const w of await outbox()) {
+      const c = w.comment;
+      const parentId = c.parentId ? (real.get(c.parentId) ?? c.parentId) : null;
+      // A reply whose thread could not be sent: it cannot go either
+      if (parentId?.startsWith("local-")) {
+        await kvDel(w.key);
+        continue;
+      }
+      try {
+        const saved = await post<Comment>(`/documents/${c.documentId}/comments`, parentId ? { parentId, body: c.body } : { anchor: c.anchor, body: c.body });
+        await kvDel(w.key);
+        real.set(c.id, saved.id);
+        sent++;
+        // On the open board: the waiting one becomes the real one (and its replies follow)
+        setComments((all) =>
+          all.map((x) => (x.id === c.id ? saved : x.parentId === c.id ? { ...x, parentId: saved.id } : x)),
+        );
+        if (focusedThread() === c.id) setFocusedThread(saved.id);
+      } catch (e) {
+        if (isOffline(e)) break;
+        // The server said no (the board is gone, no access anymore)
+        await kvDel(w.key);
+        setComments((all) => all.filter((x) => x.id !== c.id));
+        toast(`A comment could not be sent: ${e instanceof Error ? e.message : String(e)}`, "error");
+      }
+    }
+    await outbox();
+    if (sent) toast(`Back online: sent ${sent} ${sent === 1 ? "comment" : "comments"}`);
+  } finally {
+    sending = false;
   }
 }
 
@@ -63,8 +170,14 @@ function upsert(c: Comment) {
 export async function addThread(anchor: CommentAnchor, body: string) {
   const doc = openDoc();
   if (!doc) return;
-  const c = await post<Comment>(`/documents/${doc.id}/comments`, { anchor, body });
-  upsert(c);
+  let c: Comment;
+  try {
+    c = await post<Comment>(`/documents/${doc.id}/comments`, { anchor, body });
+    upsert(c);
+  } catch (e) {
+    if (!isOffline(e)) throw e;
+    c = await keepForLater(doc.id, { anchor, parentId: null, body });
+  }
   batch(() => {
     setDraftAnchor(null);
     setFocusedThread(c.id);
@@ -72,7 +185,14 @@ export async function addThread(anchor: CommentAnchor, body: string) {
 }
 
 export async function reply(root: Comment, body: string) {
-  upsert(await post<Comment>(`/documents/${root.documentId}/comments`, { parentId: root.id, body }));
+  // To a thread that is still waiting itself: waits too
+  if (isWaiting(root.id)) return void (await keepForLater(root.documentId, { anchor: root.anchor, parentId: root.id, body }));
+  try {
+    upsert(await post<Comment>(`/documents/${root.documentId}/comments`, { parentId: root.id, body }));
+  } catch (e) {
+    if (!isOffline(e)) throw e;
+    await keepForLater(root.documentId, { anchor: root.anchor, parentId: root.id, body });
+  }
 }
 
 export async function editComment(c: Comment, body: string) {
@@ -122,6 +242,12 @@ export async function loadGuest() {
 export async function becomeGuest(name: string) {
   setGuest(await post<Guest>("/guest", { name }));
 }
+
+// Back online (or logged in, with comments left from before): send what waited
+createRoot(() => {
+  createEffect(on(online, (on) => on && void sendWaiting(), { defer: true }));
+  createEffect(on(() => me()?.user.id ?? guest()?.id, (id) => id && online() && void sendWaiting()));
+});
 
 // A board opens: its comments; and keep them fresh while it is open
 createRoot(() => {

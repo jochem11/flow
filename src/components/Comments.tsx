@@ -31,6 +31,8 @@ import {
   threads,
   threadsOn,
   bodyParts,
+  discardWaiting,
+  isWaiting,
   toEditable,
   toStored,
   type Thread,
@@ -225,7 +227,7 @@ function Composer(p: { placeholder: string; initial?: string; submit: string; on
 function CommentView(p: { comment: Comment; root?: boolean }) {
   const [editing, setEditing] = createSignal(false);
   return (
-    <div class="comment">
+    <div class="comment" classList={{ waiting: isWaiting(p.comment.id) }}>
       <div class="comment-head">
         <Avatar name={p.comment.author.name} url={p.comment.author.avatarUrl} size={22} />
         <span class="comment-author">
@@ -234,11 +236,27 @@ function CommentView(p: { comment: Comment; root?: boolean }) {
             <span class="comment-guest"> (guest)</span>
           </Show>
         </span>
-        <span class="comment-time" title={new Date(p.comment.createdAt).toLocaleString()}>
-          {when(p.comment.createdAt)}
-          <Show when={p.comment.editedAt}> · edited</Show>
-        </span>
-        <Show when={mine(p.comment) || roleCanManage(openDoc()?.role)}>
+        <Show
+          when={!isWaiting(p.comment.id)}
+          fallback={
+            <>
+              <span class="comment-time comment-waiting" title="No connection: kept on this device, sent when it is back">
+                Not sent yet
+              </span>
+              <span class="comment-tools">
+                <button class="link-btn danger" onClick={() => void discardWaiting(p.comment)}>
+                  Discard
+                </button>
+              </span>
+            </>
+          }
+        >
+          <span class="comment-time" title={new Date(p.comment.createdAt).toLocaleString()}>
+            {when(p.comment.createdAt)}
+            <Show when={p.comment.editedAt}> · edited</Show>
+          </span>
+        </Show>
+        <Show when={!isWaiting(p.comment.id) && (mine(p.comment) || roleCanManage(openDoc()?.role))}>
           <span class="comment-tools">
             <Show when={mine(p.comment)}>
               <button class="link-btn" onClick={() => setEditing(true)}>
@@ -283,7 +301,7 @@ function ThreadView(p: { thread: Thread }) {
     <div class="comment-thread" classList={{ focused: focusedThread() === p.thread.root.id, resolved: resolved() }} ref={(el) => focusedThread() === p.thread.root.id && requestAnimationFrame(() => el.scrollIntoView({ block: "nearest" }))}>
       <div class="comment-anchor">
         <span>{anchorLabel(p.thread.root.anchor)}</span>
-        <Show when={canComment()}>
+        <Show when={canComment() && !isWaiting(p.thread.root.id)}>
           <button class="link-btn" onClick={() => resolve(p.thread.root, !resolved()).catch((e) => toast(errMsg(e), "error"))}>
             {resolved() ? "Reopen" : "Resolve"}
           </button>
