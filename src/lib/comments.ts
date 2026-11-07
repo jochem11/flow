@@ -149,3 +149,41 @@ createRoot(() => {
     ),
   );
 });
+
+// ---------- mentions ----------
+
+/** A mention as written in a comment: `@[Name](user id)` (see server/src/routes/inbox.rs) */
+const MENTION = /@\[([^\]\n]{1,80})\]\(([A-Za-z0-9-]{1,64})\)/g;
+
+/** A comment's text in parts: plain text, and mentions (to show as chips). */
+export function bodyParts(body: string): ({ text: string } | { name: string; userId: string })[] {
+  const out: ({ text: string } | { name: string; userId: string })[] = [];
+  let last = 0;
+  for (const m of body.matchAll(MENTION)) {
+    if (m.index! > last) out.push({ text: body.slice(last, m.index) });
+    out.push({ name: m[1], userId: m[2] });
+    last = m.index! + m[0].length;
+  }
+  if (last < body.length) out.push({ text: body.slice(last) });
+  return out;
+}
+
+/** For editing: mentions as `@Name`, and who they are. */
+export function toEditable(body: string): { text: string; picked: { name: string; id: string }[] } {
+  const picked: { name: string; id: string }[] = [];
+  const text = body.replace(MENTION, (_, name: string, id: string) => {
+    if (!picked.some((p) => p.id === id)) picked.push({ name, id });
+    return `@${name}`;
+  });
+  return { text, picked };
+}
+
+/** Back to the stored form: each `@Name` of someone picked becomes a mention. */
+export function toStored(text: string, picked: { name: string; id: string }[]): string {
+  let out = text;
+  // Longest names first, so "@Ann Lee" is not taken as "@Ann"
+  for (const p of [...picked].sort((a, b) => b.name.length - a.name.length)) {
+    out = out.split(`@${p.name}`).join(`@[${p.name}](${p.id})`);
+  }
+  return out;
+}

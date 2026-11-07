@@ -37,6 +37,7 @@ import { TimerIndicator } from "./TimerIndicator";
 import { AccountMenu } from "./AccountMenu";
 import { NewBoardDialog } from "./BoardDialogs";
 import { boardTypeOf } from "../lib/boardTypes";
+import { InboxButton } from "./InboxButton";
 
 // ---------- sidebar UI state (local only, not saved to the backend) ----------
 
@@ -471,6 +472,7 @@ export function Sidebar() {
       <div class="sidebar-head">
         <span class="logo" aria-hidden="true" />
         <span class="app-name">Flow</span>
+        <InboxButton />
         <button
           class="icon-btn small"
           title="New project"

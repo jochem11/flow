@@ -487,6 +487,12 @@ export const IconNewFolder = () => (
 
 // ---------- kanban ----------
 
+export const IconBell = () => (
+  <Svg>
+    <path d="M6 16V11a6 6 0 0 1 12 0v5l2 2H4z" />
+    <path d="M10 20a2 2 0 0 0 4 0" />
+  </Svg>
+);
 export const IconMore = () => (
   <Svg size={16}>
     <circle cx="5" cy="12" r="1.2" />

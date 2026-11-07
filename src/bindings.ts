@@ -68,6 +68,26 @@ export const commands = {
 };
 
 /* Types */
+/**  One thing that happened in a project. */
+export type Activity = {
+	id: string,
+	kind: ActivityKind,
+	actor: string,
+	actorAvatar: string | null,
+	documentId: string | null,
+	/**  The board's name then (it may be renamed or deleted since) */
+	documentName: string | null,
+	/**  A renamed board's old name, a comment's start */
+	detail: string | null,
+	at: number,
+	/**  Edits by one person to one board close together are one entry: how many */
+	count: number,
+};
+
+export type ActivityKind = "created" | "edited" | "renamed" | "deleted" | "restored" | "commented" | 
+/**  Someone joined the project or was given a board in it */
+"joined";
+
 /**  The result of Arrange: the nodes that move, and the lines between them. */
 export type Arranged = {
 	nodes: Position[],
@@ -268,7 +288,13 @@ export type CommentAnchor =
 /**  A kanban card */
 { kind: "card"; id: string } | 
 /**  A spot on a flowchart or EER canvas */
-{ kind: "point"; x: number; y: number };
+{ kind: "point"; x: number; y: number } | 
+/**
+ *  A passage of a text document: the words, and a little of what is around
+ *  them to find the right place when they occur more than once (as the W3C
+ *  text quote selector)
+ */
+{ kind: "text"; quote: string; prefix: string; suffix: string };
 
 export type CommentAuthor = {
 	/**  None for a guest */
@@ -510,6 +536,12 @@ export type Folder = {
 /**  Where an imported diagram came from. */
 export type ImportFormat = "mermaid" | "drawio" | "excalidraw";
 
+/**  The inbox: the latest notices, and how many are unread. */
+export type Inbox = {
+	items: Notification[],
+	unread: number,
+};
+
 /**  An invitation that has not been accepted yet. */
 export type Invite = {
 	id: string,
@@ -742,6 +774,30 @@ export type NodeKind = "box" | "diamond" | "note" | "pill" |
 "topic" | 
 /**  An editorial note beside the diagram: text with an accent bar, joined by a thin line to what it is about */
 "callout";
+
+/**  One notice in someone's inbox. */
+export type Notification = {
+	id: string,
+	kind: NotificationKind,
+	projectId: string | null,
+	projectName: string | null,
+	documentId: string | null,
+	documentName: string | null,
+	/**  The comment it is about (for mentions and replies), to show its thread */
+	commentId: string | null,
+	/**  Who did it */
+	actor: string,
+	/**  The start of the comment */
+	excerpt: string,
+	createdAt: number,
+	readAt: number | null,
+};
+
+export type NotificationKind = 
+/**  Someone @mentioned you in a comment */
+"mention" | 
+/**  Someone answered in a thread you wrote in */
+"reply";
 
 /**  A point on the canvas, in world coordinates. */
 export type Point = {

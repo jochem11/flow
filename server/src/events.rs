@@ -5,6 +5,7 @@
 //!                                       load the sidebar again
 //!   {"type":"access","projectId":…}    your own access changed: check the open board
 //!                                       (closed when gone, read-only when lowered)
+//!   {"type":"inbox"}                    your inbox changed: load it again
 //!
 //! Access itself is never decided here: every request still goes through
 //! `access.rs`, and changing someone's access also cuts their board connections
@@ -41,6 +42,11 @@ impl Events {
         if let Some(list) = conns.get_mut(user_id) {
             list.retain(|tx| tx.send(msg.to_string()).is_ok());
         }
+    }
+
+    /// Something new in someone's inbox (or read elsewhere).
+    pub fn inbox_changed(&self, user_id: &str) {
+        self.send_user(user_id, &json!({ "type": "inbox" }).to_string());
     }
 
     /// Someone's own access changed (in this project).

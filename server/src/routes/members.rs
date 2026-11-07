@@ -384,6 +384,11 @@ async fn respond(State(state): State<AppState>, caller: Caller, Json(r): Json<Re
         sqlx::query("UPDATE users SET email_verified_at = coalesce(email_verified_at, now()) WHERE id = $1").bind(&user.id).execute(&state.db).await?;
         sqlx::query("UPDATE invites SET accepted_at = now() WHERE id = $1").bind(&id).execute(&state.db).await?;
         grant(&state, &project_id, document_id.as_deref(), &user.id, Role::parse(&role).unwrap_or(Role::Viewer)).await?;
+        let board: Option<(String, String)> = match document_id.as_deref() {
+            Some(d) => sqlx::query_as("SELECT id, name FROM documents WHERE id = $1").bind(d).fetch_optional(&state.db).await?,
+            None => None,
+        };
+        super::activity::record(&state, &project_id, &caller, flow_core::models::ActivityKind::Joined, board.as_ref().map(|(i, n)| (i.as_str(), n.as_str())), None).await;
     } else {
         sqlx::query("DELETE FROM invites WHERE id = $1").bind(&id).execute(&state.db).await?;
     }

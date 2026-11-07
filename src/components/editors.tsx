@@ -23,15 +23,16 @@ import { NewBoardDialog } from "./BoardDialogs";
 import { MarkdownView, onMarkdownKeyDown } from "./Markdown";
 import { RichTextEditor } from "./RichTextEditor";
 import { Toolbar } from "./Toolbar";
-import { canEdit } from "../lib/access";
+import { canComment, canEdit } from "../lib/access";
 import { me } from "../lib/auth";
 import { colorFor, textDoc } from "../lib/collab";
-import { guest } from "../lib/comments";
+import { focusedThread, guest, openThreads, showThread, startThread } from "../lib/comments";
 import { MembersDialog } from "./ShareDialog";
 import { ZoomControls } from "./ZoomControls";
 import { ClassPanel } from "./ClassPanel";
 import { FindBar, Minimap } from "./FindAndMap";
 import { ProjectLook } from "./ProjectLook";
+import { ProjectActivity } from "./ProjectActivity";
 
 export function FlowEditor() {
   return (
@@ -69,6 +70,18 @@ export function TextEditor() {
             const id = me()?.user.id ?? guest()?.id ?? "guest";
             return { ...t, user: { name: me()?.user.name ?? guest()?.name ?? "Guest", color: colorFor(id) } };
           })()}
+          // Comments on passages: only for documents on the server
+          comments={
+            openDoc()?.role
+              ? {
+                  marks: () =>
+                    openThreads().flatMap((t) => (t.root.anchor.kind === "text" ? [{ id: t.root.id, quote: t.root.anchor.quote, prefix: t.root.anchor.prefix, suffix: t.root.anchor.suffix }] : [])),
+                  focused: focusedThread,
+                  onOpen: showThread,
+                  onComment: canComment() ? (a) => startThread({ kind: "text", ...a }) : undefined,
+                }
+              : undefined
+          }
         />
       </Show>
     </div>
@@ -199,6 +212,10 @@ export function ProjectView(p: { projectId: string }) {
           </div>
           <Show when={newType()}>
             {(t) => <NewBoardDialog projectId={p.projectId} folderId={null} type={t()} onClose={() => setNewType(null)} />}
+          </Show>
+
+          <Show when={proj().role}>
+            <ProjectActivity projectId={p.projectId} />
           </Show>
 
           <Show when={docsOf(p.projectId).length}>

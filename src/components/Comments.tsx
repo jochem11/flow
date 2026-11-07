@@ -30,8 +30,12 @@ import {
   startThread,
   threads,
   threadsOn,
+  bodyParts,
+  toEditable,
+  toStored,
   type Thread,
 } from "../lib/comments";
+import { people } from "../lib/people";
 import { eer, ENTITY_W } from "../lib/eer";
 import { kanban } from "../lib/kanban";
 import { nodeName } from "../lib/links";
@@ -61,6 +65,8 @@ function anchorLabel(a: CommentAnchor): string {
       const c = kanban.columns.flatMap((col) => col.cards).find((x) => x.id === a.id);
       return c ? `On card “${c.title}”` : "On a removed card";
     }
+    case "text":
+      return `On “${a.quote.length > 60 ? `${a.quote.slice(0, 59)}…` : a.quote}”`;
   }
 }
 
@@ -87,16 +93,55 @@ export function CommentsButton() {
   );
 }
 
-/** A text box with a send button; Cmd/Ctrl+Enter sends. */
+/**
+ * A text box with a send button; Cmd/Ctrl+Enter sends. Typing @ offers the
+ * people on the board: picked, they are mentioned (and told, see inbox).
+ */
 function Composer(p: { placeholder: string; initial?: string; submit: string; onSubmit: (body: string) => Promise<void>; onCancel?: () => void; autofocus?: boolean }) {
-  const [body, setBody] = createSignal(p.initial ?? "");
+  const start = toEditable(p.initial ?? "");
+  const [body, setBody] = createSignal(start.text);
+  const [picked, setPicked] = createSignal(start.picked);
   const [busy, setBusy] = createSignal(false);
+  let area!: HTMLTextAreaElement;
+  // The @word being typed, and the people it matches
+  const [query, setQuery] = createSignal<{ at: number; text: string } | null>(null);
+  const [active, setActive] = createSignal(0);
+  const matches = () => {
+    const q = query();
+    if (!q) return [];
+    const t = q.text.toLowerCase();
+    return people()
+      .filter((u) => u.id !== me()?.user.id && (u.name.toLowerCase().includes(t) || u.email.toLowerCase().startsWith(t)))
+      .slice(0, 6);
+  };
+  const findQuery = () => {
+    const before = area.value.slice(0, area.selectionStart);
+    const m = /(^|\s)@([^\s@]{0,30})$/.exec(before);
+    setQuery(m ? { at: before.length - m[2].length - 1, text: m[2] } : null);
+    setActive(0);
+  };
+  const pick = (u: { id: string; name: string }) => {
+    const q = query();
+    if (!q) return;
+    const text = body();
+    const caret = area.selectionStart;
+    const next = `${text.slice(0, q.at)}@${u.name} ${text.slice(caret)}`;
+    setBody(next);
+    setPicked((ps) => (ps.some((x) => x.id === u.id) ? ps : [...ps, { id: u.id, name: u.name }]));
+    setQuery(null);
+    requestAnimationFrame(() => {
+      const pos = q.at + u.name.length + 2;
+      area.focus();
+      area.setSelectionRange(pos, pos);
+    });
+  };
   const send = async () => {
     if (!body().trim()) return;
     setBusy(true);
     try {
-      await p.onSubmit(body());
+      await p.onSubmit(toStored(body(), picked()));
       setBody("");
+      setPicked([]);
     } catch (e) {
       toast(errMsg(e), "error");
     } finally {
@@ -107,16 +152,62 @@ function Composer(p: { placeholder: string; initial?: string; submit: string; on
     <div class="comment-composer">
       <textarea
         rows={2}
-        placeholder={p.placeholder}
+        placeholder={people().length ? `${p.placeholder} (@ to mention someone)` : p.placeholder}
         value={body()}
-        ref={(el) => p.autofocus && requestAnimationFrame(() => el.focus())}
-        onInput={(e) => setBody(e.currentTarget.value)}
+        ref={(el) => {
+          area = el;
+          if (p.autofocus) requestAnimationFrame(() => el.focus());
+        }}
+        onInput={(e) => {
+          setBody(e.currentTarget.value);
+          findQuery();
+        }}
+        onBlur={() => setTimeout(() => setQuery(null), 150)}
         onKeyDown={(e) => {
           e.stopPropagation();
+          const list = matches();
+          if (list.length) {
+            if (e.key === "ArrowDown" || e.key === "ArrowUp") {
+              e.preventDefault();
+              setActive((active() + (e.key === "ArrowDown" ? 1 : list.length - 1)) % list.length);
+              return;
+            }
+            if (e.key === "Enter" || e.key === "Tab") {
+              e.preventDefault();
+              pick(list[active()]);
+              return;
+            }
+            if (e.key === "Escape") {
+              e.preventDefault();
+              setQuery(null);
+              return;
+            }
+          }
           if (e.key === "Enter" && (e.metaKey || e.ctrlKey)) void send();
           if (e.key === "Escape") p.onCancel?.();
         }}
       />
+      <Show when={matches().length}>
+        <div class="mention-options panel" role="listbox" aria-label="Mention someone">
+          <For each={matches()}>
+            {(u, i) => (
+              <button
+                class="mention-option"
+                classList={{ active: active() === i() }}
+                role="option"
+                aria-selected={active() === i()}
+                onPointerDown={(e) => e.preventDefault()}
+                onPointerMove={() => setActive(i())}
+                onClick={() => pick(u)}
+              >
+                <Avatar name={u.name} url={u.avatarUrl} size={20} />
+                <span>{u.name}</span>
+                <small>{u.email}</small>
+              </button>
+            )}
+          </For>
+        </div>
+      </Show>
       <div class="comment-composer-actions">
         <Show when={p.onCancel}>
           <button class="text-btn" onClick={p.onCancel}>
@@ -160,7 +251,16 @@ function CommentView(p: { comment: Comment; root?: boolean }) {
           </span>
         </Show>
       </div>
-      <Show when={editing()} fallback={<p class="comment-body">{p.comment.body}</p>}>
+      <Show
+        when={editing()}
+        fallback={
+          <p class="comment-body">
+            <For each={bodyParts(p.comment.body)}>
+              {(part) => ("name" in part ? <span class="mention" classList={{ me: part.userId === me()?.user.id }}>@{part.name}</span> : part.text)}
+            </For>
+          </p>
+        }
+      >
         <Composer
           placeholder="Comment"
           initial={p.comment.body}

@@ -26,6 +26,17 @@ pub enum Mailer {
     Memory(Mutex<Vec<Mail>>),
 }
 
+/// Sends a mail without making the request wait for the mail server: a notice
+/// is not worth a slow answer. Other mailers (files, the log, tests) at once.
+pub async fn send_later(mailer: &std::sync::Arc<Mailer>, mail: Mail) {
+    if matches!(**mailer, Mailer::Smtp { .. }) {
+        let m = mailer.clone();
+        tokio::spawn(async move { m.send(mail).await });
+    } else {
+        mailer.send(mail).await;
+    }
+}
+
 impl Mailer {
     pub fn from_config(c: &Config) -> Result<Mailer, String> {
         if let Some(s) = &c.smtp {
@@ -145,5 +156,14 @@ pub fn role_words(role: flow_core::models::Role) -> &'static str {
         Role::Commenter => "view and comment",
         Role::Viewer => "view",
         Role::None => "see the boards shared with you",
+    }
+}
+
+/// Someone @mentioned them in a comment.
+pub fn mentioned(to: &str, name: &str, by: &str, board: &str, excerpt: &str, link: &str) -> Mail {
+    Mail {
+        to: to.into(),
+        subject: format!("{by} mentioned you on {board}"),
+        text: format!("Hi {name},\n\n{by} mentioned you in a comment on {board}:\n\n  {excerpt}\n\nAnswer it here:\n\n{link}\n"),
     }
 }

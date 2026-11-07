@@ -126,6 +126,8 @@ async fn restore(State(state): State<AppState>, caller: Caller, Path(id): Path<S
         .bind(&id)
         .execute(&state.db)
         .await?;
+        let (name,): (String,) = sqlx::query_as("SELECT name FROM documents WHERE id = $1").bind(&id).fetch_one(&state.db).await?;
+        super::activity::record(&state, &project_id, &caller, flow_core::models::ActivityKind::Restored, Some((&id, &name)), None).await;
         crate::events::project_changed(&state, &project_id).await;
         return Ok(StatusCode::NO_CONTENT);
     }

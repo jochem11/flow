@@ -7,7 +7,7 @@ use axum::http::StatusCode;
 use axum::routing::{get, put};
 use axum::{Json, Router};
 use chrono::{DateTime, Utc};
-use flow_core::models::{Comment, CommentAnchor, CommentAuthor, Role};
+use flow_core::models::{ActivityKind, Comment, CommentAnchor, CommentAuthor, Role};
 use serde::Deserialize;
 use sqlx::types::Json as Db;
 
@@ -94,7 +94,7 @@ fn clean(body: &str) -> ApiResult<String> {
 }
 
 async fn create(State(state): State<AppState>, caller: Caller, Path(id): Path<String>, Json(c): Json<NewComment>) -> ApiResult<Json<Comment>> {
-    require_document(&state, &caller, &id, Role::Commenter).await?;
+    let (project_id, _) = require_document(&state, &caller, &id, Role::Commenter).await?;
     let (user_id, guest_id, name) = match (&caller.user, &caller.guest) {
         (Some(u), _) => (Some(u.id.clone()), None, u.name.clone()),
         (None, Some(g)) => (None, Some(g.id.clone()), g.name.clone()),
@@ -112,18 +112,24 @@ async fn create(State(state): State<AppState>, caller: Caller, Path(id): Path<St
         None => c.anchor.unwrap_or(CommentAnchor::Board),
     };
     let comment_id = tokens::new_id();
+    let body = clean(&c.body)?;
+    let author = (user_id.clone(), name.clone());
     sqlx::query("INSERT INTO comments (id, document_id, parent_id, anchor, body, author_user_id, guest_id, author_name) VALUES ($1, $2, $3, $4, $5, $6, $7, $8)")
         .bind(&comment_id)
         .bind(&id)
         .bind(&c.parent_id)
         .bind(Db(&anchor))
-        .bind(clean(&c.body)?)
+        .bind(&body)
         .bind(user_id)
         .bind(guest_id)
         .bind(name)
         .execute(&state.db)
         .await?;
     state.rooms.comments_changed(&id);
+    // Mentions and replies to the people in them; the project's activity
+    super::inbox::notify_comment(&state, author.0.as_deref(), &author.1, &id, &comment_id, c.parent_id.as_deref(), &body).await?;
+    let (board,): (String,) = sqlx::query_as("SELECT name FROM documents WHERE id = $1").bind(&id).fetch_one(&state.db).await?;
+    super::activity::record(&state, &project_id, &caller, ActivityKind::Commented, Some((&id, &board)), Some(&super::inbox::excerpt(&body))).await;
     Ok(Json(load(&state, &comment_id).await?.comment()))
 }
 

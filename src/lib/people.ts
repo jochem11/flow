@@ -1,5 +1,5 @@
 // The people who can work on the open board (everyone with access to it), for
-// assigning kanban cards. Loaded when a board from the server opens, and again
+// assigning kanban cards and @mentioning in comments. Loaded when a board from the server opens, and again
 // when the project's people change (see projectsChanged in workspace.ts).
 
 import { createEffect, createRoot, createSignal, on } from "solid-js";
@@ -37,7 +37,8 @@ createRoot(() => {
     on(
       () => {
         const d = openDoc();
-        return d?.kind === "kanban" ? `${d.id}|${d.role}` : null;
+        // Kanban cards are assigned to them; comments on any board mention them
+        return d?.role && !d.share ? `${d.id}|${d.role}` : null;
       },
       (key) => (key ? void loadPeople() : setPeople([])),
     ),

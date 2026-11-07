@@ -34,6 +34,11 @@ export type {
   RecentBoard,
   TrashItem,
   SearchHit,
+  Inbox,
+  Notification,
+  NotificationKind,
+  Activity,
+  ActivityKind,
   // charts
   ChartDoc,
   ChartType,

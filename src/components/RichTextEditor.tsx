@@ -17,6 +17,7 @@ import type { WebsocketProvider } from "y-websocket";
 import type * as Y from "yjs";
 import { createEffect, createSignal, For, on, onCleanup, onMount, Show } from "solid-js";
 import { handleLinkClick } from "../lib/markdown";
+import { selectionAnchor, TextComments, textCommentsKey, type TextMark } from "../lib/textComments";
 
 type Action = {
   label: string;
@@ -65,6 +66,17 @@ export function RichTextEditor(p: {
    * we are the one to do so (see collab/).
    */
   collab?: { doc: Y.Doc; provider: WebsocketProvider; seed: () => boolean; user: { name: string; color: string } };
+  /**
+   * Comments on passages (a text document on the server): the threads to mark,
+   * the one shown, what a click on a marked passage does, and (when one may
+   * comment) what "Comment" on a selection does.
+   */
+  comments?: {
+    marks: () => TextMark[];
+    focused: () => string | null;
+    onOpen: (id: string) => void;
+    onComment?: (anchor: { quote: string; prefix: string; suffix: string }) => void;
+  };
 }) {
   let host!: HTMLDivElement;
   let editor: Editor | undefined;
@@ -73,6 +85,9 @@ export function RichTextEditor(p: {
   /** Bumped on every editor transaction, so toolbar "active" states update. */
   const [tick, setTick] = createSignal(0);
   const [linkOpen, setLinkOpen] = createSignal(false);
+  /** Where the "Comment" button goes, over a selection (relative to this editor) */
+  const [commentAt, setCommentAt] = createSignal<{ x: number; y: number } | null>(null);
+  let wrap!: HTMLDivElement;
 
   onMount(() => {
     editor = new Editor({
@@ -90,6 +105,7 @@ export function RichTextEditor(p: {
         TaskItem.configure({ nested: true }),
         Placeholder.configure({ placeholder: p.placeholder ?? "" }),
         Markdown,
+        ...(p.comments ? [TextComments.configure({ onOpen: p.comments.onOpen })] : []),
       ],
       content: p.collab ? undefined : p.value,
       contentType: "markdown",
@@ -100,7 +116,32 @@ export function RichTextEditor(p: {
         p.onChange(lastValue);
       },
       onTransaction: () => setTick((t) => t + 1),
+      onSelectionUpdate: ({ editor }) => placeCommentButton(editor),
+      onBlur: () => setTimeout(() => setCommentAt(null), 150),
     });
+  });
+
+  /** Over a selection of words: the "Comment" button, just above its end */
+  const placeCommentButton = (e: Editor) => {
+    // Only over words (not a bare line break or an empty block)
+    if (!p.comments?.onComment || e.state.selection.empty || !selectionAnchor(e.state)) return setCommentAt(null);
+    const end = e.view.coordsAtPos(e.state.selection.to);
+    const box = wrap.getBoundingClientRect();
+    const above = end.top - box.top - 34;
+    // On the first lines there is no room above: below the selection then
+    setCommentAt({ x: end.left - box.left, y: above < 4 ? end.bottom - box.top + 6 : above });
+  };
+
+  // The marked passages follow the threads (and which one is shown)
+  createEffect(() => {
+    const c = p.comments;
+    if (!c) return;
+    const marks = c.marks();
+    const focused = c.focused();
+    if (!editor) return;
+    editor.view.dispatch(editor.state.tr.setMeta(textCommentsKey, { marks, focused }));
+    // The shown thread's passage comes into view
+    if (focused) requestAnimationFrame(() => host.querySelector(`[data-thread="${CSS.escape(focused)}"]`)?.scrollIntoView({ block: "center", behavior: "smooth" }));
   });
 
   // A text document: the version history can put old text in it
@@ -152,7 +193,23 @@ export function RichTextEditor(p: {
   };
 
   return (
-    <div class={`rich-text ${p.variant ?? "inline"} ${p.class ?? ""}`}>
+    <div class={`rich-text ${p.variant ?? "inline"} ${p.class ?? ""}`} ref={wrap}>
+      <Show when={commentAt()}>
+        {(at) => (
+          <button
+            class="text-btn small text-comment-btn"
+            style={{ left: `${at().x}px`, top: `${at().y}px` }}
+            onMouseDown={(e) => e.preventDefault()}
+            onClick={() => {
+              const a = editor && selectionAnchor(editor.state);
+              setCommentAt(null);
+              if (a) p.comments?.onComment?.(a);
+            }}
+          >
+            Comment
+          </button>
+        )}
+      </Show>
       <div class="format-bar rich-text-toolbar" role="toolbar" aria-label="Formatting" hidden={p.readOnly}>
         <For each={ACTIONS}>
           {(group, i) => (

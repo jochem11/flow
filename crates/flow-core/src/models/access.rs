@@ -194,6 +194,10 @@ pub enum CommentAnchor {
     Card { id: String },
     /// A spot on a flowchart or EER canvas
     Point { x: f64, y: f64 },
+    /// A passage of a text document: the words, and a little of what is around
+    /// them to find the right place when they occur more than once (as the W3C
+    /// text quote selector)
+    Text { quote: String, prefix: String, suffix: String },
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, Type)]

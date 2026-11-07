@@ -516,3 +516,55 @@ async fn sign_up_limit_per_address(pool: PgPool) {
     // Someone else is not affected
     assert_eq!(sign_up(11, "198.51.100.2").await.unwrap().status(), StatusCode::OK);
 }
+
+/// Bob (in the project) and Cy (not) are mentioned: only Bob hears of it, in his
+/// inbox and by mail; Ann hears of Bob's answer; the project's activity tells it all.
+#[sqlx::test(migrations = "./migrations")]
+async fn mentions_inbox_activity(pool: PgPool) {
+    let s = Server::new(pool);
+    let ann = s.register("ann@example.com", "Ann").await;
+    let bob = s.register("bob@example.com", "Bob").await;
+    let cy = s.register("cy@example.com", "Cy").await;
+    let (pid, did) = project(&s, &ann).await;
+    let doc = format!("/documents/{did}");
+    s.ok(&ann, "POST", &format!("/projects/{pid}/invites"), Some(json!({ "email": "bob@example.com", "role": "editor" }))).await;
+    let verify = s.link_token("bob@example.com", "/verify/");
+    s.ok(&As::default(), "POST", "/auth/verify", Some(json!({ "token": verify }))).await;
+    let mine = s.ok(&bob, "GET", "/invites/mine", None).await;
+    s.ok(&bob, "POST", "/invites/respond", Some(json!({ "id": mine[0]["id"], "accept": true }))).await;
+    let id_of = |v: Value| v["user"]["id"].as_str().unwrap().to_string();
+    let (bob_id, cy_id) = (id_of(s.ok(&bob, "GET", "/auth/me", None).await), id_of(s.ok(&cy, "GET", "/auth/me", None).await));
+
+    let body = format!("@[Bob]({bob_id}) and @[Cy]({cy_id}): is this right?");
+    let thread = s.ok(&ann, "POST", &format!("{doc}/comments"), Some(json!({ "body": body, "anchor": { "kind": "node", "id": "n" } }))).await;
+    let inbox = s.ok(&bob, "GET", "/inbox", None).await;
+    assert_eq!(inbox["unread"], 1);
+    assert_eq!((inbox["items"][0]["kind"].as_str(), inbox["items"][0]["actor"].as_str()), (Some("mention"), Some("Ann")));
+    assert_eq!(inbox["items"][0]["excerpt"], "@Bob and @Cy: is this right?");
+    assert_eq!(inbox["items"][0]["documentName"], "Flow");
+    assert!(s.state.mailer.sent().iter().any(|m| m.to == "bob@example.com" && m.subject == "Ann mentioned you on Flow"));
+    // Cy cannot see the board: nothing for him
+    assert_eq!(s.ok(&cy, "GET", "/inbox", None).await["unread"], 0);
+    assert!(!s.state.mailer.sent().iter().any(|m| m.to == "cy@example.com" && m.subject.contains("mentioned")));
+
+    // Bob answers: Ann hears of it (not Bob himself)
+    s.ok(&bob, "POST", &format!("{doc}/comments"), Some(json!({ "body": "Yes", "parentId": thread["id"] }))).await;
+    let inbox = s.ok(&ann, "GET", "/inbox", None).await;
+    assert_eq!((inbox["unread"].as_u64(), inbox["items"][0]["kind"].as_str()), (Some(1), Some("reply")));
+    assert_eq!(s.ok(&bob, "GET", "/inbox", None).await["unread"], 1);
+    // Read
+    s.ok(&bob, "PUT", "/inbox/read", Some(json!({}))).await;
+    assert_eq!(s.ok(&bob, "GET", "/inbox", None).await["unread"], 0);
+
+    // Activity: edits close together are one entry; renames keep the old name
+    s.ok(&bob, "PUT", &doc, Some(flow_doc(&pid, &did, "one"))).await;
+    s.ok(&bob, "PUT", &doc, Some(flow_doc(&pid, &did, "two"))).await;
+    s.ok(&ann, "PUT", &format!("{doc}/name"), Some(json!({ "name": "Order flow" }))).await;
+    let feed = s.ok(&ann, "GET", &format!("/projects/{pid}/activity"), None).await;
+    let kinds: Vec<&str> = feed.as_array().unwrap().iter().map(|a| a["kind"].as_str().unwrap()).collect();
+    assert_eq!(kinds, ["renamed", "edited", "commented", "commented", "joined", "created"]);
+    assert_eq!((feed[0]["detail"].as_str(), feed[0]["documentName"].as_str()), (Some("Flow"), Some("Order flow")));
+    assert_eq!((feed[1]["actor"].as_str(), feed[1]["count"].as_u64()), (Some("Bob"), Some(2)));
+    // Not for someone outside the project
+    assert_eq!(s.status(&cy, "GET", &format!("/projects/{pid}/activity"), None).await, StatusCode::NOT_FOUND);
+}

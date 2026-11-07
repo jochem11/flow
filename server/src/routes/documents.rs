@@ -7,7 +7,7 @@ use axum::routing::{get, post, put};
 use axum::{Json, Router};
 use chrono::{DateTime, Utc};
 use flow_core::folders::{ensure_folder_exists, next_order};
-use flow_core::models::{DocContent, Document, DocumentKind, DocumentMeta, Role};
+use flow_core::models::{ActivityKind, DocContent, Document, DocumentKind, DocumentMeta, Role};
 use serde::Deserialize;
 use sqlx::types::Json as Db;
 
@@ -141,6 +141,7 @@ async fn create(State(state): State<AppState>, caller: Caller, Path(id): Path<St
     };
     let doc_id = tokens::new_id();
     insert(&state, &doc_id, &id, d.folder_id.as_deref(), next_order(max.into_iter()), &d.name, &content).await?;
+    super::activity::record(&state, &id, &caller, ActivityKind::Created, Some((&doc_id, &d.name)), None).await;
     crate::events::project_changed(&state, &id).await;
     Ok(Json(load_document(&state, &doc_id).await?))
 }
@@ -161,14 +162,15 @@ async fn insert(state: &AppState, id: &str, project_id: &str, folder_id: Option<
 
 /// Autosave: the board's content (its name and place have their own calls).
 async fn save(State(state): State<AppState>, caller: Caller, Path(id): Path<String>, Json(doc): Json<Document>) -> ApiResult<StatusCode> {
-    require_document(&state, &caller, &id, Role::Editor).await?;
-    let (kind,): (String,) = sqlx::query_as("SELECT kind FROM documents WHERE id = $1").bind(&id).fetch_one(&state.db).await?;
+    let (project_id, _) = require_document(&state, &caller, &id, Role::Editor).await?;
+    let (kind, name): (String, String) = sqlx::query_as("SELECT kind, name FROM documents WHERE id = $1").bind(&id).fetch_one(&state.db).await?;
     if kind != kind_str(doc.content.kind()) {
         return Err(AppError::bad("A board cannot change its kind"));
     }
     sqlx::query("UPDATE documents SET content = $2, updated_at = now() WHERE id = $1").bind(&id).bind(Db(&doc.content)).execute(&state.db).await?;
     // Now and then the board as it is now goes in its history
     super::history::keep_automatically(&state, &id, &caller.user()?.id).await?;
+    super::activity::record(&state, &project_id, &caller, ActivityKind::Edited, Some((&id, &name)), None).await;
     Ok(StatusCode::NO_CONTENT)
 }
 
@@ -182,7 +184,11 @@ async fn rename(State(state): State<AppState>, caller: Caller, Path(id): Path<St
     if n.name.trim().is_empty() {
         return Err(AppError::bad("name cannot be empty"));
     }
+    let (old,): (String,) = sqlx::query_as("SELECT name FROM documents WHERE id = $1").bind(&id).fetch_one(&state.db).await?;
     sqlx::query("UPDATE documents SET name = $2 WHERE id = $1").bind(&id).bind(n.name.trim()).execute(&state.db).await?;
+    if old != n.name.trim() {
+        super::activity::record(&state, &project_id, &caller, ActivityKind::Renamed, Some((&id, n.name.trim())), Some(&old)).await;
+    }
     crate::events::project_changed(&state, &project_id).await;
     Ok(StatusCode::NO_CONTENT)
 }
@@ -203,6 +209,8 @@ async fn delete(State(state): State<AppState>, caller: Caller, Path(id): Path<St
     require_project(&state, &caller, &project_id, Role::Editor).await?;
     // To the trash: restorable for 30 days (see routes/trash.rs)
     sqlx::query("UPDATE documents SET deleted_at = now() WHERE id = $1").bind(&id).execute(&state.db).await?;
+    let (name,): (String,) = sqlx::query_as("SELECT name FROM documents WHERE id = $1").bind(&id).fetch_one(&state.db).await?;
+    super::activity::record(&state, &project_id, &caller, ActivityKind::Deleted, Some((&id, &name)), None).await;
     // Whoever has it open loses it now
     state.rooms.kick_board(&id);
     crate::events::project_changed(&state, &project_id).await;

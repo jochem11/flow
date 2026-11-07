@@ -8,6 +8,7 @@ import { me } from "./auth";
 import { inTauri, serverUrl, sessionToken } from "./server";
 import { projectsChanged } from "./workspace";
 import { checkForUpdate } from "./version";
+import { loadInbox } from "./inbox";
 
 function url() {
   const http = inTauri ? serverUrl() : `${location.protocol}//${location.host}`;
@@ -27,6 +28,7 @@ function listen(): () => void {
       wait = 1000;
       // Missed notices while away: catch up once
       projectsChanged(true);
+      void loadInbox();
       // Back after the server was gone: maybe it was updated
       if (!first) void checkForUpdate();
       first = false;
@@ -34,7 +36,8 @@ function listen(): () => void {
     ws.onmessage = (e) => {
       try {
         const msg = JSON.parse(String(e.data)) as { type: string };
-        projectsChanged(msg.type === "access");
+        if (msg.type === "inbox") void loadInbox();
+        else projectsChanged(msg.type === "access");
       } catch {
         /* not ours */
       }
