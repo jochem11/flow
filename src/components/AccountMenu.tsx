@@ -13,6 +13,8 @@ import { Menu } from "./Menu";
 import { setTheme, theme, THEME_NAMES, type Theme } from "../lib/theme";
 import { openShortcuts } from "./Shortcuts";
 import { UploadDialog } from "./UploadDialog";
+import { AccountDialog } from "./AccountDialog";
+import { online } from "../lib/offline";
 
 /** A round picture, or the first letter of the name. */
 export function Avatar(p: { name: string; url?: string | null; size?: number }) {
@@ -33,6 +35,7 @@ export function Avatar(p: { name: string; url?: string | null; size?: number }) 
 
 export function AccountMenu() {
   const [uploading, setUploading] = createSignal(false);
+  const [settings, setSettings] = createSignal(false);
   return (
     <Show when={me()}>
       {(m) => (
@@ -63,6 +66,15 @@ export function AccountMenu() {
                   class="menu-item"
                   onClick={() => {
                     close();
+                    setSettings(true);
+                  }}
+                >
+                  <span>Account settings…</span>
+                </button>
+                <button
+                  class="menu-item"
+                  onClick={() => {
+                    close();
                     openShortcuts();
                   }}
                 >
@@ -89,6 +101,9 @@ export function AccountMenu() {
           </Menu>
           <Show when={uploading()}>
             <UploadDialog onClose={() => setUploading(false)} />
+          </Show>
+          <Show when={settings()}>
+            <AccountDialog onClose={() => setSettings(false)} />
           </Show>
         </div>
       )}
@@ -121,6 +136,17 @@ export function VerifyBanner() {
         <button class="icon-btn small" title="Hide" onClick={() => setHidden(true)}>
           ×
         </button>
+      </div>
+    </Show>
+  );
+}
+
+/** No connection: what still works, and what happens to changes. */
+export function OfflineBanner() {
+  return (
+    <Show when={!online()}>
+      <div class="verify-banner offline-banner" role="status">
+        <span>You are offline. You can keep working on what is open or was opened before: changes are kept on this device and saved when the connection is back.</span>
       </div>
     </Show>
   );

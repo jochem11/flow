@@ -10,6 +10,7 @@
 //!   trash.rs              deleted boards and projects (30 days)
 //!   personal.rs           stars and recently opened boards
 
+pub mod account;
 pub mod activity;
 pub mod comments;
 pub mod documents;
@@ -67,6 +68,7 @@ pub fn api() -> Router<AppState> {
         .merge(personal::routes())
         .merge(inbox::routes())
         .merge(activity::routes())
+        .merge(account::routes())
         .merge(crate::collab::routes())
         .merge(crate::events::routes())
 }

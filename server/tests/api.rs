@@ -568,3 +568,80 @@ async fn mentions_inbox_activity(pool: PgPool) {
     // Not for someone outside the project
     assert_eq!(s.status(&cy, "GET", &format!("/projects/{pid}/activity"), None).await, StatusCode::NOT_FOUND);
 }
+
+/// Name, password (other devices logged out), devices, email (confirmed again),
+/// giving a project away, and deleting an account (not while others share one).
+#[sqlx::test(migrations = "./migrations")]
+async fn account_settings(pool: PgPool) {
+    let s = Server::new(pool);
+    let ann = s.register("ann@example.com", "Ann").await;
+    let bob = s.register("bob@example.com", "Bob").await;
+    let login = |email: &'static str, password: &'static str| {
+        let s = &s;
+        async move {
+            let req = Request::builder()
+                .method("POST")
+                .uri("/api/auth/login")
+                .header("content-type", "application/json")
+                .header("x-flow-client", "desktop")
+                .body(Body::from(json!({ "email": email, "password": password }).to_string()))
+                .unwrap();
+            let res = s.app.clone().oneshot(req).await.unwrap();
+            let status = res.status();
+            let v: Value = serde_json::from_slice(&res.into_body().collect().await.unwrap().to_bytes()).unwrap_or(Value::Null);
+            (status, As { token: v["token"].as_str().map(String::from), ..As::default() })
+        }
+    };
+    let (_, ann_laptop) = login("ann@example.com", "correct horse").await;
+
+    // Name
+    assert_eq!(s.ok(&ann, "PUT", "/account/name", Some(json!({ "name": "Ann Lee" }))).await["user"]["name"], "Ann Lee");
+    assert_eq!(s.status(&ann, "PUT", "/account/name", Some(json!({ "name": "  " }))).await, StatusCode::BAD_REQUEST);
+
+    // Devices: two, this one marked
+    let list = s.ok(&ann, "GET", "/account/sessions", None).await;
+    assert_eq!(list.as_array().unwrap().len(), 2);
+    assert_eq!(list.as_array().unwrap().iter().filter(|x| x["current"] == true).count(), 1);
+
+    // Password: the current one is needed; then the laptop is logged out
+    assert_eq!(s.status(&ann, "PUT", "/account/password", Some(json!({ "current": "wrong", "newPassword": "battery staple" }))).await, StatusCode::FORBIDDEN);
+    s.ok(&ann, "PUT", "/account/password", Some(json!({ "current": "correct horse", "newPassword": "battery staple" }))).await;
+    assert_eq!(s.status(&ann_laptop, "GET", "/auth/me", None).await, StatusCode::UNAUTHORIZED);
+    assert_eq!(login("ann@example.com", "battery staple").await.0, StatusCode::OK);
+    // Logging out one device by its id
+    let other = s.ok(&ann, "GET", "/account/sessions", None).await.as_array().unwrap().iter().find(|x| x["current"] == false).unwrap()["id"].as_str().unwrap().to_string();
+    s.ok(&ann, "DELETE", &format!("/account/sessions/{other}"), None).await;
+    assert_eq!(s.ok(&ann, "GET", "/account/sessions", None).await.as_array().unwrap().len(), 1);
+
+    // Email: the password again, not someone else's address, then confirmed by mail
+    assert_eq!(s.status(&ann, "PUT", "/account/email", Some(json!({ "email": "bob@example.com", "password": "battery staple" }))).await, StatusCode::CONFLICT);
+    let me = s.ok(&ann, "PUT", "/account/email", Some(json!({ "email": "ann@lee.example", "password": "battery staple" }))).await;
+    assert_eq!((me["user"]["email"].as_str(), me["emailVerified"].as_bool()), (Some("ann@lee.example"), Some(false)));
+    let verify = s.link_token("ann@lee.example", "/verify/");
+    s.ok(&As::default(), "POST", "/auth/verify", Some(json!({ "token": verify }))).await;
+
+    // A project shared with Bob: Ann cannot delete her account yet
+    let (pid, _) = project(&s, &ann).await;
+    s.ok(&ann, "POST", &format!("/projects/{pid}/invites"), Some(json!({ "email": "bob@example.com", "role": "editor" }))).await;
+    let verify = s.link_token("bob@example.com", "/verify/");
+    s.ok(&As::default(), "POST", "/auth/verify", Some(json!({ "token": verify }))).await;
+    let mine = s.ok(&bob, "GET", "/invites/mine", None).await;
+    s.ok(&bob, "POST", "/invites/respond", Some(json!({ "id": mine[0]["id"], "accept": true }))).await;
+    let (status, err, _) = s.call(&ann, "DELETE", "/account", Some(json!({ "password": "battery staple" }))).await;
+    assert_eq!(status, StatusCode::CONFLICT, "{err}");
+    assert!(err.to_string().contains("Shop"));
+
+    // She gives it to Bob, and becomes co-owner
+    let bob_id = s.ok(&bob, "GET", "/auth/me", None).await["user"]["id"].as_str().unwrap().to_string();
+    assert_eq!(s.status(&bob, "POST", &format!("/projects/{pid}/transfer"), Some(json!({ "userId": bob_id }))).await, StatusCode::FORBIDDEN);
+    s.ok(&ann, "POST", &format!("/projects/{pid}/transfer"), Some(json!({ "userId": bob_id }))).await;
+    assert_eq!(s.ok(&bob, "GET", "/projects", None).await[0]["role"], "owner");
+    assert_eq!(s.ok(&ann, "GET", "/projects", None).await[0]["role"], "coOwner");
+
+    // Now she can go; her own projects go with her, Bob's stays
+    assert_eq!(s.status(&ann, "DELETE", "/account", Some(json!({ "password": "wrong" }))).await, StatusCode::FORBIDDEN);
+    s.ok(&ann, "DELETE", "/account", Some(json!({ "password": "battery staple" }))).await;
+    assert_eq!(s.status(&ann, "GET", "/auth/me", None).await, StatusCode::UNAUTHORIZED);
+    assert_eq!(login("ann@lee.example", "battery staple").await.0, StatusCode::UNAUTHORIZED);
+    assert_eq!(s.ok(&bob, "GET", "/projects", None).await.as_array().unwrap().len(), 1);
+}

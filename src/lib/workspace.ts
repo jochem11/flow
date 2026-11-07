@@ -1,7 +1,9 @@
 // Workspace state: projects, folders, documents, which document is open, and
 // autosaving it. Everything that touches the backend goes through `api`.
 
-import { batch, createEffect, createRoot, createSignal, on } from "solid-js";
+import { batch, createEffect, createRoot, createSignal, on, onCleanup } from "solid-js";
+import { me } from "./auth";
+import { isOffline, online, sendUnsaved } from "./offline";
 import { api, errMsg } from "./api";
 import { showPath, type Route } from "./route";
 import { get, ServerError, useShareToken } from "./server";
@@ -57,7 +59,9 @@ export type SaveState =
   | { kind: "saved" }
   | { kind: "dirty" }
   | { kind: "saving" }
-  | { kind: "error"; message: string };
+  | { kind: "error"; message: string }
+  /** No connection: kept on this device, saved when it is back */
+  | { kind: "offline" };
 
 const [saveState, setSaveState] = createSignal<SaveState>({ kind: "saved" });
 export { saveState };
@@ -105,9 +109,28 @@ export async function saveNow() {
     await api.saveDocument(doc);
     setSaveState({ kind: "saved" });
   } catch (e) {
-    setSaveState({ kind: "error", message: errMsg(e) });
+    setSaveState(isOffline(e) ? { kind: "offline" } : { kind: "error", message: errMsg(e) });
   }
 }
+
+/** The connection is back: what waited is saved (also from before a reload). */
+async function backOnline() {
+  if (!me()) return;
+  const sent = await sendUnsaved(api.saveDocument);
+  if (saveState().kind === "offline" || saveState().kind === "dirty") await saveNow();
+  if (sent) toast(`Back online: saved ${sent} ${sent === 1 ? "board" : "boards"} changed while offline`);
+}
+createRoot(() => {
+  // Back online: as soon as a request gets through, or the system says so
+  createEffect(on(online, (on) => on && void backOnline(), { defer: true }));
+  // Logged in (on startup): saves left from last time
+  createEffect(on(() => me()?.user.id, (id) => id && online() && void backOnline()));
+  // While offline, try now and then (the system does not always tell)
+  const timer = setInterval(() => {
+    if (!online() && saveState().kind === "offline") void saveNow();
+  }, 15_000);
+  onCleanup(() => clearInterval(timer));
+});
 
 async function flushIfDirty() {
   const s = saveState().kind;

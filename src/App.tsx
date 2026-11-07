@@ -40,7 +40,7 @@ import { Gate } from "./components/Gate";
 import { canComment, canEdit } from "./lib/access";
 import { placing, setPlacing } from "./lib/comments";
 import { Sidebar } from "./components/Sidebar";
-import { InvitesBanner, UpdateBanner, VerifyBanner } from "./components/AccountMenu";
+import { InvitesBanner, OfflineBanner, UpdateBanner, VerifyBanner } from "./components/AccountMenu";
 import { Presenter } from "./components/Presenter";
 import { openFind } from "./components/FindAndMap";
 import { addSiblingTopic, addSubtopic, deleteSelectionTidy } from "./lib/mindmap";
@@ -56,6 +56,7 @@ import "./styles.css";
 import "./lib/collab";
 // Live notices: others' changes to projects and to your access
 import "./lib/events";
+import { selectNextBlock } from "./lib/a11y";
 
 const isTyping = (t: EventTarget | null) =>
   t instanceof HTMLElement && !!t.closest("input, textarea, [contenteditable]");
@@ -228,10 +229,17 @@ export default function App() {
       case "Backspace":
         deleteSelectionTidy();
         break;
-      case "Tab":
-        // A mind map topic: a subtopic (otherwise Tab moves the focus as usual)
-        if (addSubtopic()) e.preventDefault();
+      case "Tab": {
+        // A mind map topic: a subtopic
+        if (addSubtopic()) {
+          e.preventDefault();
+          break;
+        }
+        // On the board itself (not in a panel or field): the next block (Shift: the one before)
+        const a = document.activeElement;
+        if ((a === document.body || a?.classList.contains("viewport")) && selectNextBlock(e.shiftKey)) e.preventDefault();
         break;
+      }
       case "Escape":
         clearSelection();
         setUi("tool", "select");
@@ -338,6 +346,7 @@ export default function App() {
         <div class="app">
           <Sidebar />
           <main class="main">
+            <OfflineBanner />
             <UpdateBanner />
             <VerifyBanner />
             <InvitesBanner />

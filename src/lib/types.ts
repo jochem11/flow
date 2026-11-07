@@ -34,6 +34,7 @@ export type {
   RecentBoard,
   TrashItem,
   SearchHit,
+  AccountSession,
   Inbox,
   Notification,
   NotificationKind,

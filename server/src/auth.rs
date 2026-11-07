@@ -132,7 +132,7 @@ pub fn hash_password(password: &str) -> ApiResult<String> {
     Argon2::default().hash_password(password.as_bytes()).map(|h| h.to_string()).map_err(AppError::internal)
 }
 
-fn password_matches(password: &str, hash: &str) -> bool {
+pub(crate) fn password_matches(password: &str, hash: &str) -> bool {
     PasswordHash::new(hash).is_ok_and(|h| Argon2::default().verify_password(password.as_bytes(), &h).is_ok())
 }
 
@@ -193,7 +193,7 @@ pub async fn user_by_email(state: &AppState, email: &str) -> ApiResult<Option<Us
     Ok(sqlx::query_as::<_, UserRow>(concat!("SELECT ", user_columns!(), " FROM users WHERE email = $1")).bind(email.trim().to_lowercase()).fetch_optional(&state.db).await?)
 }
 
-async fn user_by_id(state: &AppState, id: &str) -> ApiResult<UserRow> {
+pub(crate) async fn user_by_id(state: &AppState, id: &str) -> ApiResult<UserRow> {
     Ok(sqlx::query_as::<_, UserRow>(concat!("SELECT ", user_columns!(), " FROM users WHERE id = $1")).bind(id).fetch_one(&state.db).await?)
 }
 
@@ -223,7 +223,7 @@ async fn redeem(state: &AppState, purpose: &str, token: &str) -> ApiResult<(Stri
     .ok_or_else(|| AppError::bad("This link has expired or was already used"))
 }
 
-async fn send_verification(state: &AppState, user: &UserRow) -> ApiResult<()> {
+pub(crate) async fn send_verification(state: &AppState, user: &UserRow) -> ApiResult<()> {
     let token = one_time(state, "verify", &user.id, None, Duration::days(2)).await?;
     state.mailer.send(mail::verify(&user.email, &user.name, &state.link(&format!("/verify/{token}")))).await;
     Ok(())
@@ -254,7 +254,7 @@ struct Register {
     password: String,
 }
 
-fn check_password(password: &str) -> ApiResult<()> {
+pub(crate) fn check_password(password: &str) -> ApiResult<()> {
     if password.chars().count() < 8 {
         return Err(AppError::bad("Use a password of at least 8 characters"));
     }

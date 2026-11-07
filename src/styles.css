@@ -7167,3 +7167,156 @@ body.presenting .find-bar {
   background: var(--panel);
   box-shadow: var(--shadow);
 }
+
+/* account settings */
+.account-settings {
+  display: flex;
+  flex-direction: column;
+  gap: 18px;
+  max-height: 70vh;
+  overflow: auto;
+  padding: 4px 2px 8px;
+}
+.account-part h4 {
+  margin: 0 0 8px;
+  font-size: 13px;
+}
+.account-part.danger h4 {
+  color: var(--danger);
+}
+.account-row {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+}
+.account-row .panel-field {
+  flex: 1;
+  min-width: 0;
+}
+.account-fields {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  max-width: 360px;
+}
+.account-fields .text-btn {
+  align-self: flex-start;
+}
+.account-note {
+  margin: 0 0 8px;
+  color: var(--text-muted);
+  font-size: 12.5px;
+  line-height: 1.45;
+}
+.account-badge {
+  margin-left: 6px;
+  padding: 1px 6px;
+  border-radius: 8px;
+  background: var(--hover);
+  color: var(--text-muted);
+  font-size: 11px;
+}
+.account-badge.warn {
+  background: #f5a524;
+  color: #fff;
+}
+.account-sessions {
+  display: flex;
+  flex-direction: column;
+  margin-bottom: 8px;
+}
+.account-session {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 6px 0;
+  border-bottom: 1px solid var(--panel-border);
+  font-size: 13px;
+}
+.account-session small {
+  margin-left: auto;
+  color: var(--text-muted);
+}
+.text-btn.danger {
+  color: var(--danger);
+}
+
+/* ---------- touch screens: no hover, bigger targets ---------- */
+@media (pointer: coarse) {
+  /* the selected block's connection handles show (there is no hover to show them) */
+  .node.selected .handle {
+    opacity: 1;
+    transform: scale(1);
+  }
+  .handle {
+    width: 18px;
+    height: 18px;
+    margin: -9px 0 0 -9px;
+  }
+  .handle::after {
+    inset: -12px;
+  }
+  .resize-handle.nw,
+  .resize-handle.ne,
+  .resize-handle.se,
+  .resize-handle.sw {
+    width: 22px !important;
+    height: 22px !important;
+  }
+  .tool-btn,
+  .icon-btn {
+    min-width: 40px;
+    min-height: 40px;
+  }
+  .menu-item {
+    min-height: 40px;
+  }
+}
+
+/* ---------- accessibility ---------- */
+
+/* for screen readers only */
+.sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0 0 0 0);
+  white-space: nowrap;
+  border: 0;
+}
+/* where the keyboard is, always visible */
+:where(button, a, input, select, textarea, [tabindex]):focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+/* the board itself: its frame, not a ring around the whole window */
+.viewport:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: -2px;
+}
+.viewport:focus {
+  outline: none;
+}
+.viewport:focus-visible {
+  outline: 2px solid var(--accent);
+}
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
+}
+
+.offline-banner {
+  background: color-mix(in srgb, #eda100 16%, var(--panel));
+}
+.save-state.offline .dot {
+  background: #eda100;
+}

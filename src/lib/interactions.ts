@@ -65,6 +65,14 @@ import { guidesFor, nearestLine, snapBox, snapLines, SNAP_REACH, type Guide } fr
 
 const DRAG_THRESHOLD = 3;
 
+/** Stops for the gestures that are going on (a second finger takes over, see touch.ts) */
+const stoppers = new Set<() => void>();
+
+/** Ends every gesture now, without finishing it. */
+export function cancelTracking() {
+  for (const stop of [...stoppers]) stop();
+}
+
 export function trackPointer(
   down: PointerEvent,
   move: (ev: PointerEvent) => void,
@@ -72,11 +80,16 @@ export function trackPointer(
 ) {
   const id = down.pointerId;
   const onMove = (ev: PointerEvent) => ev.pointerId === id && move(ev);
-  const onUp = (ev: PointerEvent) => {
-    if (ev.pointerId !== id) return;
+  const stop = () => {
+    stoppers.delete(stop);
     window.removeEventListener("pointermove", onMove);
     window.removeEventListener("pointerup", onUp);
     window.removeEventListener("pointercancel", onUp);
+  };
+  stoppers.add(stop);
+  const onUp = (ev: PointerEvent) => {
+    if (ev.pointerId !== id) return;
+    stop();
     up?.(ev);
   };
   window.addEventListener("pointermove", onMove);

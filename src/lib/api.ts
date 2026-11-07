@@ -10,6 +10,7 @@
 
 import { commands } from "../bindings";
 import { del, get, inTauri, post, put, rawRequest } from "./server";
+import { isOffline, keepUnsaved, savedNow, withCopy } from "./offline";
 import type { Brand, DocContent,
   Document,
   DocumentKind,
@@ -176,7 +177,8 @@ const webTools: Tools = {
 };
 
 const httpApi: Api = {
-  listProjects: () => get("/projects"),
+  // Kept on this device too, to open them without a connection (offline.ts)
+  listProjects: () => withCopy("projects", () => get("/projects")),
   createProject: (name) => post("/projects", { name }),
   updateProject: (id, name, description) => put(`/projects/${id}`, { name, description }),
   setProjectBrand: (id, brand) => put(`/projects/${id}/brand`, brand),
@@ -187,10 +189,19 @@ const httpApi: Api = {
   moveFolder: (projectId, folderId, parentId, order) => put(`/projects/${projectId}/folders/${folderId}/move`, { parentId, order }),
   deleteFolder: (projectId, folderId) => del(`/projects/${projectId}/folders/${folderId}`),
 
-  listDocuments: (projectId) => get(`/projects/${projectId}/documents`),
-  loadDocument: (_projectId, id) => get(`/documents/${id}`),
+  listDocuments: (projectId) => withCopy(`docs:${projectId}`, () => get(`/projects/${projectId}/documents`)),
+  loadDocument: (_projectId, id) => withCopy(`doc:${id}`, () => get(`/documents/${id}`)),
   createDocument: (projectId, folderId, name, kind, content) => post(`/projects/${projectId}/documents`, { folderId, name, kind, content }),
-  saveDocument: (doc) => put(`/documents/${doc.id}`, doc),
+  // Without a connection: kept here, and sent when it is back (workspace.ts)
+  saveDocument: async (doc) => {
+    try {
+      await put(`/documents/${doc.id}`, doc);
+      void savedNow(doc);
+    } catch (e) {
+      if (isOffline(e)) await keepUnsaved(doc);
+      throw e;
+    }
+  },
   renameDocument: (_projectId, id, name) => put(`/documents/${id}/name`, { name }),
   moveDocument: (_projectId, id, folderId, order) => put(`/documents/${id}/move`, { parentId: folderId, order }),
   deleteDocument: (_projectId, id) => del(`/documents/${id}`),

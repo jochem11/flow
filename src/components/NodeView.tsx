@@ -156,6 +156,7 @@ export function NodeView(p: { node: FlowNode }) {
         "cards-done": cardsLinkedTo(n.id).length > 0 && cardsLinkedTo(n.id).every((c) => c.done),
       }}
       data-node-id={n.id}
+      aria-label={n.text.trim() ? n.text.trim().split("\n")[0] : n.kind}
       style={{
         transform: `translate(${n.x}px, ${n.y}px)`,
         width: `${n.w}px`,

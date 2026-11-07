@@ -293,6 +293,13 @@ export function MembersDialog(p: { projectId: string; onClose: () => void }) {
   };
   const setRole = async (userId: string, role: string) => {
     try {
+      if (role === "owner") {
+        const who = members()?.find((m) => m.user.id === userId)?.user.name ?? "them";
+        if (!confirm(`Give “${project()?.name}” to ${who}? They become its owner; you stay in it as co-owner.`)) return reload();
+        await post(`/projects/${p.projectId}/transfer`, { userId });
+        toast(`${who} owns it now`);
+        return reload();
+      }
       if (role === "remove") await del(`/projects/${p.projectId}/members/${userId}`);
       else await put(`/projects/${p.projectId}/members/${userId}`, { role });
       reload();
@@ -321,6 +328,10 @@ export function MembersDialog(p: { projectId: string; onClose: () => void }) {
                 <select class="share-select" value={m.role} onChange={(e) => setRole(m.user.id, e.currentTarget.value)}>
                   <option value="none">Only the boards below</option>
                   <For each={PROJECT_ROLES}>{(r) => <option value={r}>{ROLE_LABEL[r]}</option>}</For>
+                  {/* Only the owner gives the project away, to someone in the whole project */}
+                  <Show when={project()?.role === "owner" && m.role !== "none"}>
+                    <option value="owner">Make owner…</option>
+                  </Show>
                   <option value="remove">Remove from project</option>
                 </select>
               </Show>

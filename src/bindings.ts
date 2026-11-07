@@ -68,6 +68,17 @@ export const commands = {
 };
 
 /* Types */
+/**  A login on some device or browser. */
+export type AccountSession = {
+	/**  Not the secret itself: enough to name it when logging it out */
+	id: string,
+	/**  The browser or app, as it said */
+	userAgent: string | null,
+	createdAt: number,
+	/**  This one (the device asking) */
+	current: boolean,
+};
+
 /**  One thing that happened in a project. */
 export type Activity = {
 	id: string,

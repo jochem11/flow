@@ -9,6 +9,7 @@
 // something without it, against other sites acting for you) and, while a board
 // is open through a share link, `X-Flow-Share`.
 
+import { reachedServer } from "./offline";
 import { commands } from "../bindings";
 
 export const inTauri = typeof window !== "undefined" && "__TAURI_INTERNALS__" in window;
@@ -101,8 +102,10 @@ export async function rawRequest(method: string, path: string, body?: unknown): 
       credentials: "include",
     });
   } catch {
+    reachedServer(false);
     throw new ServerError(0, `Cannot reach the server${inTauri ? ` at ${serverUrl()}` : ""}. Check your connection.`);
   }
+  reachedServer(true);
   if (!res.ok) {
     let message = res.statusText;
     try {
@@ -156,4 +159,4 @@ export function whenLoggedOut(f: () => void) {
 export const get = <T>(path: string) => request<T>("GET", path);
 export const post = <T>(path: string, body?: unknown) => request<T>("POST", path, body ?? {});
 export const put = <T>(path: string, body?: unknown) => request<T>("PUT", path, body ?? {});
-export const del = <T>(path: string) => request<T>("DELETE", path);
+export const del = <T>(path: string, body?: unknown) => request<T>("DELETE", path, body);

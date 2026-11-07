@@ -10,6 +10,7 @@
 // Re-export everything so callers write `crate::models::Project`
 // instead of `crate::models::project::Project`.
 mod access;
+mod account;
 mod chart;
 mod document;
 mod eer;
@@ -22,6 +23,7 @@ mod project;
 mod text;
 
 pub use access::*;
+pub use account::*;
 pub use chart::*;
 pub use document::*;
 pub use eer::*;

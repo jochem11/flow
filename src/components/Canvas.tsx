@@ -12,6 +12,8 @@ import { FragmentConditions, FRAMES, NodeView } from "./NodeView";
 import { addImages } from "../lib/files";
 import { ContextBar } from "./ContextBar";
 import { BRAND_FONTS, isColor } from "../lib/brand";
+import { installTouch } from "../lib/touch";
+import { selectionText } from "../lib/a11y";
 import { openDoc, projectById } from "../lib/workspace";
 
 /** The strip at the top of a section where a double-click renames it */
@@ -37,6 +39,7 @@ export function Canvas() {
       }
     };
     el.addEventListener("wheel", onWheel, { passive: false });
+    onCleanup(installTouch(el));
     trackPresence(el, toWorld);
     onCleanup(() => el.removeEventListener("wheel", onWheel));
   });
@@ -56,6 +59,11 @@ export function Canvas() {
     }
     if (ui.tool === "line") {
       beginLine(e);
+      return;
+    }
+    // A finger on the empty canvas moves it (a selection box is for a mouse)
+    if (ui.tool === "select" && e.pointerType === "touch") {
+      beginPan(e);
       return;
     }
     if (ui.tool !== "select") {
@@ -120,6 +128,12 @@ export function Canvas() {
     <div
       ref={el}
       class="viewport"
+      // For a keyboard and a screen reader: the board is one place to be in;
+      // Tab goes through its blocks, and what is selected is said (below)
+      tabIndex={0}
+      role="application"
+      aria-roledescription="board"
+      aria-label={`${openDoc()?.name ?? "Board"}: ${board.nodes.length} ${board.nodes.length === 1 ? "block" : "blocks"}. Tab goes through them.`}
       classList={{
         "look-sketch": board.look === "sketch",
         "tool-place": ui.tool !== "select",
@@ -184,6 +198,9 @@ export function Canvas() {
         </div>
       </Show>
       <PlacingOverlay kind="flow" />
+      <div class="sr-only" aria-live="polite" aria-atomic="true">
+        {selectionText()}
+      </div>
     </div>
   );
 }

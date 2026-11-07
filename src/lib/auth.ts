@@ -8,8 +8,9 @@ import { listen } from "@tauri-apps/api/event";
 import { openUrl } from "@tauri-apps/plugin-opener";
 import { createSignal } from "solid-js";
 import { commands } from "../bindings";
-import { get, inTauri, post, ServerError, serverUrl, setToken, loadToken, whenLoggedOut } from "./server";
-import type { Me } from "./types";
+import { del, get, inTauri, post, put, ServerError, serverUrl, setToken, loadToken, whenLoggedOut } from "./server";
+import type { AccountSession, Me } from "./types";
+import { clearOffline } from "./offline";
 
 const [me, setMe] = createSignal<Me | null>(null);
 const [authReady, setAuthReady] = createSignal(false);
@@ -30,19 +31,35 @@ async function finish(r: LoggedIn) {
 
 // A session that ended (expired, or logged out elsewhere) shows the login screen
 whenLoggedOut(() => {
+  localStorage.removeItem(ME_KEY);
+  void clearOffline();
   if (me()) setMe(null);
 });
 
 /** On startup: who is logged in, if anyone, and how this server lets people log in. */
+/** Who was logged in on this device, for opening the app offline */
+const ME_KEY = "flowapp:me";
+
 export async function initAuth() {
   await loadToken();
   setServerProblem(null);
   try {
     setGoogleEnabled((await get<{ google: boolean }>("/auth/providers")).google);
-    setMe(await get<Me>("/auth/me"));
+    const m = await get<Me>("/auth/me");
+    setMe(m);
+    // Remembered, to open the app without a connection next time
+    localStorage.setItem(ME_KEY, JSON.stringify(m));
   } catch (e) {
-    if (e instanceof ServerError && e.status === 0) setServerProblem(e.message);
-    setMe(null);
+    const offline = e instanceof ServerError && e.status === 0;
+    const known = offline ? localStorage.getItem(ME_KEY) : null;
+    if (known) {
+      // Offline, but logged in here before: work from what this device keeps
+      setMe(JSON.parse(known) as Me);
+    } else {
+      if (offline) setServerProblem((e as ServerError).message);
+      if (!offline) localStorage.removeItem(ME_KEY);
+      setMe(null);
+    }
   } finally {
     setAuthReady(true);
   }
@@ -64,9 +81,30 @@ export async function verifyEmail(token: string) {
 
 export const resendVerification = () => post<void>("/auth/resend-verification");
 
+// ---------- account settings (server/src/routes/account.rs) ----------
+
+export const setName = async (name: string) => setMe(await put<Me>("/account/name", { name }));
+export const setPassword = (current: string | null, newPassword: string) => put<void>("/account/password", { current, newPassword });
+export const setEmail = async (email: string, password: string) => setMe(await put<Me>("/account/email", { email, password }));
+export const accountSessions = () => get<AccountSession[]>("/account/sessions");
+export const logOutSession = (id: string) => del<void>(`/account/sessions/${id}`);
+export const logOutOthers = () => del<void>("/account/sessions");
+
+/** Deletes the account (with its own projects); back to the login screen. */
+export async function deleteAccount(confirm: { password?: string; email?: string }) {
+  await del<void>("/account", confirm);
+  await setToken(null);
+  localStorage.removeItem(ME_KEY);
+  await clearOffline();
+  location.reload();
+}
+
 export async function logout() {
   await post<void>("/auth/logout").catch(() => {});
   await setToken(null);
+  // Nothing of this account stays on the device
+  localStorage.removeItem(ME_KEY);
+  await clearOffline();
   // Start clean: no projects or boards of this account stay in memory
   location.reload();
 }

@@ -41,11 +41,13 @@ export function SaveIndicator() {
         return "Saving…";
       case "error":
         return "Not saved";
+      case "offline":
+        return "Offline: kept here";
     }
   };
   const title = () => {
     const s = saveState();
-    return s.kind === "error" ? s.message : "Saved on the server";
+    return s.kind === "error" ? s.message : s.kind === "offline" ? "No connection: your changes are kept on this device and saved when it is back" : "Saved on the server";
   };
   return (
     <span class={`save-state ${saveState().kind}`} title={title()}>
