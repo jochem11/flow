@@ -368,6 +368,7 @@ export function restoreBoard(doc: FlowDoc) {
     setBoard("diagram", doc.diagram ?? undefined);
     setBoard("codeLanguage", doc.codeLanguage ?? undefined);
     setBoard("classDetail", doc.classDetail ?? undefined);
+    setBoard("relaxed", doc.relaxed || undefined);
     setBoard("look", doc.look ?? undefined);
     setUi({ selected: [], selectedEdge: null, editingNode: null, editingEdge: null });
   });
@@ -436,6 +437,7 @@ export function applyRemoteFlow(nodes: FlowNode[], edges: FlowEdge[], settings: 
     if (settings.diagram !== undefined) setBoard("diagram", settings.diagram);
     if (settings.codeLanguage !== undefined) setBoard("codeLanguage", settings.codeLanguage ?? undefined);
     if (settings.classDetail !== undefined) setBoard("classDetail", settings.classDetail ?? undefined);
+    if (settings.relaxed !== undefined) setBoard("relaxed", settings.relaxed || undefined);
     if (settings.look !== undefined) setBoard("look", settings.look ?? undefined);
     setBoard("nodes", reconcile(nodes, { key: "id" }));
     setBoard("edges", reconcile(edges, { key: "id" }));

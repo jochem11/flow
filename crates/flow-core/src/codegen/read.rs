@@ -266,22 +266,22 @@ pub fn read_class(n: &Node) -> Class {
                 class.values.push(v.to_string());
                 class.enum_values.push(value);
             } else {
-                class.unreadable.push(format!("Not in UML notation, skipped: {row}"));
+                class.unreadable.push(format!("{SKIPPED}{row}"));
             }
         } else if let Some(f) = parse_attribute(row) {
             class.fields.push(f);
         } else {
-            class.unreadable.push(format!("Not in UML notation, skipped: {row}"));
+            class.unreadable.push(format!("{SKIPPED}{row}"));
         }
     }
     for row in &parts[2] {
         match parse_operation(row) {
             Some(m) => class.methods.push(m),
-            None => class.unreadable.push(format!("Not in UML notation, skipped: {row}")),
+            None => class.unreadable.push(format!("{SKIPPED}{row}")),
         }
     }
     for row in parts.iter().skip(3).flatten() {
-        class.unreadable.push(format!("Not in UML notation, skipped: {row}"));
+        class.unreadable.push(format!("{SKIPPED}{row}"));
     }
     link_accessors(&mut class);
     link_constructors(&mut class);
@@ -302,6 +302,9 @@ pub(super) fn link_constructors(c: &mut Class) {
         m.body = Body::Init(sets);
     }
 }
+
+/// How a row that is not UML notation is reported (the code export writes it as a comment)
+const SKIPPED: &str = "Not in UML notation, skipped: ";
 
 /// Generic types that are lists, sets and maps of their arguments (not classes)
 pub(super) const CONTAINERS: [&str; 11] = ["list", "collection", "array", "vec", "sequence", "set", "hashset", "map", "dict", "dictionary", "hashmap"];
@@ -370,9 +373,19 @@ pub fn read_classes(flow: &FlowDoc) -> Vec<Class> {
     let index: HashMap<String, usize> = classes.iter().enumerate().map(|(i, (id, _))| (id.clone(), i)).collect();
     let name_of = |i: usize, classes: &[(String, Class)]| classes[i].1.name.clone();
 
-    // A class may use built-in types, the classes on the board and its own type parameters
+    // A class may use built-in types, the classes on the board and its own type parameters.
+    // A relaxed board shows only the focus points: other types are classes elsewhere,
+    // and rows in free text are notes
     let known: BTreeSet<String> = classes.iter().map(|(_, c)| c.name.clone()).collect();
     for (_, c) in classes.iter_mut() {
+        if flow.relaxed == Some(true) {
+            for u in c.unreadable.iter_mut() {
+                if let Some(row) = u.strip_prefix(SKIPPED) {
+                    *u = format!("Note: {row}");
+                }
+            }
+            continue;
+        }
         let mut own = known.clone();
         own.extend(c.type_params.iter().cloned());
         check_types(c, &own);

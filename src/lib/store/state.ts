@@ -103,6 +103,12 @@ export function setClassDetail(detail: ClassDetail | null) {
   touch();
 }
 
+/** Only the focus points (true): no design checks, and classes may use any type and free text. */
+export function setRelaxed(relaxed: boolean) {
+  setBoard("relaxed", relaxed || undefined);
+  touch();
+}
+
 /** How the board is drawn: clean (null) or as a sketch. */
 export function setLook(look: BoardLook | null) {
   setBoard("look", look === "clean" ? undefined : (look ?? undefined));
@@ -115,11 +121,12 @@ export interface FlowSettings {
   diagram?: DiagramType;
   codeLanguage?: CodeLanguage | null;
   classDetail?: ClassDetail | null;
+  relaxed?: boolean;
   look?: BoardLook | null;
 }
 
 /** The settings by their name in the shared document, and what "not set" is. */
-export const FLOW_SETTINGS = { callColors: false, diagram: null, codeLanguage: null, classDetail: null, look: null } as const;
+export const FLOW_SETTINGS = { callColors: false, diagram: null, codeLanguage: null, classDetail: null, relaxed: false, look: null } as const;
 
 export const isSelected = (id: string) => derived.selectedSet().has(id);
 export const nodeById = (id: string): FlowNode | undefined => derived.nodeMap().get(id);

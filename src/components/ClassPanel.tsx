@@ -21,7 +21,7 @@ import {
   type Raw,
   type Vis,
 } from "../lib/classModel";
-import { addNode, board, connect, createNode, ensureRelation, nodeById, reverseEdge, selectedNodes, setClassDetail, setCodeLanguage, setEdgeProps, setNodeText, setUi, ui } from "../lib/store";
+import { addNode, board, connect, createNode, ensureRelation, nodeById, reverseEdge, selectedNodes, setClassDetail, setCodeLanguage, setRelaxed, setEdgeProps, setNodeText, setUi, ui } from "../lib/store";
 import { relationMeaning } from "../lib/classRelations";
 import { RELATIONS } from "./EdgeMenus";
 import { sameName, type ClassKind } from "../lib/umlClass";
@@ -144,7 +144,9 @@ function ClassEditor(p: { id: string }) {
   /** What the type pickers offer as classes: the others on the board, this one, its type parameters */
   const classNames = () => [...classNodes().map((c) => c.name).filter(Boolean), ...model().typeParams];
   const attributeNames = () => model().attributes.filter((a): a is Attribute => !isRaw(a)).map((a) => a.name);
+  // On a relaxed board any type goes (a class not drawn here)
   const known = (uml: string) =>
+    !!board.relaxed ||
     (uml.match(/[\p{L}_][\p{L}\p{N}_]*/gu) ?? [])
       .filter((w) => !["List", "Set", "Map"].includes(w))
       .every((w) => isBuiltin(w) || classNames().some((c) => sameName(c, w)) || attributeNames().includes(w));
@@ -296,6 +298,11 @@ function ClassEditor(p: { id: string }) {
             <option value="public">Public members only</option>
             <option value="names">Class names only</option>
           </select>
+          <label title="Only the classes that matter here: no checks, any type (a class elsewhere) and free-text rows (notes)">Focus only</label>
+          <label class="panel-check">
+            <input type="checkbox" checked={!!board.relaxed} onChange={(e) => setRelaxed(e.currentTarget.checked)} />
+            <span>No checks</span>
+          </label>
         </div>
 
         {/* ---------- enum values ---------- */}
@@ -538,7 +545,12 @@ function RemoveButton(p: { what: string; onClick: () => void }) {
 function RawRow(p: { raw: string; onSave: (t: string) => void; onRemove: () => void }) {
   return (
     <div class="member-main">
-      <Field class="panel-field invalid" value={p.raw} title="Not UML notation: the code export skips it" onSave={(t) => (t ? p.onSave(t) : p.onRemove())} />
+      <Field
+        class={board.relaxed ? "panel-field" : "panel-field invalid"}
+        value={p.raw}
+        title={board.relaxed ? "A note (the code export keeps it as a comment)" : "Not UML notation: the code export skips it"}
+        onSave={(t) => (t ? p.onSave(t) : p.onRemove())}
+      />
       <RemoveButton what="row" onClick={p.onRemove} />
     </div>
   );

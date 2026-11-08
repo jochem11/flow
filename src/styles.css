@@ -6340,6 +6340,21 @@ body.presenting .find-bar {
 .panel-note {
   color: var(--text);
 }
+.panel-check {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  color: var(--text);
+  cursor: pointer;
+}
+.eer-checks-btn.off {
+  color: var(--text-muted);
+}
+.eer-checks-foot {
+  border-top: 1px solid var(--border);
+  margin-top: 4px;
+  padding-top: 4px;
+}
 .member-section {
   margin-top: 12px;
 }

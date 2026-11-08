@@ -362,8 +362,9 @@ function ClassBody(p: { node: FlowNode }) {
     ];
     return { self: parseClass(p.node.text).name, related, attributes: attributeNames(p.node.text) };
   });
-  /** Rows not in UML notation, or with types this class cannot use, are marked (the code export skips them) */
-  const problem = (part: number, line: string) => rowProblem(classKind(p.node.text), part, line, ctx());
+  /** Rows not in UML notation, or with types this class cannot use, are marked (the code export skips them);
+   * not on a relaxed board (only the focus points: other types are classes elsewhere, free text is a note) */
+  const problem = (part: number, line: string) => (board.relaxed ? null : rowProblem(classKind(p.node.text), part, line, ctx()));
 
   const save = (fn: (parts: string[][]) => void) => {
     const next = parts().map((rows) => [...rows]);

@@ -11,7 +11,7 @@ import { startPresenting } from "../lib/present";
 import { get } from "../lib/server";
 import { matchScore } from "../lib/match";
 import { MOD } from "../lib/shortcuts";
-import { board, setCallColors, setCodeLanguage } from "../lib/store";
+import { board, setCallColors, setCodeLanguage, setRelaxed } from "../lib/store";
 import { LANGUAGES as CODE_LANGUAGES } from "./CodeDialog";
 import { setTheme, THEME_NAMES, type Theme } from "../lib/theme";
 import type { ExportFormat, SearchHit } from "../lib/types";
@@ -119,6 +119,8 @@ export function CommandPalette() {
             out.push({ key: `lang-${l.value}`, label: `Class types: ${l.label}`, run: () => setCodeLanguage(l.value) });
           }
         }
+        if (type?.id !== "whiteboard")
+          out.push({ key: "relaxed", label: board.relaxed ? "Checks: on (check the whole diagram)" : "Checks: off (only the focus points)", run: () => setRelaxed(!board.relaxed) });
         if (type?.id === "sequence" || type?.id === "whiteboard") {
           out.push({ key: "call-colors", label: board.callColors ? "Color calls: off" : "Color calls: on", run: () => setCallColors(!board.callColors) });
         }

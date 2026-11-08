@@ -525,6 +525,11 @@ export type FlowDoc = {
 	/**  Class diagrams: which rows the classes show. Missing means all. */
 	classDetail?: ClassDetail | null,
 	/**
+	 *  Only the focus points: no design checks, and classes may use types that are
+	 *  not on the board and rows in free text (kept as notes). Missing means checked.
+	 */
+	relaxed?: boolean | null,
+	/**
 	 *  How the board is drawn: clean, or as a sketch (hand-drawn lines and type).
 	 *  Missing means clean.
 	 */

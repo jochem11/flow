@@ -29,6 +29,11 @@ pub struct FlowDoc {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     #[specta(optional)]
     pub class_detail: Option<ClassDetail>,
+    /// Only the focus points: no design checks, and classes may use types that are
+    /// not on the board and rows in free text (kept as notes). Missing means checked.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[specta(optional)]
+    pub relaxed: Option<bool>,
     /// How the board is drawn: clean, or as a sketch (hand-drawn lines and type).
     /// Missing means clean.
     #[serde(default, skip_serializing_if = "Option::is_none")]

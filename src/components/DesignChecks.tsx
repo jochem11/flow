@@ -1,11 +1,13 @@
 // The design checks of a flow board (designChecks.ts) in the top bar: how many,
 // and the list; picking one selects what it is about and brings it into view.
-// Shown only when there is something to say.
+// Shown only when there is something to say. A relaxed board (only the focus
+// points) is not checked: the button says so, and turns the checks on again.
 
 import { createMemo, createSignal, For, onCleanup, Show } from "solid-js";
 import { focusOn } from "../lib/camera";
 import { checkDesign, type DesignProblem } from "../lib/designChecks";
-import { board, select } from "../lib/store";
+import { board, select, setRelaxed } from "../lib/store";
+import { canEdit } from "../lib/access";
 
 export function DesignChecks() {
   // Warnings first, then tips
@@ -31,6 +33,16 @@ export function DesignChecks() {
   };
 
   return (
+    <Show
+      when={!board.relaxed}
+      fallback={
+        <Show when={canEdit()}>
+          <button class="text-btn eer-checks-btn off" title="This board shows only the focus points and is not checked: click to check it again" onClick={() => setRelaxed(false)}>
+            Checks off
+          </button>
+        </Show>
+      }
+    >
     <Show when={problems().length}>
       <span class="uml-wrap" ref={wrap}>
         <button
@@ -51,9 +63,22 @@ export function DesignChecks() {
                 </button>
               )}
             </For>
+            <Show when={canEdit()}>
+              <button
+                class="eer-check eer-checks-foot"
+                title="For a board with only the focus points: no checks, any type and free-text rows in classes"
+                onClick={() => {
+                  setOpen(false);
+                  setRelaxed(true);
+                }}
+              >
+                Turn checks off for this board (only the focus points)
+              </button>
+            </Show>
           </div>
         </Show>
       </span>
+    </Show>
     </Show>
   );
 }

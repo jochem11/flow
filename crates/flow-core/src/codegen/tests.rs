@@ -86,6 +86,23 @@ fn only_known_types() {
 }
 
 #[test]
+fn relaxed_board_keeps_everything() {
+    // Only the focus points: a type not drawn here is a class elsewhere, free text is a note
+    let flow: FlowDoc = serde_json::from_str(r#"{ "camera": { "x": 0, "y": 0, "zoom": 1 }, "relaxed": true,
+      "nodes": [{ "id": "a", "kind": "class", "x": 0, "y": 0, "w": 1, "h": 1, "color": "white",
+          "text": "Order\n--\n- owner: Customer\n- lines: List<OrderLine>\n--\n+ find(c: Customer): Invoice\n+ recalculate everything" }],
+      "edges": [] }"#).unwrap();
+    let order = read_classes(&flow).remove(0);
+    assert_eq!(order.fields.iter().map(|f| f.name.as_str()).collect::<Vec<_>>(), ["owner", "lines"]);
+    assert_eq!(order.methods.iter().map(|m| m.name.as_str()).collect::<Vec<_>>(), ["find"]);
+    assert_eq!(order.unreadable, vec!["Note: + recalculate everything"]);
+    let java = generate(&flow, CodeLanguage::Java, "x").into_iter().map(|f| f.content).collect::<String>();
+    assert!(java.contains("private Customer owner;"), "{java}");
+    assert!(java.contains("public Invoice find(Customer c)"), "{java}");
+    assert!(java.contains("// Note: + recalculate everything"), "{java}");
+}
+
+#[test]
 fn names() {
     assert_eq!(camel("OrderLine"), "orderLine");
     assert_eq!(snake("totalPrice"), "total_price");
