@@ -112,11 +112,14 @@ async fn sql(caller: Caller, Json(s): Json<Sql>) -> ApiResult<Json<String>> {
 struct Code {
     flow: FlowDoc,
     language: CodeLanguage,
+    /// The board's name, for the header and the file names
+    #[serde(default)]
+    title: Option<String>,
 }
 
 async fn code(caller: Caller, Json(c): Json<Code>) -> ApiResult<Json<Vec<CodeFile>>> {
     allowed(&caller)?;
-    Ok(Json(codegen::generate(&c.flow, c.language, "model")))
+    Ok(Json(codegen::generate(&c.flow, c.language, c.title.as_deref().unwrap_or("model"))))
 }
 
 #[derive(Deserialize)]

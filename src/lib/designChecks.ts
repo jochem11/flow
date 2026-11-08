@@ -26,9 +26,26 @@ export const MAX_FOCAL = 2;
 /** More blocks than this in one group (or on a board without groups) is a lot to take in at once */
 export const MAX_PER_GROUP = 12;
 
-const name = (n: FlowNode) => {
+/** What a block without text is called, in the words of the board's type */
+function unnamed(n: FlowNode, type: DiagramType): string {
+  const state = type === "state";
+  if (n.kind === "start") return state ? "the initial state" : "the start";
+  if (n.kind === "end" || n.kind === "flowfinal") return state ? "a final state" : "an end";
+  if (n.kind === "diamond") return state ? "a choice" : "a decision without text";
+  // A state is a rounded block (a pill); a box drawn on it counts as one too
+  if ((n.kind === "pill" || n.kind === "box") && state) return "a state without a name";
+  return "a block without text";
+}
+
+const name = (n: FlowNode, type: DiagramType = "flowchart") => {
   const t = n.text.trim().split("\n")[0];
-  return t ? `“${t.length > 40 ? `${t.slice(0, 39)}…` : t}”` : `a ${n.kind === "diamond" ? "decision" : "block"} without text`;
+  return t ? `“${t.length > 40 ? `${t.slice(0, 39)}…` : t}”` : unnamed(n, type);
+};
+
+/** The same, starting a sentence */
+const Name = (n: FlowNode, type?: DiagramType) => {
+  const s = name(n, type);
+  return s.charAt(0).toUpperCase() + s.slice(1);
 };
 
 export function checkDesign(nodes: FlowNode[], edges: FlowEdge[], diagram: DiagramType | null | undefined): DesignProblem[] {
@@ -58,7 +75,7 @@ export function checkDesign(nodes: FlowNode[], edges: FlowEdge[], diagram: Diagr
   // Not joined to anything, while the rest is
   if (lines.length) {
     for (const n of steps) {
-      if (degree(n.id) === 0) out.push({ nodeIds: [n.id], level: "tip", message: `${name(n)} is not joined to anything` });
+      if (degree(n.id) === 0) out.push({ nodeIds: [n.id], level: "tip", message: `${Name(n, type)} is not joined to anything` });
     }
   }
 
@@ -69,14 +86,19 @@ export function checkDesign(nodes: FlowNode[], edges: FlowEdge[], diagram: Diagr
       if (n.kind === "diamond") {
         // A merge (several in, one out) is fine; a decision needs two ways out
         const merge = i.length >= 2 && o.length === 1;
-        if (!merge && o.length === 1) out.push({ nodeIds: [n.id], level: "warning", message: `${name(n)} has only one way out: a decision needs two or more` });
+        if (!merge && o.length === 1) out.push({ nodeIds: [n.id], level: "warning", message: `${Name(n, type)} has only one way out: ${type === "state" ? "a choice" : "a decision"} needs two or more` });
         if (o.length >= 2 && o.some((e) => !e.label?.trim()) && type !== "state")
-          out.push({ nodeIds: [n.id], level: "tip", message: `Say which way is which out of ${name(n)} (yes / no on its lines)` });
+          out.push({ nodeIds: [n.id], level: "tip", message: `Say which way is which out of ${name(n, type)} (yes / no on its lines)` });
       }
       if (n.kind === "start" && i.length) out.push({ nodeIds: [n.id], level: "warning", message: "A line goes into the start" });
       if ((n.kind === "end" || n.kind === "flowfinal") && o.length) out.push({ nodeIds: [n.id], level: "warning", message: "A line leaves an end" });
-      if (!n.text.trim() && ["box", "diamond", "pill", "usecase"].includes(n.kind))
-        out.push({ nodeIds: [n.id], level: "tip", message: `A ${n.kind === "diamond" ? "decision" : "block"} has no text` });
+      // A choice in a state machine has its conditions on its lines, not in it
+      if (!n.text.trim() && ["box", "diamond", "pill", "usecase"].includes(n.kind) && !(type === "state" && n.kind === "diamond"))
+        out.push({
+          nodeIds: [n.id],
+          level: "tip",
+          message: type === "state" && (n.kind === "pill" || n.kind === "box") ? "A state has no name" : `A ${n.kind === "diamond" ? "decision" : "block"} has no text`,
+        });
     }
 
     // What can be reached from the start (when there is one)
@@ -105,7 +127,7 @@ export function checkDesign(nodes: FlowNode[], edges: FlowEdge[], diagram: Diagr
           level: type === "state" ? "warning" : "tip",
           message:
             unreachable.length === 1
-              ? `${name(unreachable[0])} can't be reached from the start`
+              ? `${Name(unreachable[0], type)} can't be reached from the start`
               : `${unreachable.length} ${type === "state" ? "states" : "blocks"} can't be reached from the start`,
         });
     }
@@ -116,7 +138,7 @@ export function checkDesign(nodes: FlowNode[], edges: FlowEdge[], diagram: Diagr
   for (const g of groups) {
     const inside = steps.filter((n) => n.parent === g.id);
     if (inside.length > MAX_PER_GROUP)
-      out.push({ nodeIds: [g.id], level: "tip", message: `${name(g)} holds ${inside.length} blocks: split it, so each part reads at a glance` });
+      out.push({ nodeIds: [g.id], level: "tip", message: `${Name(g, type)} holds ${inside.length} blocks: split it, so each part reads at a glance` });
   }
   const loose = steps.filter((n) => !n.parent);
   if (!groups.length && loose.length > MAX_PER_GROUP * 2 && type !== "mindmap")
@@ -149,7 +171,7 @@ function checkSequence(nodes: FlowNode[], edges: FlowEdge[], out: DesignProblem[
   const messages = edges.filter((e) => e.messageY != null);
   const used = new Set(messages.flatMap((e) => [e.from, e.to]));
   if (messages.length) {
-    for (const n of lifelines) if (!used.has(n.id)) out.push({ nodeIds: [n.id], level: "tip", message: `${name(n)} sends and gets no messages` });
+    for (const n of lifelines) if (!used.has(n.id)) out.push({ nodeIds: [n.id], level: "tip", message: `${Name(n, "sequence")} sends and gets no messages` });
   }
   const names = new Map<string, FlowNode>();
   for (const n of lifelines) {

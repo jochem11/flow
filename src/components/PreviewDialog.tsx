@@ -1,7 +1,7 @@
 // The frame shared by the export previews (code, SQL, Mermaid): tabs at the top,
 // the text with syntax colors, and Copy / Download at the bottom.
 
-import { For, type JSX, Show } from "solid-js";
+import { For, type JSX, onCleanup, Show } from "solid-js";
 import { Portal } from "solid-js/web";
 import type { HighlightLanguage } from "../lib/highlight";
 import { toast } from "../lib/toast";
@@ -32,10 +32,15 @@ export function PreviewDialog<T extends string | number>(p: {
     toast(`${p.copyName} copied`);
   };
 
+  // Escape closes it wherever the focus is (the button that opened it keeps it)
+  const onKey = (e: KeyboardEvent) => e.key === "Escape" && p.onClose();
+  window.addEventListener("keydown", onKey);
+  onCleanup(() => window.removeEventListener("keydown", onKey));
+
   return (
     <Portal>
       <div class="dialog-backdrop" onPointerDown={(e) => e.target === e.currentTarget && p.onClose()}>
-        <div class="sql-dialog panel" onKeyDown={(e) => e.key === "Escape" && p.onClose()}>
+        <div class="sql-dialog panel">
           <div class="sql-dialog-head">
             <strong>{p.title}</strong>
             <div class="sql-tabs">

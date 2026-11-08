@@ -18,6 +18,7 @@ import { setOpenCardId } from "./kanban";
 import { board, isContainer, select, uid } from "./store";
 import type { CardLink, DocumentMeta, FlowNode, KanbanCard, KanbanDoc, NodeKind } from "./types";
 import { docsOf, openDoc, openDocument } from "./workspace";
+import { changeClosedBoard } from "./collab";
 
 const KIND_NAMES: Partial<Record<NodeKind, string>> = {
   section: "Section",
@@ -219,10 +220,10 @@ export async function loadBoard(boardId: string): Promise<KanbanDoc | null> {
 async function changeBoard(boardId: string, change: (board: KanbanDoc) => void) {
   const open = openDoc();
   if (!open) return;
-  const doc = await api.loadDocument(open.projectId, boardId);
-  if (doc.content.kind !== "kanban") return;
-  change(doc.content.data);
-  await api.saveDocument(doc);
+  await changeClosedBoard(open.projectId, boardId, (content) => {
+    if (content.kind !== "kanban") return false;
+    change(content.data);
+  });
   await loadLinkedCards(open.projectId, open.id);
 }
 

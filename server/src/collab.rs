@@ -8,6 +8,10 @@
 //! - The state is saved to `documents.ydoc` while edited and when the last
 //!   person leaves. The board's JSON (`documents.content`), which reads and
 //!   exports use, is still saved by the editors' apps.
+//! - A board's JSON saved while nobody is in its room (a change made from
+//!   elsewhere: a timer stopped in the sidebar, edits made offline) makes its
+//!   saved state stale: that state is dropped, and the next room is filled from
+//!   the JSON again (see `content_saved`).
 //! - A new board (no state yet) is filled by the first editor that connects:
 //!   the server tells exactly one client to do so (message 100), so two people
 //!   opening it at once do not both fill it.
@@ -17,7 +21,7 @@
 use std::collections::{HashMap, HashSet};
 use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
 use std::sync::{Arc, Mutex};
-use std::time::Duration;
+use std::time::{Duration, Instant};
 
 use axum::extract::ws::{Message as WsMessage, WebSocket, WebSocketUpgrade};
 use axum::extract::{Path, Query, State};
@@ -47,6 +51,10 @@ const MSG_COMMENTS: u8 = 101;
 /// How often a changed board is saved while people edit it.
 const SAVE_EVERY: Duration = Duration::from_secs(2);
 
+/// Someone who just opened a room has no connection in it yet (the WebSocket is
+/// being set up): an empty room stays open this long after anyone opened it.
+const JOINING: Duration = Duration::from_secs(5);
+
 struct Conn {
     user_id: Option<String>,
     /// Notified to close this connection (access changed)
@@ -62,6 +70,8 @@ pub struct Room {
     dirty: AtomicBool,
     /// The connection asked to fill the empty board, if any
     seeder: Mutex<Option<u64>>,
+    /// When someone last opened it (see `JOINING`)
+    opened: Mutex<Instant>,
 }
 
 impl Room {
@@ -73,6 +83,10 @@ impl Room {
     }
     fn send_all(&self, from: u64, msg: &Message) {
         let _ = self.tx.send((from, Arc::new(msg.encode_v1())));
+    }
+    /// Nobody in it, and nobody on their way in
+    fn deserted(&self) -> bool {
+        self.conns.lock().unwrap().is_empty() && self.opened.lock().unwrap().elapsed() > JOINING
     }
 }
 
@@ -87,6 +101,7 @@ impl Rooms {
     async fn open(&self, state: &AppState, document_id: &str) -> ApiResult<Arc<Room>> {
         let mut rooms = self.rooms.lock().await;
         if let Some(room) = rooms.get(document_id) {
+            *room.opened.lock().unwrap() = Instant::now();
             return Ok(room.clone());
         }
         let (saved,): (Option<Vec<u8>>,) = sqlx::query_as("SELECT ydoc FROM documents WHERE id = $1").bind(document_id).fetch_one(&state.db).await?;
@@ -103,10 +118,34 @@ impl Rooms {
             conns: Mutex::new(HashMap::new()),
             dirty: AtomicBool::new(false),
             seeder: Mutex::new(None),
+            opened: Mutex::new(Instant::now()),
         });
         rooms.insert(document_id.to_string(), room.clone());
         tokio::spawn(keep_saved(state.clone(), room.clone()));
         Ok(room)
+    }
+
+    /// A board's JSON was saved. With nobody in its room, the saved live state no
+    /// longer matches it: dropped, so the next one to open the board fills the
+    /// room from the JSON. (With a room open, the editors in it keep both in step.)
+    /// Not for text documents: their live state is the text itself, with more in
+    /// it than the JSON keeps, and they are never changed from outside the room.
+    pub async fn content_saved(&self, state: &AppState, document_id: &str, kind: &str) -> ApiResult<()> {
+        if kind == "text" {
+            return Ok(());
+        }
+        // Held while the state is dropped: a room cannot open (and load it) meanwhile
+        let mut rooms = self.rooms.lock().await;
+        if let Some(room) = rooms.get(document_id) {
+            // Everyone left, and it is about to close: closed now
+            if !room.deserted() {
+                return Ok(());
+            }
+            room.dirty.store(false, Ordering::SeqCst);
+            rooms.remove(document_id);
+        }
+        sqlx::query("UPDATE documents SET ydoc = NULL WHERE id = $1 AND ydoc IS NOT NULL").bind(document_id).execute(&state.db).await?;
+        Ok(())
     }
 
     /// Closes someone's connections everywhere (their access changed).
@@ -156,10 +195,14 @@ async fn save(state: &AppState, room: &Room) {
 async fn keep_saved(state: AppState, room: Arc<Room>) {
     loop {
         tokio::time::sleep(SAVE_EVERY).await;
-        save(&state, &room).await;
+        // Saved under the lock, so it cannot cross `content_saved` dropping the state
         let mut rooms = state.rooms.rooms.lock().await;
-        if room.conns.lock().unwrap().is_empty() {
-            save(&state, &room).await;
+        // Closed meanwhile (see `content_saved`); a new room for the board may be open
+        if !rooms.get(&room.document_id).is_some_and(|r| Arc::ptr_eq(r, &room)) {
+            return;
+        }
+        save(&state, &room).await;
+        if room.deserted() {
             rooms.remove(&room.document_id);
             return;
         }

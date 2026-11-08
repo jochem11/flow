@@ -42,7 +42,7 @@ export const commands = {
 	/**  The SQL for a diagram, as a preview in the app. */
 	eerSql: (doc: EerDoc, dialect: SqlDialect) => __TAURI_INVOKE<string>("eer_sql", { doc, dialect }),
 	/**  Code for the UML classes in a flowchart, to preview. */
-	classCode: (flow: FlowDoc, language: CodeLanguage) => __TAURI_INVOKE<CodeFile[]>("class_code", { flow, language }),
+	classCode: (flow: FlowDoc, language: CodeLanguage, title: string | null) => __TAURI_INVOKE<CodeFile[]>("class_code", { flow, language, title }),
 	/**  The Mermaid blocks for a document, to preview: one per diagram in it. */
 	mermaidPreview: (doc: Document) => __TAURI_INVOKE<CodeFile[]>("mermaid_preview", { doc }),
 	/**  The tables and relations in a SQL script, to add to an EER diagram. */

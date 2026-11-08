@@ -5,7 +5,7 @@ import { createEffect, createResource, createSignal, For, Show } from "solid-js"
 import { api, errMsg } from "../lib/api";
 import { board, boardSnapshot, selectedNodes } from "../lib/store";
 import type { CodeLanguage, FlowDoc } from "../lib/types";
-import { exportClasses, runExport } from "../lib/workspace";
+import { exportClasses, openDoc, runExport } from "../lib/workspace";
 import { PreviewDialog } from "./PreviewDialog";
 
 export const LANGUAGES: { value: CodeLanguage; label: string; hint: string }[] = [
@@ -41,7 +41,7 @@ export function CodeDialog(p: { initial: CodeLanguage; onClose: () => void }) {
     () => [lang(), onlySelected()] as const,
     ([l, only]) => {
       const flow = boardSnapshot();
-      return api.classCode(only ? onlyClasses(flow, picked) : flow, l).catch((e) => [{ name: "error", content: `// ${errMsg(e)}` }]);
+      return api.classCode(only ? onlyClasses(flow, picked) : flow, l, openDoc()?.name).catch((e) => [{ name: "error", content: `// ${errMsg(e)}` }]);
     },
   );
   const [fileIndex, setFileIndex] = createSignal(0);

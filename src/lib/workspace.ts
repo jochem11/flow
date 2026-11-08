@@ -69,7 +69,8 @@ export { saveState };
 const AUTOSAVE_MS = 800;
 let timer: ReturnType<typeof setTimeout> | undefined;
 
-function markDirty() {
+/** The open board changed: saved soon. */
+export function markDirty() {
   const doc = openDoc();
   if (!doc) return;
   if (!roleCanEdit(doc.role)) return;
@@ -116,7 +117,9 @@ export async function saveNow() {
 /** The connection is back: what waited is saved (also from before a reload). */
 async function backOnline() {
   if (!me()) return;
-  const sent = await sendUnsaved(api.saveDocument);
+  // Each into its room too, when people are on it (collab is loaded here, not imported: it imports this file)
+  const { saveKept } = await import("./collab");
+  const sent = await sendUnsaved(saveKept);
   if (saveState().kind === "offline" || saveState().kind === "dirty") await saveNow();
   if (sent) toast(`Back online: saved ${sent} ${sent === 1 ? "board" : "boards"} changed while offline`);
 }
@@ -176,13 +179,26 @@ export async function reloadProjects() {
   await Promise.all([...projects().map((p) => refreshDocs(p.id)), loadPersonal()]);
 }
 
+/**
+ * A reloaded list, keeping the objects that did not change: the sidebar keeps
+ * their rows as they are (a name being typed in a row stays there).
+ */
+function keepSame<T extends { id: string }>(old: T[] | undefined, next: T[]): T[] {
+  const byId = new Map((old ?? []).map((o) => [o.id, o]));
+  return next.map((n) => {
+    const o = byId.get(n.id);
+    return o && JSON.stringify(o) === JSON.stringify(n) ? o : n;
+  });
+}
+
 async function refreshProjects() {
-  setProjects(await api.listProjects());
+  const next = await api.listProjects();
+  setProjects((old) => keepSame(old, next));
 }
 
 async function refreshDocs(projectId: string) {
   const docs = await api.listDocuments(projectId);
-  setDocsByProject((all) => ({ ...all, [projectId]: docs }));
+  setDocsByProject((all) => ({ ...all, [projectId]: keepSame(all[projectId], docs) }));
 }
 
 /**
@@ -469,6 +485,11 @@ export async function createDocument(
   kind: DocumentKind,
   start?: { name: string; content: DocContent },
 ): Promise<string | null> {
+  // A blank chart starts with example data (to change in its table), drawn
+  if (!start && kind === "chart") {
+    const data = emptyChart();
+    start = { name: DEFAULT_NAMES[kind], content: { kind: "chart", data: { ...data, svg: storedSvg(data) } } };
+  }
   try {
     const doc = await api.createDocument(projectId, folderId, start?.name ?? DEFAULT_NAMES[kind], kind, start?.content);
     await refreshDocs(projectId);

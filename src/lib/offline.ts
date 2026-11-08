@@ -75,30 +75,49 @@ export async function withCopy<T>(key: string, load: () => Promise<T>): Promise<
 }
 
 // ---------- saves that wait for the connection ----------
+// A board that could not be saved is kept as `pending:<id>`, shown when it is
+// opened again. `doc:<id>` stays the board as the server has it, and the first
+// time a board is kept, that version is kept too (`base:<id>`): what the changes
+// were made on, to merge them with what others did meanwhile (collab/merge.ts).
 
 /** A board that could not be saved: kept, and shown as it is now when opened again. */
 export async function keepUnsaved(doc: Document) {
+  if ((await kvGet(`base:${doc.id}`)) === undefined) {
+    const server = await kvGet<Document>(`doc:${doc.id}`);
+    if (server) await kvSet(`base:${doc.id}`, server);
+  }
   await kvSet(`pending:${doc.id}`, doc);
-  await kvSet(`doc:${doc.id}`, doc);
 }
 
-export const savedNow = (doc: Document) => Promise.all([kvDel(`pending:${doc.id}`), kvSet(`doc:${doc.id}`, doc)]);
+export const savedNow = (doc: Document) => Promise.all([kvDel(`pending:${doc.id}`), kvDel(`base:${doc.id}`), kvSet(`doc:${doc.id}`, doc)]);
 
-/** Sends the saves that waited; returns how many went. Stops at the first that cannot. */
-export async function sendUnsaved(save: (doc: Document) => Promise<void>): Promise<number> {
+/** The board as changed here and not saved yet, if it is */
+export const unsaved = (id: string) => kvGet<Document>(`pending:${id}`);
+
+/** For a board changed here and not saved yet: the version its changes were made on */
+export async function unsavedBase(id: string): Promise<Document | undefined> {
+  return (await unsaved(id)) ? kvGet<Document>(`base:${id}`) : undefined;
+}
+
+/**
+ * Sends the saves that waited, each with the version its changes were made on
+ * (when known); returns how many went. Stops at the first that cannot.
+ */
+export async function sendUnsaved(save: (doc: Document, base: Document | undefined) => Promise<void>): Promise<number> {
   let sent = 0;
   for (const key of await kvKeys()) {
     if (typeof key !== "string" || !key.startsWith("pending:")) continue;
     const doc = await kvGet<Document>(key);
     if (!doc) continue;
+    const base = await kvGet<Document>(`base:${doc.id}`);
     try {
-      await save(doc);
-      await kvDel(key);
+      await save(doc, base);
+      await Promise.all([kvDel(key), kvDel(`base:${doc.id}`)]);
       sent++;
     } catch (e) {
       if (isOffline(e)) break;
       // The server said no (gone, no access): it cannot be saved there anymore
-      await kvDel(key);
+      await Promise.all([kvDel(key), kvDel(`base:${doc.id}`)]);
     }
   }
   return sent;

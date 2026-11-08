@@ -50,6 +50,17 @@ describe("design checks", () => {
     expect(msgs).toContain("A line leaves an end");
   });
 
+  it("speaks of states, choices and final states on a state machine", () => {
+    const nodes = [node("s", "start", ""), node("a", "pill", "Idle"), node("c", "diamond", ""), node("b", "pill", "Busy"), node("e", "end", "")];
+    const msgs = messages(checkDesign([...nodes, node("x", "pill", "")], [line("s", "a"), line("a", "c"), line("c", "b", { label: "[ok]" }), line("c", "a")], "state"));
+    expect(msgs).toContain("A final state is not joined to anything");
+    expect(msgs).toContain("A state without a name is not joined to anything");
+    expect(msgs).toContain("A state has no name");
+    // A choice has its conditions on its lines
+    expect(msgs.some((m) => m.includes("decision"))).toBe(false);
+    expect(messages(checkDesign([node("d", "diamond", ""), node("b", "box")], [line("d", "b")], "flowchart"))).toContain("A decision without text has only one way out: a decision needs two or more");
+  });
+
   it("says when a section holds too much", () => {
     const section = node("g", "section", "Warehouse");
     const inside = Array.from({ length: MAX_PER_GROUP + 1 }, (_, i) => node(`n${i}`, "box", `Step ${i}`, { parent: "g" }));

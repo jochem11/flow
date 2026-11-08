@@ -5,7 +5,7 @@
 
 import { createEffect, createRoot, on, onCleanup } from "solid-js";
 import { me } from "./auth";
-import { inTauri, serverUrl, sessionToken } from "./server";
+import { get, inTauri, serverUrl, sessionToken } from "./server";
 import { projectsChanged } from "./workspace";
 import { checkForUpdate } from "./version";
 import { loadInbox } from "./inbox";
@@ -37,6 +37,8 @@ function listen(): () => void {
       try {
         const msg = JSON.parse(String(e.data)) as { type: string };
         if (msg.type === "inbox") void loadInbox();
+        // Logged out from another device? A request that is refused shows the login screen
+        else if (msg.type === "session") void get("/auth/me").catch(() => {});
         else projectsChanged(msg.type === "access");
       } catch {
         /* not ours */

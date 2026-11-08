@@ -168,6 +168,7 @@ async fn save(State(state): State<AppState>, caller: Caller, Path(id): Path<Stri
         return Err(AppError::bad("A board cannot change its kind"));
     }
     sqlx::query("UPDATE documents SET content = $2, updated_at = now() WHERE id = $1").bind(&id).bind(Db(&doc.content)).execute(&state.db).await?;
+    state.rooms.content_saved(&state, &id, &kind).await?;
     // Now and then the board as it is now goes in its history
     super::history::keep_automatically(&state, &id, &caller.user()?.id).await?;
     super::activity::record(&state, &project_id, &caller, ActivityKind::Edited, Some((&id, &name)), None).await;

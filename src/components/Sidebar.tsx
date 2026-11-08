@@ -748,7 +748,8 @@ function RenameInput(p: { value: string; onDone: (name: string | null) => void }
       class="rename-input"
       value={p.value}
       onClick={(e) => e.stopPropagation()}
-      onBlur={() => finish(ref.value)}
+      // Not when the row was only drawn again (the list reloaded): its new input takes over
+      onBlur={() => setTimeout(() => ref.isConnected && finish(ref.value))}
       onKeyDown={(e) => {
         e.stopPropagation();
         if (e.key === "Enter") finish(ref.value);

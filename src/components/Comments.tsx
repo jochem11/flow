@@ -105,7 +105,7 @@ function Composer(p: { placeholder: string; initial?: string; submit: string; on
   const [picked, setPicked] = createSignal(start.picked);
   const [busy, setBusy] = createSignal(false);
   let area!: HTMLTextAreaElement;
-  // The @word being typed, and the people it matches
+  // The @name being typed (it may have spaces: "@Ann B"), and the people it matches
   const [query, setQuery] = createSignal<{ at: number; text: string } | null>(null);
   const [active, setActive] = createSignal(0);
   const matches = () => {
@@ -118,7 +118,8 @@ function Composer(p: { placeholder: string; initial?: string; submit: string; on
   };
   const findQuery = () => {
     const before = area.value.slice(0, area.selectionStart);
-    const m = /(^|\s)@([^\s@]{0,30})$/.exec(before);
+    // Up to 30 characters after the @, on one line; nobody matching hides the list
+    const m = /(^|\s)@([^\s@][^@\n]{0,29}|)$/.exec(before);
     setQuery(m ? { at: before.length - m[2].length - 1, text: m[2] } : null);
     setActive(0);
   };

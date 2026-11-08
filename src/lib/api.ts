@@ -10,7 +10,7 @@
 
 import { commands } from "../bindings";
 import { del, get, inTauri, post, put, rawRequest } from "./server";
-import { isOffline, keepUnsaved, savedNow, withCopy } from "./offline";
+import { isOffline, keepUnsaved, savedNow, unsaved, withCopy } from "./offline";
 import type { Brand, DocContent,
   Document,
   DocumentKind,
@@ -64,7 +64,7 @@ export interface Api {
   /** The SQL for an EER diagram, to preview */
   eerSql(doc: EerDoc, dialect: SqlDialect): Promise<string>;
   /** Code for the UML classes in a flowchart, to preview */
-  classCode(flow: FlowDoc, language: CodeLanguage): Promise<CodeFile[]>;
+  classCode(flow: FlowDoc, language: CodeLanguage, title?: string): Promise<CodeFile[]>;
   /** The document as Mermaid: one block per diagram in it */
   mermaidPreview(doc: Document): Promise<CodeFile[]>;
   /** The tables and relations in a SQL script, to add to an EER diagram */
@@ -119,7 +119,7 @@ export const localFiles: Api = {
   autoLayout: (nodes, edges) => unwrap(commands.autoLayout(nodes, edges)),
   exportDocument: (doc, format, brand) => unwrap(commands.exportDocument(doc, format, brand ?? null)),
   eerSql: (doc, dialect) => commands.eerSql(doc, dialect),
-  classCode: (flow, language) => commands.classCode(flow, language),
+  classCode: (flow, language, title) => commands.classCode(flow, language, title ?? null),
   mermaidPreview: (doc) => commands.mermaidPreview(doc),
   importSql: (sql) => commands.importSql(sql),
   eerDbml: (doc) => commands.eerDbml(doc),
@@ -167,7 +167,7 @@ const webTools: Tools = {
   autoLayout: (nodes, edges) => post("/tools/layout", { nodes, edges }),
   exportDocument: async (doc, format, brand) => download(await rawRequest("POST", "/tools/export", { doc, format, brand: brand ?? null })),
   eerSql: (doc, dialect) => post("/tools/sql", { doc, dialect }),
-  classCode: (flow, language) => post("/tools/code", { flow, language }),
+  classCode: (flow, language, title) => post("/tools/code", { flow, language, title }),
   mermaidPreview: (doc) => post("/tools/mermaid", { doc }),
   importSql: (sql) => post("/tools/import-sql", { sql }),
   eerDbml: (doc) => post("/tools/dbml", { doc }),
@@ -190,7 +190,8 @@ const httpApi: Api = {
   deleteFolder: (projectId, folderId) => del(`/projects/${projectId}/folders/${folderId}`),
 
   listDocuments: (projectId) => withCopy(`docs:${projectId}`, () => get(`/projects/${projectId}/documents`)),
-  loadDocument: (_projectId, id) => withCopy(`doc:${id}`, () => get(`/documents/${id}`)),
+  // Changed here and not saved yet (no connection then): as it is here
+  loadDocument: async (_projectId, id) => (await unsaved(id)) ?? withCopy(`doc:${id}`, () => get(`/documents/${id}`)),
   createDocument: (projectId, folderId, name, kind, content) => post(`/projects/${projectId}/documents`, { folderId, name, kind, content }),
   // Without a connection: kept here, and sent when it is back (workspace.ts)
   saveDocument: async (doc) => {

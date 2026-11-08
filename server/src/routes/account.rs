@@ -132,9 +132,10 @@ async fn sessions(State(state): State<AppState>, caller: Caller) -> ApiResult<Js
 async fn others_out(state: &AppState, caller: &Caller) -> ApiResult<()> {
     let user = caller.user()?;
     let current = caller.session.as_deref().map(tokens::hash).unwrap_or_default();
-    sqlx::query("DELETE FROM sessions WHERE user_id = $1 AND token_hash <> $2").bind(&user.id).bind(current).execute(&state.db).await?;
-    // Their open boards go too
+    sqlx::query("DELETE FROM sessions WHERE user_id = $1 AND token_hash <> $2").bind(&user.id).bind(&current).execute(&state.db).await?;
+    // Their open boards go too, and their apps show the login screen
     state.rooms.kick_user(&user.id);
+    state.events.sessions_ended(&user.id, |s| s != current);
     Ok(())
 }
 
@@ -153,6 +154,8 @@ async fn log_out_one(State(state): State<AppState>, caller: Caller, Path(id): Pa
     if gone == 0 {
         return Err(AppError::not_found("Session"));
     }
+    // That device shows the login screen now (not at its next request)
+    state.events.sessions_ended(&user.id, |s| s.starts_with(&id));
     Ok(StatusCode::NO_CONTENT)
 }
 

@@ -6,10 +6,11 @@
 // stops the one running in another.
 
 import { createSignal } from "solid-js";
-import { api, errMsg } from "./api";
+import { errMsg } from "./api";
 import { closeRunningEntry, kanban, runningEntry, startEntry, stopRunningEntry } from "./kanban";
 import { toast } from "./toast";
 import { openDoc } from "./workspace";
+import { changeClosedBoard } from "./collab";
 
 export interface ActiveTimer {
   projectId: string;
@@ -76,11 +77,12 @@ export async function stopTimer() {
     stopRunningEntry();
   } else {
     try {
-      const doc = await api.loadDocument(t.projectId, t.docId);
-      if (doc.content.kind === "kanban") {
-        const card = doc.content.data.columns.flatMap((c) => c.cards).find((c) => c.id === t.cardId);
-        if (card && closeRunningEntry(card, Date.now())) await api.saveDocument(doc);
-      }
+      const now = Date.now();
+      await changeClosedBoard(t.projectId, t.docId, (content) => {
+        if (content.kind !== "kanban") return false;
+        const card = content.data.columns.flatMap((c) => c.cards).find((c) => c.id === t.cardId);
+        return !!card && closeRunningEntry(card, now);
+      });
     } catch (e) {
       toast(`Could not stop the timer: ${errMsg(e)}`, "error");
       return;

@@ -66,8 +66,8 @@ pub fn eer_sql(doc: EerDoc, dialect: SqlDialect) -> String {
 /// Code for the UML classes in a flowchart, to preview.
 #[tauri::command]
 #[specta::specta]
-pub fn class_code(flow: FlowDoc, language: CodeLanguage) -> Vec<CodeFile> {
-    codegen::generate(&flow, language, "model")
+pub fn class_code(flow: FlowDoc, language: CodeLanguage, title: Option<String>) -> Vec<CodeFile> {
+    codegen::generate(&flow, language, title.as_deref().unwrap_or("model"))
 }
 
 /// The Mermaid blocks for a document, to preview: one per diagram in it.

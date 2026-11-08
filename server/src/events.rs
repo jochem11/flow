@@ -6,6 +6,8 @@
 //!   {"type":"access","projectId":…}    your own access changed: check the open board
 //!                                       (closed when gone, read-only when lowered)
 //!   {"type":"inbox"}                    your inbox changed: load it again
+//!   {"type":"session"}                  this device may have been logged out
+//!                                       elsewhere: check (the login screen if so)
 //!
 //! Access itself is never decided here: every request still goes through
 //! `access.rs`, and changing someone's access also cuts their board connections
@@ -30,17 +32,33 @@ use crate::auth::identify;
 use crate::error::{ApiResult, AppError};
 use crate::state::AppState;
 
+struct Conn {
+    /// The hash of the session it was opened with
+    session: String,
+    tx: mpsc::UnboundedSender<String>,
+}
+
 #[derive(Default)]
 pub struct Events {
     /// Open event connections per user (one per open app)
-    conns: Mutex<HashMap<String, Vec<mpsc::UnboundedSender<String>>>>,
+    conns: Mutex<HashMap<String, Vec<Conn>>>,
 }
 
 impl Events {
     fn send_user(&self, user_id: &str, msg: &str) {
         let mut conns = self.conns.lock().unwrap();
         if let Some(list) = conns.get_mut(user_id) {
-            list.retain(|tx| tx.send(msg.to_string()).is_ok());
+            list.retain(|c| c.tx.send(msg.to_string()).is_ok());
+        }
+    }
+
+    /// Sessions of someone were logged out (`ended` says which, by their hash):
+    /// the apps using them check now, and show the login screen.
+    pub fn sessions_ended(&self, user_id: &str, ended: impl Fn(&str) -> bool) {
+        let msg = json!({ "type": "session" }).to_string();
+        let mut conns = self.conns.lock().unwrap();
+        if let Some(list) = conns.get_mut(user_id) {
+            list.retain(|c| !ended(&c.session) || c.tx.send(msg.clone()).is_ok());
         }
     }
 
@@ -97,12 +115,13 @@ async fn connect(State(state): State<AppState>, Query(q): Query<EventsQuery>, he
     }
     let caller = identify(&state, &headers, q.token, None).await?;
     let user_id = caller.user()?.id.clone();
-    Ok(ws.on_upgrade(move |socket| run(state, user_id, socket)))
+    let session = caller.session.as_deref().map(crate::tokens::hash).unwrap_or_default();
+    Ok(ws.on_upgrade(move |socket| run(state, user_id, session, socket)))
 }
 
-async fn run(state: AppState, user_id: String, socket: WebSocket) {
+async fn run(state: AppState, user_id: String, session: String, socket: WebSocket) {
     let (tx, mut rx) = mpsc::unbounded_channel::<String>();
-    state.events.conns.lock().unwrap().entry(user_id.clone()).or_default().push(tx);
+    state.events.conns.lock().unwrap().entry(user_id.clone()).or_default().push(Conn { session, tx });
     let (mut sink, mut stream) = socket.split();
     let mut ping = tokio::time::interval(Duration::from_secs(25));
     loop {
@@ -122,7 +141,7 @@ async fn run(state: AppState, user_id: String, socket: WebSocket) {
     // Drop closed senders (this one) for the user
     let mut conns = state.events.conns.lock().unwrap();
     if let Some(list) = conns.get_mut(&user_id) {
-        list.retain(|tx| !tx.is_closed());
+        list.retain(|c| !c.tx.is_closed());
         if list.is_empty() {
             conns.remove(&user_id);
         }
