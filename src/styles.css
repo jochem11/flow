@@ -1773,9 +1773,17 @@ button.crumb:hover {
 }
 
 @media (max-width: 640px) {
-  .text-btn span,
   .save-state {
     display: none;
+  }
+  /* Icons only; the words stay for screen readers (the button's name) */
+  .text-btn:has(svg) > span {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    overflow: hidden;
+    clip-path: inset(50%);
+    white-space: nowrap;
   }
   .doc-name {
     max-width: 120px;
