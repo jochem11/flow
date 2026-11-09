@@ -43,6 +43,8 @@ export const commands = {
 	eerSql: (doc: EerDoc, dialect: SqlDialect) => __TAURI_INVOKE<string>("eer_sql", { doc, dialect }),
 	/**  Code for the UML classes in a flowchart, to preview. */
 	classCode: (flow: FlowDoc, language: CodeLanguage, title: string | null) => __TAURI_INVOKE<CodeFile[]>("class_code", { flow, language, title }),
+	codeReadFiles: (name: string, files: SourceFile[]) => typedError<CodeSource, string>(__TAURI_INVOKE("code_read_files", { name, files })),
+	codeActivity: (id: string, entry: string, depth: number) => typedError<CodeActivity, string>(__TAURI_INVOKE("code_activity", { id, entry, depth })),
 	/**  The Mermaid blocks for a document, to preview: one per diagram in it. */
 	mermaidPreview: (doc: Document) => __TAURI_INVOKE<CodeFile[]>("mermaid_preview", { doc }),
 	/**  The tables and relations in a SQL script, to add to an EER diagram. */
@@ -244,10 +246,34 @@ export type ClassDetail =
 /**  Only the names of the classes */
 "names";
 
+/**
+ *  An activity diagram drawn from a function: its blocks and lines, laid out,
+ *  and notes on what was not followed.
+ */
+export type CodeActivity = {
+	nodes: Node[],
+	edges: Edge[],
+	notes: string[],
+};
+
 /**  One generated source file. */
 export type CodeFile = {
 	name: string,
 	content: string,
+};
+
+/**  A function or method in a codebase: one to draw from. */
+export type CodeFunction = {
+	id: string,
+	name: string,
+	/**  The class (or struct, object) it is in */
+	class: string | null,
+	file: string,
+	line: number,
+	/**  A web route it answers (`PUT /api/lends/{id}`), from its annotations */
+	route: string | null,
+	/**  How many steps it has (to tell small from big) */
+	steps: number,
 };
 
 /**
@@ -267,6 +293,18 @@ export type CodeImport = {
 export type CodeLanguage = "typescript" | "java" | "csharp" | "python" | "kotlin" | "rust" | 
 /**  Go has no classes: structs with methods, embedding instead of inheritance */
 "go";
+
+/**  A codebase read for diagrams (a folder or a git repository): what it holds. */
+export type CodeSource = {
+	/**  For asking for diagrams of it while it is kept (on the server, or in the app) */
+	id: string,
+	/**  The folder's or repository's name */
+	name: string,
+	files: number,
+	functions: CodeFunction[],
+	/**  Files left out, and why */
+	skipped: string[],
+};
 
 export type ColumnPair = {
 	/**  Attribute id in the `from` table */
@@ -937,6 +975,12 @@ export type SharedBoard = {
 	name: string,
 	/**  What the person who opened the link may do */
 	role: Role,
+};
+
+/**  A source file to read (from a folder chosen in the browser). */
+export type SourceFile = {
+	path: string,
+	text: string,
 };
 
 /**  The databases SQL can be generated for. */

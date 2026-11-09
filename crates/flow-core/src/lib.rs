@@ -7,6 +7,7 @@
 //!   flow_svg     flowchart → SVG (and PNG via `flow`)     import       Mermaid, draw.io, Excalidraw → board
 
 pub mod arrange;
+pub mod code_flow;
 pub mod code_import;
 pub mod codegen;
 pub mod dbml;

@@ -14,6 +14,7 @@
 //!   tools.rs      layout, export, SQL, code, Mermaid and imports: wrappers around
 //!                 `flow_core`, where all of that lives (shared with the server)
 
+pub mod code_flow;
 pub mod documents;
 pub mod folders;
 pub mod projects;

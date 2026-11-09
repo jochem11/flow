@@ -11,6 +11,7 @@ import { currentFlowType } from "./Toolbar";
 import { SqlImportDialog } from "./SqlImportDialog";
 import { CodeImportDialog } from "./CodeImportDialog";
 import { DiagramImportDialog } from "./DiagramImportDialog";
+import { CodeFlowDialog } from "./CodeFlowDialog";
 import { DesignChecks } from "./DesignChecks";
 import { CardLinksMenu } from "./CardLinksMenu";
 import type { CodeLanguage, ExportFormat, Folder } from "../lib/types";
@@ -163,6 +164,7 @@ function EerActions() {
 const [codePreview, setCodePreview] = createSignal<CodeLanguage | null>(null);
 const [codeImport, setCodeImport] = createSignal(false);
 const [diagramImport, setDiagramImport] = createSignal(false);
+const [codeFlow, setCodeFlow] = createSignal(false);
 
 export function TopBar() {
   return (
@@ -261,7 +263,7 @@ export function TopBar() {
                   <Menu
                     align="right"
                     button={(toggle) => (
-                      <button class="text-btn" title="Add a diagram from Mermaid, draw.io or Excalidraw, or classes from code" onClick={toggle}>
+                      <button class="text-btn" title="Add a diagram from Mermaid, draw.io or Excalidraw, classes from code, or an activity from a codebase" onClick={toggle}>
                         <IconImport />
                         <span>Import</span>
                       </button>
@@ -289,6 +291,18 @@ export function TopBar() {
                           >
                             <span>Classes from code…</span>
                             <small>TypeScript, Java, C#, Python, Kotlin, Rust, Go</small>
+                          </button>
+                        </Show>
+                        <Show when={["activity", "flowchart", "whiteboard"].includes(currentFlowType().id)}>
+                          <button
+                            class="menu-item"
+                            onClick={() => {
+                              setCodeFlow(true);
+                              close();
+                            }}
+                          >
+                            <span>Activity from a codebase…</span>
+                            <small>A folder or git repository</small>
                           </button>
                         </Show>
                       </>
@@ -356,6 +370,9 @@ export function TopBar() {
                 </Show>
                 <Show when={diagramImport()}>
                   <DiagramImportDialog onClose={() => setDiagramImport(false)} />
+                </Show>
+                <Show when={codeFlow()}>
+                  <CodeFlowDialog onClose={() => setCodeFlow(false)} />
                 </Show>
               </div>
             </Show>

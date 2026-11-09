@@ -475,6 +475,54 @@ pub struct CodeImport {
     pub skipped: Vec<String>,
 }
 
+/// A codebase read for diagrams (a folder or a git repository): what it holds.
+#[derive(Debug, Clone, Serialize, Deserialize, Type)]
+#[serde(rename_all = "camelCase")]
+pub struct CodeSource {
+    /// For asking for diagrams of it while it is kept (on the server, or in the app)
+    pub id: String,
+    /// The folder's or repository's name
+    pub name: String,
+    pub files: u32,
+    pub functions: Vec<CodeFunction>,
+    /// Files left out, and why
+    pub skipped: Vec<String>,
+}
+
+/// A function or method in a codebase: one to draw from.
+#[derive(Debug, Clone, Serialize, Deserialize, Type)]
+#[serde(rename_all = "camelCase")]
+pub struct CodeFunction {
+    pub id: String,
+    pub name: String,
+    /// The class (or struct, object) it is in
+    pub class: Option<String>,
+    pub file: String,
+    pub line: u32,
+    /// A web route it answers (`PUT /api/lends/{id}`), from its annotations
+    pub route: Option<String>,
+    /// How many steps it has (to tell small from big)
+    pub steps: u32,
+}
+
+/// A source file to read (from a folder chosen in the browser).
+#[derive(Debug, Clone, Serialize, Deserialize, Type)]
+#[serde(rename_all = "camelCase")]
+pub struct SourceFile {
+    pub path: String,
+    pub text: String,
+}
+
+/// An activity diagram drawn from a function: its blocks and lines, laid out,
+/// and notes on what was not followed.
+#[derive(Debug, Clone, Serialize, Deserialize, Type)]
+#[serde(rename_all = "camelCase")]
+pub struct CodeActivity {
+    pub nodes: Vec<Node>,
+    pub edges: Vec<Edge>,
+    pub notes: Vec<String>,
+}
+
 /// Where an imported diagram came from.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, Type)]
 #[serde(rename_all = "lowercase")]
