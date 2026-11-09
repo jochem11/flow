@@ -5,18 +5,6 @@ const kinds = (code: string, lang: Parameters<typeof highlight>[1]) =>
   highlight(code, lang).filter((t) => t.kind !== "plain").map((t) => `${t.kind}:${t.text}`);
 
 describe("highlight", () => {
-  it("Java", () => {
-    expect(kinds('@Override\npublic int pay(String s) { return 1; } // done', "java")).toEqual([
-      "annotation:@Override",
-      "keyword:public",
-      "keyword:int",
-      "function:pay",
-      "type:String",
-      "keyword:return",
-      "number:1",
-      "comment:// done",
-    ]);
-  });
   it("SQL keywords are case-insensitive, identifiers in quotes are not strings", () => {
     expect(kinds(`create table "order" (id INT DEFAULT 'x'); -- note`, "sql")).toEqual([
       "keyword:create",
@@ -37,7 +25,7 @@ describe("highlight", () => {
     ]);
   });
   it("keeps all the text", () => {
-    const code = "func (c *Order) Pay() bool {\n\treturn true\n}";
-    expect(highlight(code, "go").map((t) => t.text).join("")).toBe(code);
+    const code = "CREATE TABLE \"order\" (\n  id INT -- the key\n);";
+    expect(highlight(code, "sql").map((t) => t.text).join("")).toBe(code);
   });
 });

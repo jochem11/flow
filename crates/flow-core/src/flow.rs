@@ -7,9 +7,9 @@
 use std::collections::HashMap;
 
 use super::flow_svg::to_svg_with;
-use super::{codegen, eer, mermaid};
+use super::{eer, mermaid};
 use crate::models::{Brand, 
-    CodeLanguage, DocContent, Document, ExportFormat, FlowDoc, Node, NodeKind, SqlDialect,
+    DocContent, Document, ExportFormat, FlowDoc, Node, NodeKind, SqlDialect,
 };
 
 // ===========================================================================
@@ -44,7 +44,7 @@ pub fn export_with(doc: &Document, format: ExportFormat, brand: Option<&Brand>) 
     };
     let flow = || match &doc.content {
         DocContent::Flow(flow) => Ok(flow),
-        _ => Err("only flowcharts can be exported as an image or code".to_string()),
+        _ => Err("only flowcharts can be exported as an image".to_string()),
     };
 
     // A chart: the drawing the app keeps with it (the app draws charts, Rust does not)
@@ -56,30 +56,6 @@ pub fn export_with(doc: &Document, format: ExportFormat, brand: Option<&Brand>) 
             ExportFormat::Pdf => named("pdf", svg_to_pdf(svg)?),
             _ => return Err("a chart can be exported as SVG, PNG or PDF".into()),
         });
-    }
-
-    let lang = match format {
-        ExportFormat::TypeScript => Some(CodeLanguage::TypeScript),
-        ExportFormat::Java => Some(CodeLanguage::Java),
-        ExportFormat::CSharp => Some(CodeLanguage::CSharp),
-        ExportFormat::Python => Some(CodeLanguage::Python),
-        ExportFormat::Kotlin => Some(CodeLanguage::Kotlin),
-        ExportFormat::Rust => Some(CodeLanguage::Rust),
-        ExportFormat::Go => Some(CodeLanguage::Go),
-        _ => None,
-    };
-    if let Some(lang) = lang {
-        let files = codegen::generate(flow()?, lang, &doc.name);
-        if files.is_empty() {
-            return Err("there are no UML classes in this flowchart".into());
-        }
-        return Ok(files
-            .into_iter()
-            .map(|f| ExportFile {
-                name: safe_file_name(&f.name),
-                bytes: f.content.into_bytes(),
-            })
-            .collect());
     }
 
     Ok(match format {
@@ -99,7 +75,6 @@ pub fn export_with(doc: &Document, format: ExportFormat, brand: Option<&Brand>) 
         ExportFormat::Sqlite => sql(SqlDialect::Sqlite)?,
         ExportFormat::SqlServer => sql(SqlDialect::SqlServer)?,
         ExportFormat::Oracle => sql(SqlDialect::Oracle)?,
-        _ => unreachable!("code formats are handled above"),
     })
 }
 

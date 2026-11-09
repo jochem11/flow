@@ -1,14 +1,14 @@
 // Picking a type for an attribute, a parameter or a return value (class panel).
-// Shows and offers the board's language's types (classTypes.ts); what is picked
-// or typed is stored neutral. Groups: the language's types, the classes on the
-// board (and the class's type parameters), and wrapping the current type in a
-// list, set, map or optional.
+// Groups: UML's usual types, the classes on the board (and the class's type
+// parameters), and wrapping the current type in a list, set, map or optional.
+// Any other type may be typed: it is kept as written.
 
 import { createMemo, createSignal, For, onCleanup, Show } from "solid-js";
 import { Portal } from "solid-js/web";
-import { pickerTypes, typeFrom, typeIn } from "../lib/classTypes";
 import { isType } from "../lib/classModel";
-import type { CodeLanguage } from "../lib/types";
+
+/** The usual UML types, offered first */
+const UML_TYPES = ["int", "long", "double", "decimal", "bool", "string", "char", "date", "datetime", "time", "duration", "uuid", "bytes", "object"];
 
 interface Option {
   group: string;
@@ -28,14 +28,11 @@ function unwrap(uml: string): string {
 
 export function TypePicker(p: {
   value: string;
-  lang: CodeLanguage | null;
   /** Classes on the board and the class's type parameters */
   classes: string[];
   /** Operations: no return value, or one of the class's attributes (a getter) */
   returns?: { attributes: string[] };
   placeholder?: string;
-  /** Is the type one that can be used? (marked when not) */
-  known: (uml: string) => boolean;
   onChange: (uml: string) => void;
 }) {
   const [open, setOpen] = createSignal(false);
@@ -45,21 +42,21 @@ export function TypePicker(p: {
   let input!: HTMLInputElement;
   let list: HTMLDivElement | undefined;
 
-  const shown = () => (p.value ? typeIn(p.value, p.lang) : "");
+  const shown = () => p.value;
 
   const options = createMemo((): Option[] => {
     const q = (typed() ?? "").trim().toLowerCase();
     const all: Option[] = [];
-    if (p.returns) all.push({ group: "Returns", label: typeIn("void", p.lang) || "nothing (void)", uml: "void" });
-    for (const t of pickerTypes(p.lang)) if (t.uml !== "void") all.push({ group: "Types", label: t.label, uml: t.uml });
+    if (p.returns) all.push({ group: "Returns", label: "nothing (void)", uml: "void" });
+    for (const t of UML_TYPES) all.push({ group: "Types", label: t, uml: t });
     for (const c of p.classes) all.push({ group: "Classes", label: c, uml: c });
     for (const a of p.returns?.attributes ?? []) all.push({ group: "Its attribute (a getter)", label: a, uml: a });
     // Wrapping what is chosen now
     const inner = p.value && p.value !== "void" ? p.value : "";
     if (inner) {
       const wrap = [`List<${inner}>`, `${inner}?`, `Set<${inner}>`, `Map<string, ${inner}>`];
-      for (const w of wrap) all.push({ group: "Wrap it", label: typeIn(w, p.lang) || w, uml: w });
-      if (unwrap(inner) !== inner) all.push({ group: "Wrap it", label: `just ${typeIn(unwrap(inner), p.lang)}`, uml: unwrap(inner) });
+      for (const w of wrap) all.push({ group: "Wrap it", label: w, uml: w });
+      if (unwrap(inner) !== inner) all.push({ group: "Wrap it", label: `just ${unwrap(inner)}`, uml: unwrap(inner) });
     }
     return q ? all.filter((o) => o.label.toLowerCase().includes(q)) : all;
   });
@@ -85,11 +82,11 @@ export function TypePicker(p: {
     close();
     if (uml !== p.value) p.onChange(uml);
   };
-  /** What was typed, read as the board's language writes types */
+  /** What was typed, kept as written */
   const commitTyped = () => {
     const t = typed();
     if (t === null) return close();
-    const uml = typeFrom(t.trim(), p.lang, p.value);
+    const uml = t.trim();
     close();
     if (uml && uml !== p.value) p.onChange(uml);
   };
@@ -102,7 +99,8 @@ export function TypePicker(p: {
   document.addEventListener("pointerdown", onDoc);
   onCleanup(() => document.removeEventListener("pointerdown", onDoc));
 
-  const bad = () => !!p.value && p.value !== "void" && (!isType(p.value) || !p.known(p.value));
+  // Only a type that is not written as one is marked (any name is fine: a class elsewhere)
+  const bad = () => !!p.value && p.value !== "void" && !isType(p.value);
 
   return (
     <>
@@ -110,7 +108,7 @@ export function TypePicker(p: {
         ref={input}
         class="type-input"
         classList={{ invalid: bad() }}
-        title={bad() ? "Not a type that can be used here: a built-in type, a class on this board, or a type parameter" : undefined}
+        title={bad() ? "Not written as a type: a name, maybe with <…>, [] or ?" : undefined}
         value={typed() ?? shown()}
         placeholder={p.placeholder ?? "type"}
         spellcheck={false}

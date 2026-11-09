@@ -14,7 +14,7 @@ pub type CmdResult<T> = Result<T, String>;
 /// Every command the frontend may call. Both the `invoke_handler` and
 /// `bindings.ts` are generated from this list, so they can never drift apart.
 fn specta_builder() -> Builder<tauri::Wry> {
-    use commands::{code_flow, documents, folders, projects, session, tools};
+    use commands::{documents, folders, projects, session, tools};
 
     Builder::<tauri::Wry>::new()
         .commands(collect_commands![
@@ -36,14 +36,10 @@ fn specta_builder() -> Builder<tauri::Wry> {
             tools::auto_layout,
             tools::export_document,
             tools::eer_sql,
-            tools::class_code,
-            code_flow::code_read_files,
-            code_flow::code_activity,
             tools::mermaid_preview,
             tools::import_sql,
             tools::eer_dbml,
             tools::import_dbml,
-            tools::import_code,
             tools::import_diagram,
             session::get_session_token,
             session::set_session_token,

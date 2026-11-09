@@ -3,7 +3,7 @@
 import { batch } from "solid-js";
 import { produce, reconcile, unwrap } from "solid-js/store";
 import { alignRects, bounds, distributeRects, intersects, portAt, type AlignTo, type Pt } from "../geometry";
-import type { Arranged, CodeImport, DiagramType, FlowDoc, FlowEdge, FlowNode, NodeColor } from "../types";
+import type { Arranged, DiagramType, FlowDoc, FlowEdge, FlowNode, NodeColor } from "../types";
 import { freeEndsIn, isBetweenLifelines, makeMessage, moveFreeEnds } from "./edges";
 import { assignParents, frameAt, growFrames, updateFrames, withContents } from "./frames";
 import { checkpoint, resetHistory } from "./history";
@@ -43,38 +43,6 @@ export function addNode(node: FlowNode) {
   growFrames([node.id]);
   select([node.id]);
   touch();
-}
-
-/**
- * Classes read from code (`api.importCode`), added to the right of the board in
- * a new frame as one undo step: a package with the package's name when the code
- * has one (so the code export puts them in it again), else a section.
- */
-export function insertClasses(imp: CodeImport, title: string): FlowNode | null {
-  if (!imp.nodes.length) return null;
-  const right = board.nodes.length ? Math.max(...board.nodes.map((n) => n.x + n.w)) + 120 : 0;
-  const top = board.nodes.length ? Math.min(...board.nodes.map((n) => n.y)) : 0;
-  const w = Math.max(...imp.nodes.map((n) => n.x + n.w));
-  const h = Math.max(...imp.nodes.map((n) => n.y + n.h));
-  const frame: FlowNode = {
-    id: uid(),
-    kind: imp.package ? "package" : "section",
-    x: right,
-    y: top,
-    w: w + 80,
-    h: h + 100,
-    text: imp.package ?? title,
-    color: "white",
-  };
-  const nodes = imp.nodes.map((n) => ({ ...n, x: right + 40 + n.x, y: top + 60 + n.y, parent: frame.id }));
-  checkpoint();
-  batch(() => {
-    setBoard("nodes", (ns) => [...ns, frame, ...nodes]);
-    setBoard("edges", (es) => [...es, ...imp.edges]);
-    select([frame.id]);
-  });
-  touch();
-  return frame;
 }
 
 /**
@@ -378,7 +346,6 @@ export function restoreBoard(doc: FlowDoc) {
     setBoard("edges", reconcile(doc.edges ?? [], { key: "id" }));
     setBoard("callColors", doc.callColors ?? undefined);
     setBoard("diagram", doc.diagram ?? undefined);
-    setBoard("codeLanguage", doc.codeLanguage ?? undefined);
     setBoard("classDetail", doc.classDetail ?? undefined);
     setBoard("relaxed", doc.relaxed || undefined);
     setBoard("look", doc.look ?? undefined);
@@ -447,7 +414,6 @@ export function applyRemoteFlow(nodes: FlowNode[], edges: FlowEdge[], settings: 
   batch(() => {
     if (settings.callColors !== undefined) setBoard("callColors", settings.callColors || undefined);
     if (settings.diagram !== undefined) setBoard("diagram", settings.diagram);
-    if (settings.codeLanguage !== undefined) setBoard("codeLanguage", settings.codeLanguage ?? undefined);
     if (settings.classDetail !== undefined) setBoard("classDetail", settings.classDetail ?? undefined);
     if (settings.relaxed !== undefined) setBoard("relaxed", settings.relaxed || undefined);
     if (settings.look !== undefined) setBoard("look", settings.look ?? undefined);

@@ -1,28 +1,22 @@
 import { describe, expect, it } from "vitest";
-import rows from "../../fixtures/uml-rows.json";
-import { attributeNames, classKind, className, classParts, fixOperation, rowProblem, withClassKind } from "./umlClass";
+import { classKind, className, fixOperation, rowProblem, withClassKind } from "./umlClass";
 
-/** The name of an attribute row (`- total: int` → total) or an operation row (`+ pay(…)` → pay). */
-const rowName = (line: string) =>
-  line
-    .trim()
-    .replace(/^[+\-#~]\s*/, "")
-    .replace(/\{static\}|\{abstract\}|^static\s+/g, "")
-    .trim()
-    .split(/[(:]/)[0]
-    .trim();
-
-describe("UML rows (shared with codegen.rs)", () => {
-  for (const c of rows.cases) {
-    it(c.name, () => {
-      const parts = classParts(c.text);
-      const ctx = { self: className(c.text), related: c.related, attributes: attributeNames(c.text) };
-      const accepted = (part: number) =>
-        parts[part].filter((line) => rowProblem(classKind(c.text), part, line, ctx) === null).map(rowName);
-      expect(accepted(1)).toEqual(c.fields);
-      expect(accepted(2)).toEqual(c.methods);
-    });
-  }
+describe("UML notation of rows", () => {
+  it("accepts attributes and operations in UML notation, with any type", () => {
+    for (const row of ["- total: Money = 0", "+ lines: List<OrderLine>", "+ customer: Customer?", "{static} count: int", "- owner: SomeClassElsewhere"]) {
+      expect(rowProblem("class", 1, row), row).toBeNull();
+    }
+    for (const row of ["+ pay(amount: double, note: string): bool", "+ cancel()", "+ find(id: uuid): Order?"]) {
+      expect(rowProblem("class", 2, row), row).toBeNull();
+    }
+  });
+  it("marks rows that are not UML notation", () => {
+    expect(rowProblem("class", 1, "int total")).toMatch(/Write an attribute as/);
+    expect(rowProblem("class", 1, "- total price: int")).toMatch(/Write an attribute as/);
+    expect(rowProblem("class", 2, "+ pay(double amount): bool")).toMatch(/Write an operation as/);
+    expect(rowProblem("enum", 1, "Paid = 2")).toBeNull();
+    expect(rowProblem("enum", 1, "not a value")).toMatch(/An enum value/);
+  });
 });
 
 describe("class text", () => {

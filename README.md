@@ -12,8 +12,8 @@ and version history; on kanban boards dates, priorities, "blocked by", filters, 
 timeline; on EER diagrams DBML import and export, indexes and schema checks.
 
 ```
-crates/flow-core   the documents (models) and everything made from them: code in 7 languages,
-                   SQL for 5 databases, Mermaid, SVG/PNG, auto-layout, SQL and code import
+crates/flow-core   the documents (models) and everything made from them: SQL for 5 databases,
+                   Mermaid, SVG/PNG, auto-layout, SQL import
 server             Rust (Axum + PostgreSQL): accounts, projects and boards, rights, invites,
                    share links, comments, editing together (WebSocket, Yjs), and the web version
 src-tauri          the desktop app (Tauri 2): a window for the same frontend, the tools from
@@ -166,7 +166,7 @@ desktop commands (`src-tauri/src/commands/`) by tauri-specta: `npm run bindings`
 ```
 crates/flow-core/src/
   models/            project, document, flow, text, kanban, eer, access (roles, comments)
-  codegen/           class diagram → code      code_import/   code → class diagram
+  uml/               UML class rows (Mermaid and SVG read them)
   eer.rs             EER → SQL                 sql_import.rs  SQL → EER
   dbml.rs            EER ↔ DBML (dbdiagram.io)
   mermaid.rs         documents → Mermaid       flow.rs        layout, export files

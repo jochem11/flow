@@ -11,8 +11,7 @@ import { startPresenting } from "../lib/present";
 import { get } from "../lib/server";
 import { matchScore } from "../lib/match";
 import { MOD } from "../lib/shortcuts";
-import { board, setCallColors, setCodeLanguage, setRelaxed } from "../lib/store";
-import { LANGUAGES as CODE_LANGUAGES } from "./CodeDialog";
+import { board, setCallColors, setRelaxed } from "../lib/store";
 import { setTheme, THEME_NAMES, type Theme } from "../lib/theme";
 import type { ExportFormat, SearchHit } from "../lib/types";
 import {
@@ -113,14 +112,8 @@ export function CommandPalette() {
         for (const t of BOARD_TYPES.filter((t) => t.kind === "flow" && t.id !== type?.id)) {
           out.push({ key: `type-${t.id}`, label: `Board type: ${t.label}`, run: () => void changeBoardType(t.diagram!) });
         }
-        if (type?.id === "class" || type?.id === "whiteboard") {
-          out.push({ key: "lang-uml", label: "Class types: UML (no language)", run: () => setCodeLanguage(null) });
-          for (const l of CODE_LANGUAGES.filter((l) => l.value !== board.codeLanguage)) {
-            out.push({ key: `lang-${l.value}`, label: `Class types: ${l.label}`, run: () => setCodeLanguage(l.value) });
-          }
-        }
         if (type?.id !== "whiteboard")
-          out.push({ key: "relaxed", label: board.relaxed ? "Checks: on (check the whole diagram)" : "Checks: off (only the focus points)", run: () => setRelaxed(!board.relaxed) });
+          out.push({ key: "relaxed", label: board.relaxed ? "Checks: on (the UML rules)" : "Checks: off", run: () => setRelaxed(!board.relaxed) });
         if (type?.id === "sequence" || type?.id === "whiteboard") {
           out.push({ key: "call-colors", label: board.callColors ? "Color calls: off" : "Color calls: on", run: () => setCallColors(!board.callColors) });
         }

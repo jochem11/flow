@@ -17,7 +17,7 @@ import { loadPersonal, loadTrash, noteOpened } from "./personal";
 import { addNode, applyLayout, board, boardSnapshot, createNode, replaceBoard, rev, setChartBlockSvg, setDiagram } from "./store";
 import { WELCOME } from "../templates";
 import { toast } from "./toast";
-import type { Brand, ChartDoc, DiagramType, DocContent, Document, DocumentKind, DocumentMeta, ExportFormat, FlowDoc, Project, Role, SharedBoard } from "./types";
+import type { Brand, ChartDoc, DiagramType, DocContent, Document, DocumentKind, DocumentMeta, ExportFormat, Project, Role, SharedBoard } from "./types";
 
 // ---------- state ----------
 
@@ -563,17 +563,6 @@ export async function runAutoLayout() {
 }
 
 /** Code for some of the classes: the open flowchart, with only those in it. */
-export async function exportClasses(flow: FlowDoc, format: ExportFormat) {
-  const doc = currentDocument();
-  if (!doc) return;
-  try {
-    const path = await api.exportDocument({ ...doc, content: { kind: "flow", data: flow } }, format);
-    toast(`Exported to ${path}`);
-  } catch (e) {
-    toast(errMsg(e), "error");
-  }
-}
-
 export async function runExport(format: ExportFormat) {
   const doc = currentDocument();
   if (!doc) return;

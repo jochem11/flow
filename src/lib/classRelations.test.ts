@@ -7,21 +7,21 @@ const line = { name: "OrderLine", kind: "class" as const };
 const payable = { name: "Payable", kind: "interface" as const };
 const edge = (props: Partial<FlowEdge>): FlowEdge => ({ id: "e", from: "a", to: "b", ...props });
 
-describe("what a line between classes means for the code (as read_classes)", () => {
+describe("what a line between classes means in UML", () => {
   it("reads multiplicities", () => {
     expect([isMany("*"), isMany("0..*"), isMany("1..5"), isMany("0..1"), isMany("1"), isMany(undefined)]).toEqual([true, true, true, false, false, false]);
   });
 
-  it("names the field an association, aggregation or composition makes", () => {
-    expect(relationMeaning(edge({ endCap: "open", endLabel: "*" }), order, line)).toBe("Order has a list of OrderLine (field orderLines).");
-    expect(relationMeaning(edge({ startCap: "diamond", endCap: "none" }), order, line)).toBe("Order owns one OrderLine (field orderLine, may be empty).");
+  it("says what an association, aggregation or composition holds", () => {
+    expect(relationMeaning(edge({ endCap: "open", endLabel: "*" }), order, line)).toBe("Order has a list of OrderLine.");
+    expect(relationMeaning(edge({ startCap: "diamond", endCap: "none" }), order, line)).toBe("Order owns one OrderLine (or none).");
     // A diamond at the end: the class there is the whole
-    expect(relationMeaning(edge({ endCap: "hollowDiamond", startLabel: "1..*" }), line, order)).toBe("Order has a list of OrderLine (field orderLines).");
+    expect(relationMeaning(edge({ endCap: "hollowDiamond", startLabel: "1..*" }), line, order)).toBe("Order has a list of OrderLine.");
   });
 
   it("inheritance, realization and dependency", () => {
     expect(relationMeaning(edge({ endCap: "triangle" }), order, line)).toBe("Order extends OrderLine.");
     expect(relationMeaning(edge({ endCap: "triangle" }), order, payable)).toBe("Order implements Payable.");
-    expect(relationMeaning(edge({ endCap: "open", pattern: "dashed" }), order, line)).toBe("Order uses OrderLine (no field in the code).");
+    expect(relationMeaning(edge({ endCap: "open", pattern: "dashed" }), order, line)).toBe("Order uses OrderLine (a dependency).");
   });
 });

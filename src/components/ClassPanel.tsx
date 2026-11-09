@@ -1,16 +1,15 @@
 // The class panel (right side, on class diagrams and whiteboards): the selected
-// class as fields instead of UML text. Name, kind, type parameters and the
-// board's language; attributes with visibility, type, default, static and
-// read-only; operations with parameters and a return type; enum values. Every
-// change is written back to the class's text (classModel.ts), so undo, editing
-// together and the code export work as with typing on the canvas. Picking another
-// class as a type draws the line to it (ensureRelation).
+// class as fields instead of UML text. Name, kind and type parameters;
+// attributes with visibility, type, default, static and read-only; operations
+// with parameters and a return type; enum values. Every change is written back
+// to the class's text (classModel.ts), so undo and editing together work as with
+// typing on the canvas. Picking another class as a type draws the line to it
+// (ensureRelation).
 
 import { createMemo, createSignal, For, Index, type JSX, Show } from "solid-js";
 import { boardTypeOf } from "../lib/boardTypes";
 import { canEdit } from "../lib/access";
 import { panelOpen } from "../lib/comments";
-import { isBuiltin, LANGUAGES } from "../lib/classTypes";
 import {
   isRaw,
   parseClass,
@@ -21,13 +20,12 @@ import {
   type Raw,
   type Vis,
 } from "../lib/classModel";
-import { addNode, board, connect, createNode, ensureRelation, nodeById, reverseEdge, selectedNodes, setClassDetail, setCodeLanguage, setRelaxed, setEdgeProps, setNodeText, setUi, ui } from "../lib/store";
+import { addNode, board, connect, createNode, ensureRelation, nodeById, reverseEdge, selectedNodes, setClassDetail, setRelaxed, setEdgeProps, setNodeText, setUi, ui } from "../lib/store";
 import { relationMeaning } from "../lib/classRelations";
 import { RELATIONS } from "./EdgeMenus";
 import { sameName, type ClassKind } from "../lib/umlClass";
-import { formatClass, missingOperations, withAccessors, withConstructor } from "../lib/classModel";
-import type { ClassDetail, CodeLanguage, FlowNode } from "../lib/types";
-import { LANGUAGES as LANGUAGE_NAMES } from "./CodeDialog";
+import { formatClass } from "../lib/classModel";
+import type { ClassDetail, FlowNode } from "../lib/types";
 import { IconClose, IconPlus } from "./icons";
 import { TypePicker } from "./TypePicker";
 
@@ -139,30 +137,10 @@ function Toggle(p: { on: boolean; label: string; title: string; onChange: (on: b
 function ClassEditor(p: { id: string }) {
   const node = () => nodeById(p.id);
   const model = createMemo(() => parseClass(node()?.text ?? ""));
-  const lang = () => (board.codeLanguage ?? null) as CodeLanguage | null;
   const classNodes = createMemo(() => board.nodes.filter((n) => n.kind === "class").map((n) => ({ id: n.id, name: parseClass(n.text).name })));
   /** What the type pickers offer as classes: the others on the board, this one, its type parameters */
   const classNames = () => [...classNodes().map((c) => c.name).filter(Boolean), ...model().typeParams];
   const attributeNames = () => model().attributes.filter((a): a is Attribute => !isRaw(a)).map((a) => a.name);
-  // On a relaxed board any type goes (a class not drawn here)
-  const known = (uml: string) =>
-    !!board.relaxed ||
-    (uml.match(/[\p{L}_][\p{L}\p{N}_]*/gu) ?? [])
-      .filter((w) => !["List", "Set", "Map"].includes(w))
-      .every((w) => isBuiltin(w) || classNames().some((c) => sameName(c, w)) || attributeNames().includes(w));
-
-  /** The classes this one extends or implements (lines with a triangle from it) */
-  const supers = createMemo(() =>
-    board.edges
-      .filter((e) => e.from === p.id && e.endCap === "triangle")
-      .map((e) => nodeById(e.to))
-      .filter((n): n is FlowNode => n?.kind === "class")
-      .map((n) => parseClass(n.text)),
-  );
-  const inherited = () => missingOperations(model(), supers());
-  const operationNames = () => model().operations.filter((o): o is Operation => !isRaw(o)).map((o) => o.name);
-  /** The class made anew from what it is (generating members) */
-  const replace = (fn: (m: ClassModel) => ClassModel) => setNodeText(p.id, formatClass(fn(model())));
 
   /** A UML note to the right of the class, with a dashed line to it; its text is edited straight away */
   const addNote = () => {
@@ -250,15 +228,6 @@ function ClassEditor(p: { id: string }) {
       <div class="class-panel-head">
         <strong>Class</strong>
         <span class="spacer" />
-        <select
-          class="lang-select"
-          title="The language the classes are for: its types are offered and shown"
-          value={lang() ?? ""}
-          onChange={(e) => setCodeLanguage((e.currentTarget.value || null) as CodeLanguage | null)}
-        >
-          <option value="">UML types</option>
-          <For each={LANGUAGES}>{(l) => <option value={l}>{LANGUAGE_NAMES.find((x) => x.value === l)?.label ?? l}</option>}</For>
-        </select>
         <button class="icon-btn small" title="Hide the class panel" onClick={() => setPanelClosed(true)}>
           <IconClose />
         </button>
@@ -298,10 +267,10 @@ function ClassEditor(p: { id: string }) {
             <option value="public">Public members only</option>
             <option value="names">Class names only</option>
           </select>
-          <label title="Only the classes that matter here: no checks, any type (a class elsewhere) and free-text rows (notes)">Focus only</label>
+          <label title="The board's UML checks (the Checks list in the top bar), and rows marked when they are not UML notation">Checks</label>
           <label class="panel-check">
-            <input type="checkbox" checked={!!board.relaxed} onChange={(e) => setRelaxed(e.currentTarget.checked)} />
-            <span>No checks</span>
+            <input type="checkbox" checked={!board.relaxed} onChange={(e) => setRelaxed(!e.currentTarget.checked)} />
+            <span>UML rules</span>
           </label>
         </div>
 
@@ -360,9 +329,7 @@ function ClassEditor(p: { id: string }) {
                       <span class="colon">:</span>
                       <TypePicker
                         value={(a() as Attribute).type}
-                        lang={lang()}
                         classes={classNames()}
-                        known={known}
                         onChange={(type) => {
                           setAttr(i, { type });
                           usesClasses(type, "attribute");
@@ -410,10 +377,8 @@ function ClassEditor(p: { id: string }) {
                     <span class="colon">→</span>
                     <TypePicker
                       value={(o() as Operation).returns ?? "void"}
-                      lang={lang()}
                       classes={classNames()}
                       returns={{ attributes: attributeNames() }}
-                      known={known}
                       placeholder="returns"
                       onChange={(ret) => {
                         setOp(i, { returns: ret === "void" ? null : ret });
@@ -438,9 +403,7 @@ function ClassEditor(p: { id: string }) {
                           <span class="colon">:</span>
                           <TypePicker
                             value={param()[1]}
-                            lang={lang()}
                             classes={classNames()}
-                            known={known}
                             onChange={(type) => {
                               setOp(i, { params: (o() as Operation).params.map((x, k) => (k === j ? [x[0], type] : x)) });
                               usesClasses(type, "operation");
@@ -471,41 +434,6 @@ function ClassEditor(p: { id: string }) {
             )}
           </Index>
         </Section>
-        {/* ---------- generate ---------- */}
-        <Show when={model().kind !== "enum"}>
-          <section class="member-section">
-            <div class="member-head">
-              <span>Generate</span>
-            </div>
-            <div class="generate-row">
-              <Show when={model().kind !== "interface"}>
-                <button class="text-btn small" title="A getter for each attribute, and a setter unless it is read-only" onClick={() => replace(withAccessors)}>
-                  Getters &amp; setters
-                </button>
-                <button
-                  class="text-btn small"
-                  disabled={operationNames().includes(model().name)}
-                  title={operationNames().includes(model().name) ? "It has a constructor" : "A constructor that takes every attribute"}
-                  onClick={() => replace(withConstructor)}
-                >
-                  Constructor
-                </button>
-              </Show>
-              <button
-                class="text-btn small"
-                disabled={!inherited().length}
-                title={
-                  inherited().length
-                    ? `Adds ${inherited().map((o) => o.name).join(", ")}`
-                    : "Nothing to add from the interfaces it implements or the abstract classes it extends"
-                }
-                onClick={() => update((m) => m.operations.push(...inherited()))}
-              >
-                Implement inherited{inherited().length ? ` (${inherited().length})` : ""}
-              </button>
-            </div>
-          </section>
-        </Show>
         <section class="member-section">
           <div class="generate-row">
             <button class="text-btn small" title="A note next to this class, joined to it with a dashed line" onClick={addNote}>
@@ -548,7 +476,7 @@ function RawRow(p: { raw: string; onSave: (t: string) => void; onRemove: () => v
       <Field
         class={board.relaxed ? "panel-field" : "panel-field invalid"}
         value={p.raw}
-        title={board.relaxed ? "A note (the code export keeps it as a comment)" : "Not UML notation: the code export skips it"}
+        title={board.relaxed ? "A note (free text: the checks are off)" : "Not UML notation"}
         onSave={(t) => (t ? p.onSave(t) : p.onRemove())}
       />
       <RemoveButton what="row" onClick={p.onRemove} />
@@ -566,7 +494,7 @@ const MULTIPLICITIES = ["1", "0..1", "*", "1..*", "0..*"];
 
 /**
  * The line inspector: what kind of relation, how many at each end, the role
- * name, which way round, and what it makes in the code.
+ * name, which way round, and what it says.
  */
 function RelationEditor(p: { id: string }) {
   const edge = () => board.edges.find((e) => e.id === p.id);

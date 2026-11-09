@@ -1,13 +1,11 @@
 // A UML class as a structure: what the class panel edits. The class's text (see
 // umlClass.ts) stays what is stored; `parseClass` reads it and `formatClass`
-// writes it back, in the same notation the code export reads (parse_attribute,
-// parse_operation and read_class in crates/flow-core/src/codegen/read.rs; shared
-// cases in fixtures/classRows.json). Rows that are not UML notation are kept as
+// writes it back, in the same notation the Mermaid and SVG exports read
+// (parse_attribute, parse_operation and read_class in crates/flow-core/src/uml/;
+// shared cases in fixtures/classRows.json). Rows that are not UML notation are kept as
 // they are.
 
 import { classKind, classParts, classText, fixOperation, type ClassKind } from "./umlClass";
-import { typeFrom, typeIn } from "./classTypes";
-import type { CodeLanguage } from "./types";
 
 /** + public, - private, # protected, ~ package, "" not written (the language's default) */
 export type Vis = "+" | "-" | "#" | "~" | "";
@@ -205,112 +203,7 @@ export function formatClass(c: ClassModel): string {
   ]);
 }
 
-// ---------- rows in a programming language (the board's codeLanguage) ----------
-
-/** Anything that is not empty: a type as some language writes it */
-const anyType = (t: string) => t.trim().length > 0;
-
-/**
- * A row as a board with language `lang` shows it: its types as that language
- * writes them. `part` 1 is attributes, 2 operations; enum values and rows that
- * are not UML notation stay as they are.
- */
-export function rowIn(part: number, kind: ClassKind, line: string, lang: CodeLanguage | null | undefined): string {
-  if (!lang || (part === 1 && kind === "enum")) return line;
-  if (part === 1) {
-    const a = parseAttribute(line);
-    return a ? formatAttribute({ ...a, type: typeIn(a.type, lang) }) : line;
-  }
-  if (part === 2) {
-    const o = parseOperation(line);
-    if (!o) return line;
-    return formatOperation({
-      ...o,
-      params: o.params.map(([n, t]) => [n, typeIn(t, lang)] as Param),
-      returns: o.returns && typeIn(o.returns, lang),
-    });
-  }
-  return line;
-}
-
-/**
- * A row typed on a board with language `lang`, back to neutral UML. With
- * `before` (the row it was), types that still read the same keep what they were.
- */
-export function rowFrom(part: number, kind: ClassKind, typed: string, lang: CodeLanguage | null | undefined, before?: string): string {
-  if (!lang || (part === 1 && kind === "enum")) return typed;
-  if (part === 1) {
-    const a = parseAttribute(typed, anyType);
-    if (!a) return typed;
-    const old = before ? parseAttribute(before) : null;
-    return formatAttribute({ ...a, type: typeFrom(a.type, lang, old?.type) });
-  }
-  if (part === 2) {
-    const o = parseOperation(typed, anyType);
-    if (!o) return typed;
-    const old = before ? parseOperation(before) : null;
-    return formatOperation({
-      ...o,
-      params: o.params.map(([n, t], i) => [n, typeFrom(t, lang, old?.params[i]?.[1])] as Param),
-      returns: o.returns && typeFrom(o.returns, lang, old?.returns ?? undefined),
-    });
-  }
-  return typed;
-}
-
-// ---------- generating members (the class panel's "Generate") ----------
-
-const cap = (s: string) => s.charAt(0).toUpperCase() + s.slice(1);
-const attributesOf = (m: ClassModel) => m.attributes.filter((a): a is Attribute => !isRaw(a) && !a.static);
-const operationsOf = (m: ClassModel) => m.operations.filter((o): o is Operation => !isRaw(o));
-
-/**
- * A getter for each attribute (`isX` for a bool) and a setter unless it is
- * read-only, where the class has none yet. The code export gives them bodies
- * (link_accessors in read.rs).
- */
-export function withAccessors(m: ClassModel): ClassModel {
-  const names = new Set(operationsOf(m).map((o) => o.name.toLowerCase()));
-  const add: Operation[] = [];
-  for (const a of attributesOf(m)) {
-    const getter = `${a.type === "bool" ? "is" : "get"}${cap(a.name)}`;
-    if (!names.has(getter.toLowerCase())) add.push({ vis: "+", name: getter, params: [], returns: a.type, static: false, abstract: false });
-    const setter = `set${cap(a.name)}`;
-    if (!a.readOnly && !names.has(setter.toLowerCase())) {
-      add.push({ vis: "+", name: setter, params: [[a.name, a.type]], returns: null, static: false, abstract: false });
-    }
-  }
-  return { ...m, operations: [...m.operations, ...add] };
-}
-
-/** A constructor (an operation named after the class) taking every attribute, unless it has one. */
-export function withConstructor(m: ClassModel): ClassModel {
-  if (!m.name || operationsOf(m).some((o) => o.name === m.name)) return m;
-  const ctor: Operation = { vis: "+", name: m.name, params: attributesOf(m).map((a) => [a.name, a.type] as Param), returns: null, static: false, abstract: false };
-  // First among the operations, as is usual
-  return { ...m, operations: [ctor, ...m.operations] };
-}
-
-/**
- * The operations this class must still write itself: all of the interfaces it
- * implements, and the abstract ones of the classes it extends, that it does not
- * have yet (by name).
- */
-export function missingOperations(m: ClassModel, supers: ClassModel[]): Operation[] {
-  const have = new Set(operationsOf(m).map((o) => o.name));
-  const out: Operation[] = [];
-  for (const s of supers) {
-    for (const o of operationsOf(s)) {
-      if ((s.kind === "interface" || o.abstract) && !have.has(o.name) && o.name !== s.name) {
-        have.add(o.name);
-        out.push({ ...o, abstract: false, vis: o.vis || "+" });
-      }
-    }
-  }
-  return out;
-}
-
-/** Whether a class row is shown at a board's level of detail (as `row_shown` in read.rs). */
+/** Whether a class row is shown at a board's level of detail (as `row_shown` in crates/flow-core/src/uml). */
 export function rowShown(part: number, kind: ClassKind, line: string, detail: "all" | "public" | "names" | null | undefined): boolean {
   if (!detail || detail === "all" || part === 0) return true;
   if (detail === "names") return false;

@@ -32,8 +32,6 @@ export interface BoardType {
   tools?: TypeTool[][];
   /** UML arrow presets for lines (class relations and the like) */
   umlLines: boolean;
-  /** Code from classes, and classes from code */
-  code: boolean;
   /** What to do first, on an empty board */
   hint: string;
 }
@@ -55,7 +53,6 @@ export const BOARD_TYPES: BoardType[] = [
       [{ tool: "section" }, { tool: "lanes" }],
     ],
     umlLines: false,
-    code: false,
     hint: "Press R for a step and D for a decision; drag from a block's edge to connect it.",
   },
   {
@@ -67,7 +64,6 @@ export const BOARD_TYPES: BoardType[] = [
     newName: "Mind map",
     tools: [[{ tool: "topic" }], NOTES, [{ tool: "line" }], [{ tool: "section" }]],
     umlLines: false,
-    code: false,
     hint: "Press M for a topic, then Tab for a subtopic and Enter for the next one.",
   },
   {
@@ -84,7 +80,6 @@ export const BOARD_TYPES: BoardType[] = [
       [{ tool: "line" }],
     ],
     umlLines: false,
-    code: false,
     hint: "Add lifelines, then drag from one lifeline's dashed line to another for a message.",
   },
   {
@@ -92,11 +87,10 @@ export const BOARD_TYPES: BoardType[] = [
     kind: "flow",
     diagram: "class",
     label: "Class diagram",
-    description: "UML classes, relations and code",
+    description: "UML classes and their relations",
     newName: "Class diagram",
     tools: [[{ tool: "class" }, { tool: "package" }], [{ tool: "comment" }, { tool: "label" }], [{ tool: "line" }]],
     umlLines: true,
-    code: true,
     hint: "Add a class, then connect classes and pick the relation from the line's “UML” menu.",
   },
   {
@@ -108,7 +102,6 @@ export const BOARD_TYPES: BoardType[] = [
     newName: "Use case diagram",
     tools: [[{ tool: "actor" }, { tool: "usecase" }, { tool: "boundary" }], [{ tool: "comment" }, { tool: "label" }], [{ tool: "line" }]],
     umlLines: true,
-    code: false,
     hint: "Draw the system boundary, put use cases in it and actors around it.",
   },
   {
@@ -125,7 +118,6 @@ export const BOARD_TYPES: BoardType[] = [
       [{ tool: "line" }],
     ],
     umlLines: true,
-    code: false,
     hint: "Start with a start point (S), then actions (R); a bar forks or joins.",
   },
   {
@@ -142,7 +134,6 @@ export const BOARD_TYPES: BoardType[] = [
       [{ tool: "line" }],
     ],
     umlLines: true,
-    code: false,
     hint: "Press S for the initial state and P for a state; label each transition with its event.",
   },
   {
@@ -153,7 +144,6 @@ export const BOARD_TYPES: BoardType[] = [
     description: "Every shape, for anything else",
     newName: "Whiteboard",
     umlLines: true,
-    code: true,
     hint: "Every tool is here: blocks on the left, UML shapes under the UML button.",
   },
   {
@@ -163,7 +153,6 @@ export const BOARD_TYPES: BoardType[] = [
     description: "Text with headings, lists and tables",
     newName: "Untitled",
     umlLines: false,
-    code: false,
     hint: "",
   },
   {
@@ -173,7 +162,6 @@ export const BOARD_TYPES: BoardType[] = [
     description: "Cards moving through columns",
     newName: "Kanban board",
     umlLines: false,
-    code: false,
     hint: "",
   },
   {
@@ -183,7 +171,6 @@ export const BOARD_TYPES: BoardType[] = [
     description: "Columns, lines, areas and shares from a table",
     newName: "Chart",
     umlLines: false,
-    code: false,
     hint: "",
   },
   {
@@ -193,7 +180,6 @@ export const BOARD_TYPES: BoardType[] = [
     description: "Database tables, keys and SQL",
     newName: "EER diagram",
     umlLines: false,
-    code: false,
     hint: "",
   },
 ];

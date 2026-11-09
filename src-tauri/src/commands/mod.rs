@@ -11,10 +11,9 @@
 //!   folders.rs    folders inside a project (a tree via `parent_id`)
 //!   documents.rs  documents: list, load, save, create, rename, move, delete
 //!   session.rs    the Flow server session token, in the system keychain
-//!   tools.rs      layout, export, SQL, code, Mermaid and imports: wrappers around
+//!   tools.rs      layout, export, SQL, Mermaid and imports: wrappers around
 //!                 `flow_core`, where all of that lives (shared with the server)
 
-pub mod code_flow;
 pub mod documents;
 pub mod folders;
 pub mod projects;

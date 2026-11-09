@@ -21,8 +21,6 @@ pub struct AppState {
     pub rooms: Arc<crate::collab::Rooms>,
     /// Live notices to people's apps (project and access changes)
     pub events: Arc<crate::events::Events>,
-    /// Codebases read for diagrams (routes/code.rs)
-    pub code: Arc<crate::routes::code::CodeCache>,
 }
 
 impl AppState {
@@ -43,7 +41,6 @@ impl AppState {
             limits: Arc::new(RateLimits::default()),
             rooms: Arc::new(crate::collab::Rooms::default()),
             events: Arc::new(crate::events::Events::default()),
-            code: Arc::new(crate::routes::code::CodeCache::default()),
         }
     }
 

@@ -1,6 +1,6 @@
-import { createMemo, createSignal, For, Show } from "solid-js";
+import { createMemo, For, Show } from "solid-js";
 import { bounds, type Rect } from "../lib/geometry";
-import type { CodeLanguage, FlowEdge, NodeColor } from "../lib/types";
+import type { FlowEdge, NodeColor } from "../lib/types";
 import {
   addLane,
   board,
@@ -32,12 +32,11 @@ import { AlignMenu } from "./AlignMenu";
 import { deleteSelectionTidy } from "../lib/mindmap";
 import { labelPoint } from "./Edges";
 import { Menu } from "./Menu";
-import { CodeDialog } from "./CodeDialog";
 import { classKind, classParts, ROW_NAMES, withClassKind, type ClassKind } from "../lib/umlClass";
 import { isLinkable } from "../lib/links";
 import { FRAMES } from "./NodeView";
 import { currentFlowType } from "./Toolbar";
-import { IconCode, IconCopy, IconLock, IconRename, IconUnlock, IconLabelSide, IconUndo, IconPattern, IconLabel, IconPlus, IconSection, IconTrash, IconFocal } from "./icons";
+import { IconCopy, IconLock, IconRename, IconUnlock, IconLabelSide, IconUndo, IconPattern, IconLabel, IconPlus, IconSection, IconTrash, IconFocal } from "./icons";
 import { FloatingBar, grow } from "./FloatingBar";
 import { CardLinksMenu } from "./CardLinksMenu";
 import { CapMenu, EndLabelsMenu, NEXT_PATTERN, NEXT_SIDE, PATTERN_NAMES, RELATIONS, SIDE_NAMES, STYLES } from "./EdgeMenus";
@@ -52,7 +51,6 @@ const COLOR_NAMES: Record<NodeColor, string> = {
   pink: "Pink",
 };
 
-const [codeFor, setCodeFor] = createSignal<CodeLanguage | null>(null);
 
 /** Floating bar above the selection: color, duplicate, delete; for an edge its style and arrowheads. */
 export function ContextBar() {
@@ -138,7 +136,6 @@ export function ContextBar() {
 
   return (
     <>
-      <Show when={codeFor()}>{(l) => <CodeDialog initial={l()} onClose={() => setCodeFor(null)} />}</Show>
       <Show when={!hidden() && nodeBox()}>
         {(box) => (
           <FloatingBar box={box()}>
@@ -262,17 +259,6 @@ export function ContextBar() {
                   <span class="divider" />
                 </>
               )}
-            </Show>
-            <Show when={selectedNodes().some((n) => n.kind === "class")}>
-              <button
-                class="icon-btn"
-                title="Code for the selected classes"
-                onClick={() => setCodeFor("typescript")}
-              >
-                <IconCode />
-                <span>Code</span>
-              </button>
-              <span class="divider" />
             </Show>
             <Show when={selectedNodes().length > 1}>
               <AlignMenu count={selectedNodes().length} onAlign={alignSelection} onDistribute={distributeSelection} />

@@ -1,4 +1,4 @@
-//! The tools of the desktop app for the web version: layout, export, SQL, code,
+//! The tools of the desktop app for the web version: layout, export, SQL,
 //! Mermaid and imports, all from `flow_core`. Open to anyone who is logged in,
 //! a guest, or on a share link (they only compute; nothing is stored).
 
@@ -10,8 +10,8 @@ use axum::http::{HeaderValue, header};
 use axum::response::{IntoResponse, Response};
 use axum::routing::post;
 use flow_core::flow::{self, ExportFile, safe_file_name};
-use flow_core::models::{Arranged, Brand, CodeFile, CodeImport, CodeLanguage, DiagramImport, Document, Edge, EerDoc, ExportFormat, FlowDoc, Node, SqlDialect, SqlImport};
-use flow_core::{arrange, code_import, codegen, dbml, eer, import, mermaid, sql_import};
+use flow_core::models::{Arranged, Brand, CodeFile, DiagramImport, Document, Edge, EerDoc, ExportFormat, Node, SqlDialect, SqlImport};
+use flow_core::{arrange, dbml, eer, import, mermaid, sql_import};
 use serde::Deserialize;
 
 use crate::auth::Caller;
@@ -23,12 +23,10 @@ pub fn routes() -> Router<AppState> {
         .route("/tools/layout", post(layout))
         .route("/tools/export", post(export))
         .route("/tools/sql", post(sql))
-        .route("/tools/code", post(code))
         .route("/tools/mermaid", post(mermaid_blocks))
         .route("/tools/import-sql", post(import_sql))
         .route("/tools/dbml", post(to_dbml))
         .route("/tools/import-dbml", post(import_dbml))
-        .route("/tools/import-code", post(import_code))
         .route("/tools/import-diagram", post(import_diagram))
 }
 
@@ -109,20 +107,6 @@ async fn sql(caller: Caller, Json(s): Json<Sql>) -> ApiResult<Json<String>> {
 }
 
 #[derive(Deserialize)]
-struct Code {
-    flow: FlowDoc,
-    language: CodeLanguage,
-    /// The board's name, for the header and the file names
-    #[serde(default)]
-    title: Option<String>,
-}
-
-async fn code(caller: Caller, Json(c): Json<Code>) -> ApiResult<Json<Vec<CodeFile>>> {
-    allowed(&caller)?;
-    Ok(Json(codegen::generate(&c.flow, c.language, c.title.as_deref().unwrap_or("model"))))
-}
-
-#[derive(Deserialize)]
 struct Doc {
     doc: Document,
 }
@@ -160,17 +144,6 @@ struct ImportDbml {
 async fn import_dbml(caller: Caller, Json(i): Json<ImportDbml>) -> ApiResult<Json<SqlImport>> {
     allowed(&caller)?;
     Ok(Json(dbml::read_dbml(&i.dbml)))
-}
-
-#[derive(Deserialize)]
-struct ImportCode {
-    code: String,
-    language: Option<CodeLanguage>,
-}
-
-async fn import_code(caller: Caller, Json(i): Json<ImportCode>) -> ApiResult<Json<CodeImport>> {
-    allowed(&caller)?;
-    Ok(Json(code_import::import_guessing(&i.code, i.language)))
 }
 
 #[derive(Deserialize)]

@@ -7,17 +7,8 @@ import { addSiblingTopic, addSubtopic, parentOf } from "../lib/mindmap";
 import { Portal } from "solid-js/web";
 import type { FlowNode, Lane, NodeKind } from "../lib/types";
 import { RESIZE_DIRS, type ResizeDir, type Side } from "../lib/geometry";
-import {
-  attributeNames,
-  classKind,
-  classParts,
-  classText,
-  fixOperation,
-  ROW_NAMES,
-  rowProblem,
-  type ClassContext,
-} from "../lib/umlClass";
-import { parseClass, rowFrom, rowIn, rowShown } from "../lib/classModel";
+import { classKind, classParts, classText, fixOperation, ROW_NAMES, rowProblem } from "../lib/umlClass";
+import { rowShown } from "../lib/classModel";
 import { canEdit } from "../lib/access";
 import { openDocumentById } from "../lib/workspace";
 import { NEST } from "../lib/sequence";
@@ -355,17 +346,8 @@ function ClassBody(p: { node: FlowNode }) {
   const active = () => isSelected(p.node.id) && ui.selected.length === 1 && !ui.dragging;
   let body!: HTMLDivElement;
 
-  /** What this class may use as a type: itself, the classes on the board, its type parameters, its attributes */
-  const ctx = createMemo((): ClassContext => {
-    const related = [
-      ...board.nodes.filter((n) => n.kind === "class" && n.id !== p.node.id).map((n) => parseClass(n.text).name),
-      ...parseClass(p.node.text).typeParams,
-    ];
-    return { self: parseClass(p.node.text).name, related, attributes: attributeNames(p.node.text) };
-  });
-  /** Rows not in UML notation, or with types this class cannot use, are marked (the code export skips them);
-   * not on a relaxed board (only the focus points: other types are classes elsewhere, free text is a note) */
-  const problem = (part: number, line: string) => (board.relaxed ? null : rowProblem(classKind(p.node.text), part, line, ctx()));
+  /** Rows not in UML notation are marked; not on a board with its checks off (free text is a note there) */
+  const problem = (part: number, line: string) => (board.relaxed ? null : rowProblem(classKind(p.node.text), part, line));
 
   const save = (fn: (parts: string[][]) => void) => {
     const next = parts().map((rows) => [...rows]);
@@ -381,8 +363,7 @@ function ClassBody(p: { node: FlowNode }) {
     // An operation without its () gets them: `+ getName: name` → `+ getName(): name`
     const typed = value.replace(/\n/g, " ").trim();
     const fixed = part === 2 ? fixOperation(typed) : typed;
-    // Typed in the board's language: back to neutral UML (unchanged types keep what they were)
-    const line = rowFrom(part, classKind(p.node.text), fixed, board.codeLanguage, insert ? undefined : parts()[part][index]);
+    const line = fixed;
     save((next) => {
       if (insert) {
         if (line) next[part].splice(index, 0, line);
@@ -459,7 +440,7 @@ function ClassBody(p: { node: FlowNode }) {
                             setRow(part, index);
                           }}
                         >
-                          <span>{rowIn(part, classKind(p.node.text), value(), board.codeLanguage)}</span>
+                          <span>{value()}</span>
                           <Show when={active()}>
                             <button
                               class="class-row-remove"
@@ -475,7 +456,7 @@ function ClassBody(p: { node: FlowNode }) {
                     >
                       <TextEditor
                         class="class-row editor"
-                        value={rowIn(part, classKind(p.node.text), value(), board.codeLanguage)}
+                        value={value()}
                         onDone={(t, key) => commitRow(part, index, t, false, key)}
                       />
                     </Show>

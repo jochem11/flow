@@ -4,7 +4,7 @@ import type { Guide } from "../snapping";
 import { createMemo, createRoot, createSignal } from "solid-js";
 import { createStore, unwrap } from "solid-js/store";
 import { analyze, callColor, type Bar } from "../sequence";
-import type { BoardLook, Camera, ClassDetail, CodeLanguage, DiagramType, EdgeStyle, FlowDoc, FlowNode, NodeKind } from "../types";
+import type { BoardLook, Camera, ClassDetail, DiagramType, EdgeStyle, FlowDoc, FlowNode, NodeKind } from "../types";
 import { emptyFlow } from "./nodes";
 
 // ---------- state ----------
@@ -91,19 +91,13 @@ export function setDiagram(diagram: DiagramType) {
   touch();
 }
 
-/** Class diagrams: the language the classes are for (null: UML-neutral), see classTypes.ts. */
-export function setCodeLanguage(lang: CodeLanguage | null) {
-  setBoard("codeLanguage", lang ?? undefined);
-  touch();
-}
-
 /** Class diagrams: which rows the classes show (null: all). */
 export function setClassDetail(detail: ClassDetail | null) {
   setBoard("classDetail", detail === "all" ? undefined : (detail ?? undefined));
   touch();
 }
 
-/** Only the focus points (true): no design checks, and classes may use any type and free text. */
+/** The UML checks off (true): no design checks, and class rows in free text are not marked. */
 export function setRelaxed(relaxed: boolean) {
   setBoard("relaxed", relaxed || undefined);
   touch();
@@ -119,14 +113,13 @@ export function setLook(look: BoardLook | null) {
 export interface FlowSettings {
   callColors?: boolean;
   diagram?: DiagramType;
-  codeLanguage?: CodeLanguage | null;
   classDetail?: ClassDetail | null;
   relaxed?: boolean;
   look?: BoardLook | null;
 }
 
 /** The settings by their name in the shared document, and what "not set" is. */
-export const FLOW_SETTINGS = { callColors: false, diagram: null, codeLanguage: null, classDetail: null, relaxed: false, look: null } as const;
+export const FLOW_SETTINGS = { callColors: false, diagram: null, classDetail: null, relaxed: false, look: null } as const;
 
 export const isSelected = (id: string) => derived.selectedSet().has(id);
 export const nodeById = (id: string): FlowNode | undefined => derived.nodeMap().get(id);

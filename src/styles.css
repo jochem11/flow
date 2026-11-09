@@ -4195,120 +4195,6 @@ textarea.kd-input {
 }
 
 /* Import SQL */
-.code-flow-dialog {
-  width: min(760px, 94vw);
-}
-.code-flow-sources {
-  display: grid;
-  grid-template-columns: 1fr 1fr;
-  gap: 14px;
-  padding: 14px 16px;
-}
-.code-flow-source {
-  display: flex;
-  flex-direction: column;
-  align-items: flex-start;
-  gap: 8px;
-  padding: 14px;
-  border: 1px solid var(--border);
-  border-radius: 10px;
-}
-.code-flow-source p {
-  margin: 0;
-  color: var(--text-muted);
-  font-size: 12.5px;
-}
-.code-flow-input {
-  width: 100%;
-  box-sizing: border-box;
-  height: 32px;
-  padding: 0 10px;
-  border: 1px solid var(--border);
-  border-radius: 8px;
-  background: var(--bg);
-  color: var(--text);
-  font: inherit;
-}
-.code-flow-dialog > .code-flow-input {
-  width: auto;
-  margin: 0 16px 8px;
-}
-.code-flow-row {
-  display: flex;
-  gap: 8px;
-  width: 100%;
-}
-.code-flow-head {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  padding: 12px 16px 8px;
-  font-size: 13px;
-  color: var(--text-muted);
-}
-.code-flow-head strong {
-  color: var(--text);
-}
-.code-flow-list {
-  display: flex;
-  flex-direction: column;
-  max-height: 46vh;
-  overflow: auto;
-  margin: 0 16px;
-  border: 1px solid var(--border);
-  border-radius: 8px;
-}
-.code-flow-fn {
-  display: grid;
-  grid-template-columns: auto 1fr;
-  align-items: baseline;
-  gap: 2px 8px;
-  padding: 7px 10px;
-  border: none;
-  border-bottom: 1px solid var(--border);
-  background: none;
-  color: var(--text);
-  text-align: left;
-  font: inherit;
-  font-size: 13px;
-  cursor: pointer;
-}
-.code-flow-fn:hover {
-  background: var(--hover);
-}
-.code-flow-fn.on {
-  background: var(--accent-soft, rgba(91, 91, 214, 0.12));
-}
-.code-flow-fn small {
-  grid-column: 1 / -1;
-  color: var(--text-muted);
-  font-size: 11.5px;
-}
-.code-flow-route {
-  padding: 1px 6px;
-  border-radius: 5px;
-  background: var(--bg-muted, rgba(0, 0, 0, 0.06));
-  font-family: var(--mono, ui-monospace, monospace);
-  font-size: 11.5px;
-}
-.code-flow-name {
-  font-weight: 600;
-  grid-column: auto / -1;
-}
-.code-flow-route + .code-flow-name {
-  grid-column: auto;
-}
-.code-flow-depth {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  font-size: 12.5px;
-  color: var(--text-muted);
-}
-.code-flow-busy {
-  font-size: 12.5px;
-  color: var(--text-muted);
-}
 .import-hint {
   flex: 1;
   color: var(--text-muted);
@@ -4412,7 +4298,7 @@ textarea.kd-input {
   flex: 1;
 }
 
-/* class rows not in UML notation (skipped by the code export) */
+/* class rows not in UML notation */
 .class-row.invalid {
   color: var(--danger);
   text-decoration: wavy underline color-mix(in srgb, var(--danger) 60%, transparent);
@@ -4433,26 +4319,6 @@ textarea.kd-input {
 }
 
 /* code preview: one tab per file (Java) */
-.code-files {
-  display: flex;
-  gap: 2px;
-  padding: 6px 12px 0;
-  border-bottom: 1px solid var(--panel-border);
-  overflow-x: auto;
-}
-.code-file {
-  padding: 5px 9px;
-  border: 0;
-  border-radius: 6px 6px 0 0;
-  background: none;
-  color: var(--text-muted);
-  font: 600 12.5px ui-monospace, SFMono-Regular, Menlo, monospace;
-  cursor: pointer;
-}
-.code-file.active {
-  background: var(--bg);
-  color: var(--text);
-}
 
 /* code previews: line numbers and syntax colors */
 .code-view {
@@ -4520,11 +4386,6 @@ textarea.kd-input {
 .tok-function { color: var(--tok-function); }
 
 /* code preview: selected classes or all */
-.code-scope {
-  display: flex;
-  gap: 2px;
-  margin-right: auto;
-}
 
 /* the cards button for a whole document, in the header */
 .header-cards {
@@ -6413,34 +6274,13 @@ body.presenting .find-bar {
   overflow: auto;
   padding: 10px 12px 16px;
 }
-.lang-select,
-.vis-select,
-.panel-field,
-.type-input {
-  height: 28px;
-  min-width: 0;
-  padding: 0 7px;
-  border: 1px solid var(--panel-border);
-  border-radius: 6px;
-  background: var(--bg);
-  color: var(--text);
-  font: inherit;
-  font-size: 12.5px;
-  outline: none;
-}
 .panel-field:focus,
 .type-input:focus,
 .vis-select:focus,
-.lang-select:focus {
-  border-color: var(--accent);
-}
 .panel-field.invalid,
 .type-input.invalid {
   border-color: var(--danger);
   color: var(--danger);
-}
-.lang-select {
-  height: 26px;
 }
 .panel-grid {
   display: grid;

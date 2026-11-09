@@ -16,12 +16,9 @@ import type { Brand, DocContent,
   DocumentKind,
   DocumentMeta,
   CodeFile,
-  CodeImport,
   DiagramImport,
-  CodeLanguage,
   EerDoc,
   ExportFormat,
-  FlowDoc,
   FlowEdge,
   FlowNode,
   Folder,
@@ -64,7 +61,6 @@ export interface Api {
   /** The SQL for an EER diagram, to preview */
   eerSql(doc: EerDoc, dialect: SqlDialect): Promise<string>;
   /** Code for the UML classes in a flowchart, to preview */
-  classCode(flow: FlowDoc, language: CodeLanguage, title?: string): Promise<CodeFile[]>;
   /** The document as Mermaid: one block per diagram in it */
   mermaidPreview(doc: Document): Promise<CodeFile[]>;
   /** The tables and relations in a SQL script, to add to an EER diagram */
@@ -74,7 +70,6 @@ export interface Api {
   /** The tables, relations and groups in DBML */
   importDbml(dbml: string): Promise<SqlImport>;
   /** UML classes from source code; without a language it is guessed */
-  importCode(code: string, language: CodeLanguage | null): Promise<CodeImport>;
   /** Blocks and lines from a Mermaid diagram, a draw.io file or an Excalidraw drawing */
   importDiagram(text: string): Promise<DiagramImport>;
 }
@@ -119,12 +114,10 @@ export const localFiles: Api = {
   autoLayout: (nodes, edges) => unwrap(commands.autoLayout(nodes, edges)),
   exportDocument: (doc, format, brand) => unwrap(commands.exportDocument(doc, format, brand ?? null)),
   eerSql: (doc, dialect) => commands.eerSql(doc, dialect),
-  classCode: (flow, language, title) => commands.classCode(flow, language, title ?? null),
   mermaidPreview: (doc) => commands.mermaidPreview(doc),
   importSql: (sql) => commands.importSql(sql),
   eerDbml: (doc) => commands.eerDbml(doc),
   importDbml: (dbml) => commands.importDbml(dbml),
-  importCode: (code, language) => commands.importCode(code, language),
   importDiagram: (text) => commands.importDiagram(text),
 };
 
@@ -145,7 +138,7 @@ async function download(res: Response): Promise<string> {
 
 type Tools = Pick<
   Api,
-  "autoLayout" | "exportDocument" | "eerSql" | "classCode" | "mermaidPreview" | "importSql" | "importCode" | "eerDbml" | "importDbml" | "importDiagram"
+  "autoLayout" | "exportDocument" | "eerSql" | "mermaidPreview" | "importSql" | "eerDbml" | "importDbml" | "importDiagram"
 >;
 
 /** In the desktop app: Rust, locally (exports go to Downloads). */
@@ -153,12 +146,10 @@ const localTools: Tools = {
   autoLayout: localFiles.autoLayout,
   exportDocument: localFiles.exportDocument,
   eerSql: localFiles.eerSql,
-  classCode: localFiles.classCode,
   mermaidPreview: localFiles.mermaidPreview,
   importSql: localFiles.importSql,
   eerDbml: localFiles.eerDbml,
   importDbml: localFiles.importDbml,
-  importCode: localFiles.importCode,
   importDiagram: localFiles.importDiagram,
 };
 
@@ -167,12 +158,10 @@ const webTools: Tools = {
   autoLayout: (nodes, edges) => post("/tools/layout", { nodes, edges }),
   exportDocument: async (doc, format, brand) => download(await rawRequest("POST", "/tools/export", { doc, format, brand: brand ?? null })),
   eerSql: (doc, dialect) => post("/tools/sql", { doc, dialect }),
-  classCode: (flow, language, title) => post("/tools/code", { flow, language, title }),
   mermaidPreview: (doc) => post("/tools/mermaid", { doc }),
   importSql: (sql) => post("/tools/import-sql", { sql }),
   eerDbml: (doc) => post("/tools/dbml", { doc }),
   importDbml: (dbml) => post("/tools/import-dbml", { dbml }),
-  importCode: (code, language) => post("/tools/import-code", { code, language }),
   importDiagram: (text) => post("/tools/import-diagram", { text }),
 };
 

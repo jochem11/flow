@@ -8,10 +8,9 @@ use std::collections::{BTreeSet, HashMap};
 use serde_json::json;
 
 use super::{arranged, edge, empty, fit, node, round20, skip, uid};
-use crate::code_import::{layout, named};
-use crate::codegen::{Body, Class, Field, Kind, Method, Vis};
+use crate::uml::{layout, named, Body, Class, Field, Kind, Method, Vis};
 use crate::models::{
-    Attribute, Cardinality, CodeLanguage, ColumnPair, DataType, DiagramImport, DiagramType, Edge, Entity, ImportFormat, Lane, NodeKind, RefAction, Relation, SqlImport,
+    Attribute, Cardinality, ColumnPair, DataType, DiagramImport, DiagramType, Edge, Entity, ImportFormat, Lane, NodeKind, RefAction, Relation, SqlImport,
 };
 use crate::sql_import;
 
@@ -935,7 +934,7 @@ fn uml_type(t: &str) -> String {
                 "HashSet" | "TreeSet" | "set" | "ISet" => "Set".to_string(),
                 "HashMap" | "TreeMap" | "Dictionary" | "dict" | "IDictionary" => "Map".to_string(),
                 "List" | "Set" | "Map" => word.clone(),
-                w => named(w, CodeLanguage::Java),
+                w => named(w),
             };
             s.push_str(&w);
             word.clear();

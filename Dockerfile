@@ -33,7 +33,7 @@ RUN cargo build --release -p flow-server
 # The same Debian as the rust image (the binary needs its glibc)
 FROM debian:trixie-slim
 RUN apt-get update \
- && apt-get install -y --no-install-recommends ca-certificates fonts-dejavu-core git \
+ && apt-get install -y --no-install-recommends ca-certificates fonts-dejavu-core \
  && rm -rf /var/lib/apt/lists/*
 COPY --from=server /app/target/release/flow-server /usr/local/bin/flow-server
 COPY --from=web /app/dist /srv/web

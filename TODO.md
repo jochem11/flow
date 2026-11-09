@@ -10,8 +10,6 @@
 - [x] Right-angle lines go around blocks (app + SVG export, `fixtures/routing.json`)
 - [x] Import SQL into an EER diagram (`commands/sql_import.rs`, `sqlparser`): our own export for all
       5 databases, pg_dump and mysqldump; many-to-many tables become relations
-- [x] Import code into a class diagram for all 7 export languages (`commands/code_import/`),
-      checked by a round trip through the code export
 - [x] Accounts on a server (`server/`): email + password (confirmation and reset by mail), Google
 - [x] Projects shared with view / comment / edit rights, invites by mail, per-board roles (also No access)
 - [x] Public links per board (only people with access, or anyone: view / comment), guests without an account
@@ -30,10 +28,8 @@
       labels on / above / below the line, end texts (multiplicity), pinned ends at any angle,
       free lines (line tool), dragging a line's middle (`bend`)
 - [x] UML: activity, use case, class and sequence symbols; UML relation presets; class editor
-      with rows, kinds (class / abstract / interface / enum) and notation + type checks
+      with rows, kinds (class / abstract / interface / enum) and notation checks
 - [x] Sequence diagrams: horizontal messages, automatic activation bars, returns, self-messages
-- [x] Code from class diagrams: TypeScript, Java, C#, Python, Kotlin, Rust, Go (`commands/codegen/`),
-      getters / setters, preview with syntax colors, selected classes only
 - [x] EER editor: typed columns, keys, defaults, joins by dragging rows, crow's foot,
       SQL for PostgreSQL / MySQL / SQLite / SQL Server / Oracle with preview (`commands/eer.rs`)
 - [x] Kanban cards linked to documents, and to sections / tables in them, from either side
@@ -63,9 +59,6 @@ both (routing, activation bars, UML rows) gets a case in `fixtures/`, checked by
 - [ ] Tests for the commands themselves, against a temporary data directory
 - [ ] Auto-layout: let back edges (feedback loops) avoid blocks too
 - [ ] The old `boards/` directory from before projects is no longer read; delete it from the app data directory
-- [ ] Compile-check generated Kotlin and C# (no compilers on the dev machine yet), e.g. in CI
-- [ ] Code import: `Map<K, V>` and other library types are marked red (only built-in types and
-      connected classes are allowed); allow a few common generic library types
 - [ ] SQL import: multi-column UNIQUE and CHECK constraints are not in the diagram model yet
 
 ## Editors (frontend)

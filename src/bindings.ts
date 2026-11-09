@@ -41,10 +41,6 @@ export const commands = {
 	exportDocument: (doc: Document, format: ExportFormat, brand: Brand | null) => typedError<string, string>(__TAURI_INVOKE("export_document", { doc, format, brand })),
 	/**  The SQL for a diagram, as a preview in the app. */
 	eerSql: (doc: EerDoc, dialect: SqlDialect) => __TAURI_INVOKE<string>("eer_sql", { doc, dialect }),
-	/**  Code for the UML classes in a flowchart, to preview. */
-	classCode: (flow: FlowDoc, language: CodeLanguage, title: string | null) => __TAURI_INVOKE<CodeFile[]>("class_code", { flow, language, title }),
-	codeReadFiles: (name: string, files: SourceFile[]) => typedError<CodeSource, string>(__TAURI_INVOKE("code_read_files", { name, files })),
-	codeActivity: (id: string, entry: string, depth: number) => typedError<CodeActivity, string>(__TAURI_INVOKE("code_activity", { id, entry, depth })),
 	/**  The Mermaid blocks for a document, to preview: one per diagram in it. */
 	mermaidPreview: (doc: Document) => __TAURI_INVOKE<CodeFile[]>("mermaid_preview", { doc }),
 	/**  The tables and relations in a SQL script, to add to an EER diagram. */
@@ -53,8 +49,6 @@ export const commands = {
 	eerDbml: (doc: EerDoc) => __TAURI_INVOKE<string>("eer_dbml", { doc }),
 	/**  The tables, relations and table groups in DBML, to add to an EER diagram. */
 	importDbml: (dbml: string) => __TAURI_INVOKE<SqlImport>("import_dbml", { dbml }),
-	/**  The classes in source code, as a class diagram. Without a language it is guessed. */
-	importCode: (code: string, language: CodeLanguage | null) => __TAURI_INVOKE<CodeImport>("import_code", { code, language }),
 	/**  A Mermaid diagram, a draw.io file or an Excalidraw drawing, as blocks and lines. */
 	importDiagram: (text: string) => __TAURI_INVOKE<DiagramImport>("import_diagram", { text }),
 	getSessionToken: () => typedError<string | null, string>(__TAURI_INVOKE("get_session_token")),
@@ -237,7 +231,7 @@ export type ChartType =
 /**  One whole split into parts: the first series, as one segmented bar */
 "share";
 
-/**  How much of each class a class diagram shows (the code export always has all). */
+/**  How much of each class a class diagram shows. */
 export type ClassDetail = 
 /**  Every attribute and operation */
 "all" | 
@@ -246,64 +240,10 @@ export type ClassDetail =
 /**  Only the names of the classes */
 "names";
 
-/**
- *  An activity diagram drawn from a function: its blocks and lines, laid out,
- *  and notes on what was not followed.
- */
-export type CodeActivity = {
-	nodes: Node[],
-	edges: Edge[],
-	notes: string[],
-};
-
 /**  One generated source file. */
 export type CodeFile = {
 	name: string,
 	content: string,
-};
-
-/**  A function or method in a codebase: one to draw from. */
-export type CodeFunction = {
-	id: string,
-	name: string,
-	/**  The class (or struct, object) it is in */
-	class: string | null,
-	file: string,
-	line: number,
-	/**  A web route it answers (`PUT /api/lends/{id}`), from its annotations */
-	route: string | null,
-	/**  How many steps it has (to tell small from big) */
-	steps: number,
-};
-
-/**
- *  What `import_code` read from source code: UML classes (laid out from (0, 0))
- *  and the lines between them, the language it read, the package or namespace
- *  it found, and notes on what it could not use.
- */
-export type CodeImport = {
-	nodes: Node[],
-	edges: Edge[],
-	language: CodeLanguage,
-	package: string | null,
-	skipped: string[],
-};
-
-/**  Languages the UML classes of a flowchart can be turned into. */
-export type CodeLanguage = "typescript" | "java" | "csharp" | "python" | "kotlin" | "rust" | 
-/**  Go has no classes: structs with methods, embedding instead of inheritance */
-"go";
-
-/**  A codebase read for diagrams (a folder or a git repository): what it holds. */
-export type CodeSource = {
-	/**  For asking for diagrams of it while it is kept (on the server, or in the app) */
-	id: string,
-	/**  The folder's or repository's name */
-	name: string,
-	files: number,
-	functions: CodeFunction[],
-	/**  Files left out, and why */
-	skipped: string[],
 };
 
 export type ColumnPair = {
@@ -536,9 +476,7 @@ export type ExportFormat = "svg" | "png" |
 /**  A one-page PDF of the drawing (vector, with selectable text) */
 "pdf" | "mermaid" | 
 /**  SQL from an EER diagram, for one of these databases */
-"postgres" | "mysql" | "sqlite" | "sqlserver" | "oracle" | 
-/**  Code from the UML classes in a flowchart, in one of these languages */
-"typescript" | "java" | "csharp" | "python" | "kotlin" | "rust" | "go";
+"postgres" | "mysql" | "sqlite" | "sqlserver" | "oracle";
 
 export type FlowDoc = {
 	nodes: Node[],
@@ -554,17 +492,11 @@ export type FlowDoc = {
 	 *  Missing means `Whiteboard` (everything, as boards were before types).
 	 */
 	diagram?: DiagramType | null,
-	/**
-	 *  Class diagrams: the programming language the classes are for. Their types are
-	 *  shown as it writes them and offered from its built-in types; they are stored
-	 *  language-neutral (see fixtures/types.json). Missing means UML-neutral.
-	 */
-	codeLanguage?: CodeLanguage | null,
 	/**  Class diagrams: which rows the classes show. Missing means all. */
 	classDetail?: ClassDetail | null,
 	/**
-	 *  Only the focus points: no design checks, and classes may use types that are
-	 *  not on the board and rows in free text (kept as notes). Missing means checked.
+	 *  The UML checks off: no design checks, and class rows in free text are not
+	 *  marked (kept as notes). Missing means checked.
 	 */
 	relaxed?: boolean | null,
 	/**
@@ -975,12 +907,6 @@ export type SharedBoard = {
 	name: string,
 	/**  What the person who opened the link may do */
 	role: Role,
-};
-
-/**  A source file to read (from a folder chosen in the browser). */
-export type SourceFile = {
-	path: string,
-	text: string,
 };
 
 /**  The databases SQL can be generated for. */

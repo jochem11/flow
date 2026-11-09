@@ -1,7 +1,7 @@
 [package]
 name = "flow-core"
 version = "0.1.0"
-description = "Flow's documents and everything made from them: code, SQL, Mermaid, SVG/PNG, layout, imports"
+description = "Flow's documents and everything made from them: SQL, Mermaid, SVG/PNG, layout, imports"
 edition = "2024"
 
 [dependencies]
@@ -20,12 +20,3 @@ krilla = "0.8"
 krilla-svg = "0.8"
 # The SVG reader krilla-svg is built on (an older one than resvg's)
 usvg47 = { package = "usvg", version = "0.47" }
-# Reading a codebase for diagrams from code (code_flow): real parsers per language
-tree-sitter = "0.25"
-tree-sitter-java = "0.23"
-tree-sitter-kotlin-ng = "1.1"
-tree-sitter-c-sharp = "0.23"
-tree-sitter-go = "0.25"
-tree-sitter-python = "0.25"
-tree-sitter-typescript = "0.23"
-tree-sitter-javascript = "0.25"

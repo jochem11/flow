@@ -1,6 +1,23 @@
-//! Reading the diagram: classes, their rows and the lines between them.
+//! UML classes as written in a class node's text: its name (with an optional
+//! «interface», «abstract», «enum» or «record» line above it), then a `--` line,
+//! its attributes, another `--`, and its operations. Rows use UML notation, the
+//! same rules as the editor (`src/lib/classModel.ts`, `src/lib/umlClass.ts`):
+//!
+//!   attribute   [+|-|#|~] name: Type [= default]
+//!   operation   [+|-|#|~] name(param: Type, ...)[: ReturnType]
+//!
+//! `static` (or `{static}`), `{abstract}` and `{readOnly}` may be added. Types are
+//! free text in UML style (`int`, `Money`, `List<Line>`, `Customer?`).
+//!
+//! Read for the Mermaid export, the Mermaid import (which also lays classes out
+//! here) and the SVG export (rows at a board's level of detail).
 
-use super::*;
+use std::collections::HashMap;
+
+use crate::models::Node;
+
+#[cfg(test)]
+mod tests;
 
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub enum Kind {
@@ -74,20 +91,20 @@ pub struct Class {
     pub extends: Option<String>,
     pub implements: Vec<String>,
     pub package: Option<String>,
-    /// Rows that could not be used, with why: written as a comment in the code
+    /// Rows that are not UML notation, with why (the Mermaid export leaves them out)
     pub unreadable: Vec<String>,
 }
 
 /// What is written around a row's declaration: `+`, `-`, `#`, `~` in front, and
 /// `static` / `{static}`, `{abstract}`, `{readOnly}`.
-pub(super) struct Modifiers {
+pub(crate) struct Modifiers {
     pub vis: Vis,
     pub is_static: bool,
     pub is_abstract: bool,
     pub read_only: bool,
 }
 
-pub(super) fn modifiers(line: &str) -> (Modifiers, String) {
+pub(crate) fn modifiers(line: &str) -> (Modifiers, String) {
     let mut s = line.trim().to_string();
     let vis = match s.chars().next() {
         Some('+') => Vis::Public,
@@ -123,7 +140,7 @@ pub fn is_ident(s: &str) -> bool {
 }
 
 /// A type: an identifier, optionally `Name<...>`, `Name[]` or `Name?`.
-pub(super) fn is_type(s: &str) -> bool {
+pub(crate) fn is_type(s: &str) -> bool {
     let s = s.trim().trim_end_matches('?').trim_end_matches("[]");
     match s.find('<') {
         Some(i) if s.ends_with('>') => is_ident(&s[..i]) && split_args(&s[i + 1..s.len() - 1]).iter().all(|a| is_type(a)),
@@ -189,7 +206,7 @@ pub fn parse_operation(line: &str) -> Option<Method> {
 
 /// Getters and setters: an operation that returns an attribute (by name, or
 /// `getX()` / `isX()` for attribute `x`) returns it; `setX(value)` sets it.
-pub(super) fn link_accessors(c: &mut Class) {
+pub(crate) fn link_accessors(c: &mut Class) {
     let field = |name: &str| c.fields.iter().find(|f| f.name.eq_ignore_ascii_case(name)).cloned();
     let prop = |method: &str, prefix: &str| method.strip_prefix(prefix).filter(|r| r.starts_with(char::is_uppercase)).and_then(field);
     let mut out = c.methods.clone();
@@ -290,7 +307,7 @@ pub fn read_class(n: &Node) -> Class {
 
 /// An operation named after the class is its constructor: it sets the attributes
 /// whose names its parameters have (`+ Order(id: int, customer: Customer)`).
-pub(super) fn link_constructors(c: &mut Class) {
+pub(crate) fn link_constructors(c: &mut Class) {
     let fields: Vec<String> = c.fields.iter().filter(|f| !f.is_static).map(|f| f.name.clone()).collect();
     for m in c.methods.iter_mut().filter(|m| pascal(&m.name) == c.name && !m.is_static) {
         let sets = m
@@ -303,190 +320,9 @@ pub(super) fn link_constructors(c: &mut Class) {
     }
 }
 
-/// How a row that is not UML notation is reported (the code export writes it as a comment)
+/// How a row that is not UML notation is reported
 const SKIPPED: &str = "Not in UML notation, skipped: ";
 
-/// Generic types that are lists, sets and maps of their arguments (not classes)
-pub(super) const CONTAINERS: [&str; 11] = ["list", "collection", "array", "vec", "sequence", "set", "hashset", "map", "dict", "dictionary", "hashmap"];
-
-/// The first name in type `t` that is not a built-in type, the class itself, or a class on the board.
-pub(super) fn unknown_in(t: &str, own: &str, related: &BTreeSet<String>) -> Option<String> {
-    t.split(|c: char| !(c.is_alphanumeric() || c == '_'))
-        .filter(|w| !w.is_empty() && !CONTAINERS.contains(&w.to_lowercase().as_str()))
-        .find(|w| builtin(w).is_none() && pascal(w) != own && !related.contains(&pascal(w)))
-        .map(String::from)
-}
-
-/// Moves attributes and operations with types the class cannot use to `unreadable`,
-/// with why (the editor marks the same rows, see `rowProblem` in umlClass.ts).
-/// `known`: the classes on the board (the editor draws a line to one when it is used).
-pub(super) fn check_types(c: &mut Class, known: &BTreeSet<String>) {
-    let related = known;
-    let why = |t: &str| format!("Unknown type `{t}` (not built in, and no class on this board), skipped:");
-    let (own, mut skipped) = (c.name.clone(), vec![]);
-    c.fields.retain(|f| match unknown_in(&f.ty, &own, related) {
-        Some(t) => {
-            skipped.push(format!("{} attribute {}: {}", why(&t), f.name, f.ty));
-            false
-        }
-        None => true,
-    });
-    c.methods.retain(|m| {
-        let types = m.params.iter().map(|p| p.1.as_str()).chain(m.ret.as_deref());
-        match types.filter_map(|t| unknown_in(t, &own, related)).next() {
-            Some(t) => {
-                skipped.push(format!("{} operation {}()", why(&t), m.name));
-                false
-            }
-            None => true,
-        }
-    });
-    c.unreadable.extend(skipped);
-}
-
-/// Is this multiplicity more than one? (`*`, `0..*`, `1..5`)
-pub(super) fn is_many(label: Option<&str>) -> bool {
-    let Some(l) = label else { return false };
-    l.contains('*') || l.rsplit("..").next().and_then(|u| u.trim().parse::<u32>().ok()).is_some_and(|u| u > 1)
-}
-
-/// All classes in the diagram, with what the lines between them say.
-pub fn read_classes(flow: &FlowDoc) -> Vec<Class> {
-    let by_id: HashMap<&str, &Node> = flow.nodes.iter().map(|n| (n.id.as_str(), n)).collect();
-    let mut classes: Vec<(String, Class)> = flow
-        .nodes
-        .iter()
-        .filter(|n| n.kind == NodeKind::Class)
-        .map(|n| {
-            let mut c = read_class(n);
-            // The package it is drawn in
-            c.package = n
-                .parent
-                .as_deref()
-                .and_then(|p| by_id.get(p))
-                .filter(|p| p.kind == NodeKind::Package)
-                .map(|p| p.text.lines().next().unwrap_or("").trim().to_string())
-                .filter(|p| !p.is_empty());
-            (n.id.clone(), c)
-        })
-        .collect();
-    let index: HashMap<String, usize> = classes.iter().enumerate().map(|(i, (id, _))| (id.clone(), i)).collect();
-    let name_of = |i: usize, classes: &[(String, Class)]| classes[i].1.name.clone();
-
-    // A class may use built-in types, the classes on the board and its own type parameters.
-    // A relaxed board shows only the focus points: other types are classes elsewhere,
-    // and rows in free text are notes
-    let known: BTreeSet<String> = classes.iter().map(|(_, c)| c.name.clone()).collect();
-    for (_, c) in classes.iter_mut() {
-        if flow.relaxed == Some(true) {
-            for u in c.unreadable.iter_mut() {
-                if let Some(row) = u.strip_prefix(SKIPPED) {
-                    *u = format!("Note: {row}");
-                }
-            }
-            continue;
-        }
-        let mut own = known.clone();
-        own.extend(c.type_params.iter().cloned());
-        check_types(c, &own);
-    }
-
-    for e in &flow.edges {
-        let (Some(&a), Some(&b)) = (index.get(&e.from), index.get(&e.to)) else { continue };
-        let start = e.start_cap.unwrap_or(EdgeCap::None);
-        let end = e.end_cap.unwrap_or(EdgeCap::Arrow);
-        let dashed = e.pattern == Some(LinePattern::Dashed);
-
-        if end == EdgeCap::Triangle {
-            // Generalization or realization: from is the subtype
-            let sup = name_of(b, &classes);
-            if dashed || classes[b].1.kind == Kind::Interface {
-                classes[a].1.implements.push(sup);
-            } else {
-                classes[a].1.extends = Some(sup);
-            }
-            continue;
-        }
-        let (whole, part, label) = match (start, end) {
-            (EdgeCap::Diamond | EdgeCap::HollowDiamond, _) => (a, b, e.end_label.as_deref()),
-            (_, EdgeCap::Diamond | EdgeCap::HollowDiamond) => (b, a, e.start_label.as_deref()),
-            // A dependency (dashed arrow) is not a field
-            (_, EdgeCap::Arrow | EdgeCap::Open) if !dashed => (a, b, e.end_label.as_deref()),
-            (EdgeCap::None, EdgeCap::None) if !dashed => (a, b, e.end_label.as_deref()),
-            _ => continue,
-        };
-        let part_name = name_of(part, &classes);
-        let many = is_many(label);
-        let field = camel(&if many { plural(&part_name) } else { part_name.clone() });
-        let w = &mut classes[whole].1;
-        // Not when an attribute already refers to that class (`owner: Customer`)
-        let refers = |f: &Field| f.ty.split(|c: char| !(c.is_alphanumeric() || c == '_')).any(|t| pascal(t) == part_name);
-        if w.kind != Kind::Enum && !w.fields.iter().any(|f| f.name == field || refers(f)) {
-            let ty = if many { format!("List<{part_name}>") } else { format!("{part_name}?") };
-            w.fields.push(Field { vis: Vis::Private, name: field, ty, default: None, is_static: false, read_only: false });
-        }
-    }
-
-    // Supertypes before subtypes (Python and TypeScript need that)
-    let mut out: Vec<Class> = vec![];
-    let mut rest: Vec<Class> = classes.into_iter().map(|(_, c)| c).collect();
-    while !rest.is_empty() {
-        let names: BTreeSet<String> = rest.iter().map(|c| c.name.clone()).collect();
-        let ready = rest
-            .iter()
-            .position(|c| c.extends.iter().chain(&c.implements).all(|s| !names.contains(s) || *s == c.name))
-            .unwrap_or(0);
-        out.push(rest.remove(ready));
-    }
-    out
-}
-
-// ---------- rows as a board's language shows them (as rowIn in src/lib/classModel.ts) ----------
-
-fn vis_mark(v: Vis) -> &'static str {
-    match v {
-        Vis::Public => "+ ",
-        Vis::Private => "- ",
-        Vis::Protected => "# ",
-        Vis::Package => "~ ",
-        Vis::Unset => "",
-    }
-}
-
-/// A class row with its types as `lang` writes them: `part` 1 is attributes, 2
-/// operations. Enum values and rows that are not UML notation stay as they are.
-pub fn row_in(part: usize, is_enum: bool, line: &str, lang: CodeLanguage) -> String {
-    let t = |s: &str| ty(&parse_ty(s), lang, false);
-    match part {
-        1 if !is_enum => match parse_attribute(line) {
-            Some(f) => format!(
-                "{}{}{}: {}{}{}",
-                vis_mark(f.vis),
-                if f.is_static { "static " } else { "" },
-                f.name,
-                t(&f.ty),
-                f.default.map_or(String::new(), |d| format!(" = {d}")),
-                if f.read_only { " {readOnly}" } else { "" }
-            ),
-            None => line.to_string(),
-        },
-        2 => match parse_operation(line) {
-            Some(m) => format!(
-                "{}{}{}({}){}{}",
-                vis_mark(m.vis),
-                if m.is_static { "static " } else { "" },
-                m.name,
-                m.params.iter().map(|(n, p)| format!("{n}: {}", t(p))).collect::<Vec<_>>().join(", "),
-                m.ret.map_or(String::new(), |r| format!(": {}", t(&r))),
-                if m.is_abstract { " {abstract}" } else { "" }
-            ),
-            None => line.to_string(),
-        },
-        _ => line.to_string(),
-    }
-}
-
-// ---------- enum values and type parameters, as the generators write them ----------
 
 impl Class {
     /// The value an enum value stands for, if the diagram gives one.
@@ -529,4 +365,194 @@ pub fn row_shown(part: usize, is_enum: bool, line: &str, detail: crate::models::
         (D::Public, 1) => parse_attribute(line).is_none_or(|f| f.vis == Vis::Public),
         (D::Public, _) => parse_operation(line).is_none_or(|m| matches!(m.vis, Vis::Public | Vis::Unset)),
     }
+}
+
+fn vis_mark(v: Vis) -> &'static str {
+    match v {
+        Vis::Public => "+ ",
+        Vis::Private => "- ",
+        Vis::Protected => "# ",
+        Vis::Package => "~ ",
+        Vis::Unset => "",
+    }
+}
+
+
+fn words(s: &str) -> Vec<String> {
+    let mut out = vec![];
+    let mut cur = String::new();
+    let chars: Vec<char> = s.chars().collect();
+    for (i, &c) in chars.iter().enumerate() {
+        if !c.is_alphanumeric() {
+            if !cur.is_empty() {
+                out.push(std::mem::take(&mut cur));
+            }
+            continue;
+        }
+        let boundary = c.is_uppercase()
+            && !cur.is_empty()
+            && (chars[i - 1].is_lowercase() || chars.get(i + 1).is_some_and(|n| n.is_lowercase()));
+        if boundary {
+            out.push(std::mem::take(&mut cur));
+        }
+        cur.push(c);
+    }
+    if !cur.is_empty() {
+        out.push(cur);
+    }
+    out
+}
+
+fn cap(w: &str) -> String {
+    let mut c = w.chars();
+    c.next().map(|f| f.to_uppercase().collect::<String>() + &c.as_str().to_lowercase()).unwrap_or_default()
+}
+
+/// `order_line` → `OrderLine`
+pub fn pascal(s: &str) -> String {
+    words(s).iter().map(|w| cap(w)).collect()
+}
+
+/// The arguments of a generic type, split on the top-level commas.
+pub(crate) fn split_args(s: &str) -> Vec<String> {
+    let (mut out, mut cur, mut depth) = (vec![], String::new(), 0);
+    for c in s.chars() {
+        match c {
+            '<' => depth += 1,
+            '>' => depth -= 1,
+            ',' if depth == 0 => {
+                out.push(std::mem::take(&mut cur).trim().to_string());
+                continue;
+            }
+            _ => {}
+        }
+        cur.push(c);
+    }
+    if !cur.trim().is_empty() {
+        out.push(cur.trim().to_string());
+    }
+    out
+}
+
+/// A class as a class node's text (for the Mermaid import).
+pub(crate) fn class_text(c: &Class) -> String {
+    let mut s = match c.kind {
+        Kind::Interface => "«interface»\n".to_string(),
+        Kind::Abstract => "«abstract»\n".to_string(),
+        Kind::Enum => "«enum»\n".to_string(),
+        Kind::Record => "«record»\n".to_string(),
+        Kind::Class => String::new(),
+    };
+    s.push_str(&c.name);
+    s.push_str(&c.generics());
+    s.push_str("\n--\n");
+    let mut rows: Vec<String> = vec![];
+    if c.kind == Kind::Enum {
+        rows.extend(c.values.iter().enumerate().map(|(i, v)| match c.enum_value(i) {
+            Some(x) => format!("{v} = {x}"),
+            None => v.clone(),
+        }));
+    }
+    for f in &c.fields {
+        let st = if f.is_static { "{static} " } else { "" };
+        let default = f.default.as_deref().map_or(String::new(), |d| format!(" = {d}"));
+        let ro = if f.read_only { " {readOnly}" } else { "" };
+        rows.push(format!("{}{st}{}: {}{default}{ro}", vis_mark(f.vis), f.name, f.ty));
+    }
+    s.push_str(&rows.join("\n"));
+    s.push_str("\n--\n");
+    let ops: Vec<String> = c
+        .methods
+        .iter()
+        .map(|m| {
+            let st = if m.is_static { "{static} " } else { "" };
+            let params: Vec<String> = m.params.iter().map(|(n, t)| format!("{n}: {t}")).collect();
+            let ret = m.ret.as_deref().map_or(String::new(), |r| format!(": {r}"));
+            let abs = if m.is_abstract { " {abstract}" } else { "" };
+            format!("{}{st}{}({}){ret}{abs}", vis_mark(m.vis), m.name, params.join(", "))
+        })
+        .collect();
+    s.push_str(&ops.join("\n"));
+    s
+}
+
+/// How wide a row of classes gets before it goes on below
+const ROW_WIDTH: f64 = 1600.0;
+
+/// Rows: supertypes on top, the classes that extend or implement them below.
+pub(crate) fn layout(classes: &[Class], ids: &HashMap<&str, String>) -> Vec<Node> {
+    let by_name: HashMap<&str, &Class> = classes.iter().map(|c| (c.name.as_str(), c)).collect();
+    fn level<'a>(c: &'a Class, by_name: &HashMap<&str, &'a Class>, seen: &mut Vec<&'a str>) -> usize {
+        if seen.contains(&c.name.as_str()) {
+            return 0;
+        }
+        seen.push(&c.name);
+        let l = c.extends.iter().chain(&c.implements).filter_map(|s| by_name.get(s.as_str())).map(|s| level(s, by_name, seen) + 1).max().unwrap_or(0);
+        seen.pop();
+        l
+    }
+    let mut rows: Vec<Vec<(&Class, String, f64, f64)>> = vec![];
+    for c in classes {
+        let l = level(c, &by_name, &mut vec![]);
+        if rows.len() <= l {
+            rows.resize_with(l + 1, Vec::new);
+        }
+        let text = class_text(c);
+        let longest = text.lines().map(|l| l.chars().count()).max().unwrap_or(10) as f64;
+        let w = ((longest * 8.0 + 40.0).clamp(160.0, 480.0) / 10.0).ceil() * 10.0;
+        let count = |i: usize| text.split("\n--\n").nth(i).map_or(1, |p| p.lines().count().max(1)) as f64;
+        let h = ((34.0 + count(0) * 18.0 + 12.0 + count(1) * 19.0 + 12.0 + count(2) * 19.0 + 10.0) / 10.0).ceil() * 10.0;
+        rows[l].push((c, text, w, h));
+    }
+    let mut out = vec![];
+    let mut y = 0.0;
+    for row in rows {
+        let mut x = 0.0;
+        let mut tallest: f64 = 0.0;
+        for (c, text, w, h) in row {
+            // A long row goes on below itself
+            if x > 0.0 && x + w > ROW_WIDTH {
+                x = 0.0;
+                y += tallest + 60.0;
+                tallest = 0.0;
+            }
+            out.push(
+                serde_json::from_value(serde_json::json!({
+                    "id": ids[c.name.as_str()], "kind": "class", "x": x, "y": y, "w": w, "h": h, "text": text, "color": "white"
+                }))
+                .expect("a valid node"),
+            );
+            x += w + 60.0;
+            tallest = tallest.max(h);
+        }
+        y += tallest + 100.0;
+    }
+    out
+}
+
+/// A plain type name as a UML type: built-in types by their UML name, classes as they are.
+pub(crate) fn named(t: &str) -> String {
+    let lower = t.to_lowercase();
+    let uml = match lower.as_str() {
+        "int" | "integer" | "int32" | "i32" | "i16" | "i8" | "u8" | "u16" | "u32" | "short" | "byte" | "sbyte" | "uint" | "ushort" | "int16"
+        | "int8" | "uint8" | "uint16" | "uint32" => "int",
+        "long" | "int64" | "i64" | "u64" | "usize" | "isize" | "uint64" | "ulong" | "bigint" | "i128" | "u128" => "long",
+        "double" | "float" | "f64" | "f32" | "float64" | "float32" | "single" | "number" => "double",
+        "decimal" | "bigdecimal" => "decimal",
+        "bool" | "boolean" => "bool",
+        "string" | "str" | "char" | "character" | "rune" | "charsequence" => "string",
+        "localdate" | "dateonly" => "date",
+        "date" => "date",
+        "localdatetime" | "datetime" | "instant" | "time.time" | "timestamp" | "offsetdatetime" | "datetimeoffset" | "zoneddatetime" => "datetime",
+        "uuid" | "guid" => "uuid",
+        "object" | "any" | "unknown" | "interface{}" => "object",
+        "void" | "unit" | "none" | "()" | "nothing" | "never" => "void",
+        _ => "",
+    };
+    if !uml.is_empty() {
+        return uml.into();
+    }
+    // `java.util.Foo`, `models::Foo`, `pkg.Foo`
+    let last = t.rsplit(['.', ':']).next().unwrap_or(t);
+    pascal(last)
 }

@@ -5,9 +5,9 @@ use std::path::{Path, PathBuf};
 
 use flow_core::flow::{self, safe_file_name};
 use flow_core::models::{
-    Arranged, Brand, CodeFile, CodeImport, CodeLanguage, DiagramImport, Document, Edge, EerDoc, ExportFormat, FlowDoc, Node, SqlDialect, SqlImport,
+    Arranged, Brand, CodeFile, DiagramImport, Document, Edge, EerDoc, ExportFormat, Node, SqlDialect, SqlImport,
 };
-use flow_core::{arrange, code_import, codegen, dbml, eer, import, mermaid, sql_import};
+use flow_core::{arrange, dbml, eer, import, mermaid, sql_import};
 use tauri::{AppHandle, Manager};
 
 use crate::CmdResult;
@@ -63,13 +63,6 @@ pub fn eer_sql(doc: EerDoc, dialect: SqlDialect) -> String {
     eer::to_sql(&doc, dialect, "")
 }
 
-/// Code for the UML classes in a flowchart, to preview.
-#[tauri::command]
-#[specta::specta]
-pub fn class_code(flow: FlowDoc, language: CodeLanguage, title: Option<String>) -> Vec<CodeFile> {
-    codegen::generate(&flow, language, title.as_deref().unwrap_or("model"))
-}
-
 /// The Mermaid blocks for a document, to preview: one per diagram in it.
 #[tauri::command]
 #[specta::specta]
@@ -96,13 +89,6 @@ pub fn eer_dbml(doc: EerDoc) -> String {
 #[specta::specta]
 pub fn import_dbml(dbml: String) -> SqlImport {
     dbml::read_dbml(&dbml)
-}
-
-/// The classes in source code, as a class diagram. Without a language it is guessed.
-#[tauri::command]
-#[specta::specta]
-pub fn import_code(code: String, language: Option<CodeLanguage>) -> CodeImport {
-    code_import::import_guessing(&code, language)
 }
 
 /// A Mermaid diagram, a draw.io file or an Excalidraw drawing, as blocks and lines.

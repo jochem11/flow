@@ -9,11 +9,9 @@
 //!   tools.rs              layout, export, SQL, code, Mermaid, imports
 //!   trash.rs              deleted boards and projects (30 days)
 //!   personal.rs           stars and recently opened boards
-//!   code.rs               diagrams from a codebase (a git repository, a folder)
 
 pub mod account;
 pub mod activity;
-pub mod code;
 pub mod comments;
 pub mod documents;
 pub mod files;
@@ -71,7 +69,6 @@ pub fn api() -> Router<AppState> {
         .merge(inbox::routes())
         .merge(activity::routes())
         .merge(account::routes())
-        .merge(code::routes())
         .merge(crate::collab::routes())
         .merge(crate::events::routes())
 }

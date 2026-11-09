@@ -5,7 +5,7 @@
 
 use std::collections::{HashMap, HashSet};
 
-use super::codegen::{self, Kind, Vis};
+use super::uml::{self, Kind, Vis};
 use super::flow::to_mermaid;
 use super::flow_svg::analyze;
 use crate::models::{
@@ -93,8 +93,8 @@ fn vis(v: Vis) -> &'static str {
 
 fn class_diagram(flow: &FlowDoc) -> String {
     let mut s = String::from("classDiagram\n");
-    let classes: Vec<(&str, codegen::Class)> =
-        flow.nodes.iter().filter(|n| n.kind == NodeKind::Class).map(|n| (n.id.as_str(), codegen::read_class(n))).collect();
+    let classes: Vec<(&str, uml::Class)> =
+        flow.nodes.iter().filter(|n| n.kind == NodeKind::Class).map(|n| (n.id.as_str(), uml::read_class(n))).collect();
     let names: HashMap<&str, String> = classes.iter().map(|(id, c)| (*id, ident(&c.name))).collect();
 
     for (_, c) in &classes {

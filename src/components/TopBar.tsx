@@ -5,16 +5,12 @@ import { createSignal, For, Show } from "solid-js";
 import { canRedoEer, canUndoEer, redoEer, undoEer } from "../lib/eer";
 import { DIALECTS, SqlDialog, type SchemaFormat } from "./SqlDialog";
 import { board, canRedo, canUndo, redo, undo } from "../lib/store";
-import { CodeDialog, LANGUAGES } from "./CodeDialog";
 import { MermaidDialog } from "./MermaidDialog";
-import { currentFlowType } from "./Toolbar";
 import { SqlImportDialog } from "./SqlImportDialog";
-import { CodeImportDialog } from "./CodeImportDialog";
 import { DiagramImportDialog } from "./DiagramImportDialog";
-import { CodeFlowDialog } from "./CodeFlowDialog";
 import { DesignChecks } from "./DesignChecks";
 import { CardLinksMenu } from "./CardLinksMenu";
-import type { CodeLanguage, ExportFormat, Folder } from "../lib/types";
+import type { ExportFormat, Folder } from "../lib/types";
 import {
   openDoc,
   openProject,
@@ -161,10 +157,7 @@ function EerActions() {
   );
 }
 
-const [codePreview, setCodePreview] = createSignal<CodeLanguage | null>(null);
-const [codeImport, setCodeImport] = createSignal(false);
 const [diagramImport, setDiagramImport] = createSignal(false);
-const [codeFlow, setCodeFlow] = createSignal(false);
 
 export function TopBar() {
   return (
@@ -260,54 +253,10 @@ export function TopBar() {
                     <IconLayout />
                     <span>Arrange</span>
                   </button>
-                  <Menu
-                    align="right"
-                    button={(toggle) => (
-                      <button class="text-btn" title="Add a diagram from Mermaid, draw.io or Excalidraw, classes from code, or an activity from a codebase" onClick={toggle}>
-                        <IconImport />
-                        <span>Import</span>
-                      </button>
-                    )}
-                  >
-                    {(close) => (
-                      <>
-                        <button
-                          class="menu-item"
-                          onClick={() => {
-                            setDiagramImport(true);
-                            close();
-                          }}
-                        >
-                          <span>Diagram…</span>
-                          <small>Mermaid, draw.io, Excalidraw</small>
-                        </button>
-                        <Show when={currentFlowType().code || board.nodes.some((n) => n.kind === "class")}>
-                          <button
-                            class="menu-item"
-                            onClick={() => {
-                              setCodeImport(true);
-                              close();
-                            }}
-                          >
-                            <span>Classes from code…</span>
-                            <small>TypeScript, Java, C#, Python, Kotlin, Rust, Go</small>
-                          </button>
-                        </Show>
-                        <Show when={["activity", "flowchart", "whiteboard"].includes(currentFlowType().id)}>
-                          <button
-                            class="menu-item"
-                            onClick={() => {
-                              setCodeFlow(true);
-                              close();
-                            }}
-                          >
-                            <span>Activity from a codebase…</span>
-                            <small>A folder or git repository</small>
-                          </button>
-                        </Show>
-                      </>
-                    )}
-                  </Menu>
+                  <button class="text-btn" title="Add a diagram from Mermaid, draw.io or Excalidraw" onClick={() => setDiagramImport(true)}>
+                    <IconImport />
+                    <span>Import</span>
+                  </button>
                 </Show>
                 <Menu
                   align="right"
@@ -336,43 +285,14 @@ export function TopBar() {
                           </button>
                         )}
                       </For>
-                      {/* Code, when there are UML classes */}
-                      <Show when={board.nodes.some((n) => n.kind === "class")}>
-                        <div class="menu-sep" />
-                        <div class="menu-title">Class diagram as code</div>
-                        {/* The board's language first */}
-                        <For each={[...LANGUAGES].sort((a, b) => Number(b.value === board.codeLanguage) - Number(a.value === board.codeLanguage))}>
-                          {(l) => (
-                            <button
-                              class="menu-item"
-                              onClick={() => {
-                                setCodePreview(l.value);
-                                close();
-                              }}
-                            >
-                              <span>{l.label}</span>
-                              <small>{l.value === board.codeLanguage ? "this board" : l.hint}</small>
-                            </button>
-                          )}
-                        </For>
-                      </Show>
                     </>
                   )}
                 </Menu>
-                <Show when={codePreview()}>
-                  {(l) => <CodeDialog initial={l()} onClose={() => setCodePreview(null)} />}
-                </Show>
                 <Show when={mermaidOpen()}>
                   <MermaidDialog onClose={() => setMermaidOpen(false)} />
                 </Show>
-                <Show when={codeImport()}>
-                  <CodeImportDialog onClose={() => setCodeImport(false)} />
-                </Show>
                 <Show when={diagramImport()}>
                   <DiagramImportDialog onClose={() => setDiagramImport(false)} />
-                </Show>
-                <Show when={codeFlow()}>
-                  <CodeFlowDialog onClose={() => setCodeFlow(false)} />
                 </Show>
               </div>
             </Show>

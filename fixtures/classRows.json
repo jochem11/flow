@@ -1,5 +1,5 @@
 {
-  "about": "Rows of a UML class as written in a class node's text, and what they mean. Checked by src/lib/classModel.test.ts (parse and write back: `written`, when not the row itself) and by crates/flow-core/src/codegen/tests.rs (parse_attribute, parse_operation). `null`: not UML notation.",
+  "about": "Rows of a UML class as written in a class node's text, and what they mean. Checked by src/lib/classModel.test.ts (parse and write back: `written`, when not the row itself) and by crates/flow-core/src/uml/tests.rs (parse_attribute, parse_operation). `null`: not UML notation.",
   "attributes": [
     { "row": "- name: string", "parsed": { "vis": "-", "name": "name", "type": "string", "default": null, "static": false, "readOnly": false } },
     { "row": "+ count: int = 0", "parsed": { "vis": "+", "name": "count", "type": "int", "default": "0", "static": false, "readOnly": false } },

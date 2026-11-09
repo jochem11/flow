@@ -19,18 +19,12 @@ pub struct FlowDoc {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     #[specta(optional)]
     pub diagram: Option<DiagramType>,
-    /// Class diagrams: the programming language the classes are for. Their types are
-    /// shown as it writes them and offered from its built-in types; they are stored
-    /// language-neutral (see fixtures/types.json). Missing means UML-neutral.
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    #[specta(optional)]
-    pub code_language: Option<CodeLanguage>,
     /// Class diagrams: which rows the classes show. Missing means all.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     #[specta(optional)]
     pub class_detail: Option<ClassDetail>,
-    /// Only the focus points: no design checks, and classes may use types that are
-    /// not on the board and rows in free text (kept as notes). Missing means checked.
+    /// The UML checks off: no design checks, and class rows in free text are not
+    /// marked (kept as notes). Missing means checked.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     #[specta(optional)]
     pub relaxed: Option<bool>,
@@ -50,7 +44,7 @@ pub enum BoardLook {
     Sketch,
 }
 
-/// How much of each class a class diagram shows (the code export always has all).
+/// How much of each class a class diagram shows.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, Type)]
 #[serde(rename_all = "camelCase")]
 pub enum ClassDetail {
@@ -431,28 +425,6 @@ pub enum ExportFormat {
     Sqlite,
     SqlServer,
     Oracle,
-    /// Code from the UML classes in a flowchart, in one of these languages
-    TypeScript,
-    Java,
-    CSharp,
-    Python,
-    Kotlin,
-    Rust,
-    Go,
-}
-
-/// Languages the UML classes of a flowchart can be turned into.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, Type)]
-#[serde(rename_all = "lowercase")]
-pub enum CodeLanguage {
-    TypeScript,
-    Java,
-    CSharp,
-    Python,
-    Kotlin,
-    Rust,
-    /// Go has no classes: structs with methods, embedding instead of inheritance
-    Go,
 }
 
 /// One generated source file.
@@ -460,67 +432,6 @@ pub enum CodeLanguage {
 pub struct CodeFile {
     pub name: String,
     pub content: String,
-}
-
-/// What `import_code` read from source code: UML classes (laid out from (0, 0))
-/// and the lines between them, the language it read, the package or namespace
-/// it found, and notes on what it could not use.
-#[derive(Debug, Clone, Serialize, Deserialize, Type)]
-#[serde(rename_all = "camelCase")]
-pub struct CodeImport {
-    pub nodes: Vec<Node>,
-    pub edges: Vec<Edge>,
-    pub language: CodeLanguage,
-    pub package: Option<String>,
-    pub skipped: Vec<String>,
-}
-
-/// A codebase read for diagrams (a folder or a git repository): what it holds.
-#[derive(Debug, Clone, Serialize, Deserialize, Type)]
-#[serde(rename_all = "camelCase")]
-pub struct CodeSource {
-    /// For asking for diagrams of it while it is kept (on the server, or in the app)
-    pub id: String,
-    /// The folder's or repository's name
-    pub name: String,
-    pub files: u32,
-    pub functions: Vec<CodeFunction>,
-    /// Files left out, and why
-    pub skipped: Vec<String>,
-}
-
-/// A function or method in a codebase: one to draw from.
-#[derive(Debug, Clone, Serialize, Deserialize, Type)]
-#[serde(rename_all = "camelCase")]
-pub struct CodeFunction {
-    pub id: String,
-    pub name: String,
-    /// The class (or struct, object) it is in
-    pub class: Option<String>,
-    pub file: String,
-    pub line: u32,
-    /// A web route it answers (`PUT /api/lends/{id}`), from its annotations
-    pub route: Option<String>,
-    /// How many steps it has (to tell small from big)
-    pub steps: u32,
-}
-
-/// A source file to read (from a folder chosen in the browser).
-#[derive(Debug, Clone, Serialize, Deserialize, Type)]
-#[serde(rename_all = "camelCase")]
-pub struct SourceFile {
-    pub path: String,
-    pub text: String,
-}
-
-/// An activity diagram drawn from a function: its blocks and lines, laid out,
-/// and notes on what was not followed.
-#[derive(Debug, Clone, Serialize, Deserialize, Type)]
-#[serde(rename_all = "camelCase")]
-pub struct CodeActivity {
-    pub nodes: Vec<Node>,
-    pub edges: Vec<Edge>,
-    pub notes: Vec<String>,
 }
 
 /// Where an imported diagram came from.
