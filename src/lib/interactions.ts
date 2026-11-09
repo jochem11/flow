@@ -3,7 +3,8 @@
 
 import { canEdit } from "./access";
 import { batch } from "solid-js";
-import { panBy, toWorld } from "./camera";
+import { panBy, toWorld, viewportRect } from "./camera";
+import { type AutoPan, edgePanner } from "./edgePan";
 import type { FlowEdge } from "./types";
 import {
   angleAt,
@@ -65,6 +66,9 @@ import { guidesFor, nearestLine, snapBox, snapLines, SNAP_REACH, type Guide } fr
 
 const DRAG_THRESHOLD = 3;
 
+/** For the gestures that reach across the board */
+const FOLLOW: AutoPan = { rect: viewportRect, pan: panBy };
+
 /** Stops for the gestures that are going on (a second finger takes over, see touch.ts) */
 const stoppers = new Set<() => void>();
 
@@ -77,11 +81,19 @@ export function trackPointer(
   down: PointerEvent,
   move: (ev: PointerEvent) => void,
   up?: (ev: PointerEvent) => void,
+  /** The board moves along when the pointer gets to its edge */
+  autoPan?: AutoPan,
 ) {
   const id = down.pointerId;
-  const onMove = (ev: PointerEvent) => ev.pointerId === id && move(ev);
+  const edge = autoPan ? edgePanner(down, autoPan, move) : null;
+  const onMove = (ev: PointerEvent) => {
+    if (ev.pointerId !== id) return;
+    move(ev);
+    edge?.at(ev);
+  };
   const stop = () => {
     stoppers.delete(stop);
+    edge?.stop();
     window.removeEventListener("pointermove", onMove);
     window.removeEventListener("pointerup", onUp);
     window.removeEventListener("pointercancel", onUp);
@@ -207,6 +219,7 @@ export function beginNodeDrag(e: PointerEvent, grabbedId: string) {
       });
     },
     () => setUi({ dragging: false, dropTarget: null, guides: [] }),
+    FOLLOW,
   );
 }
 
@@ -258,6 +271,7 @@ export function beginResize(e: PointerEvent, id: string, dir: ResizeDir = "se") 
       setUi({ dragging: false, guides: [] });
       if (started) updateFrames([id]);
     },
+    FOLLOW,
   );
 }
 
@@ -363,6 +377,7 @@ export function beginEndDrag(e: PointerEvent, id: string, end: "from" | "to") {
       placeEnd(ev, id, end, true);
     },
     () => setUi("dragging", false),
+    FOLLOW,
   );
 }
 
@@ -407,6 +422,7 @@ export function beginLine(e: PointerEvent) {
       if ((edge.from && edge.from === edge.to) || (a && b && a.x === b.x && a.y === b.y)) dropEdge(edge.id);
       else selectEdge(edge.id);
     },
+    FOLLOW,
   );
 }
 
@@ -502,6 +518,7 @@ export function beginEdgeMove(e: PointerEvent, id: string) {
       if (to0) setFreeEnd(id, "to", { x: to0.x + dx, y: to0.y + dy });
     },
     () => setUi("dragging", false),
+    FOLLOW,
   );
 }
 
@@ -579,6 +596,7 @@ export function beginConnect(e: PointerEvent, fromId: string) {
       addConnectedNode(node, fromId, kind === "class" ? { endCap: "open" } : undefined);
       setUi("editingNode", node.id);
     },
+    FOLLOW,
   );
 }
 
@@ -609,5 +627,6 @@ export function beginMarquee(e: PointerEvent) {
       setUi({ selected: additive ? [...new Set([...base, ...hits])] : hits, selectedEdge: null });
     },
     () => setUi("marquee", null),
+    FOLLOW,
   );
 }

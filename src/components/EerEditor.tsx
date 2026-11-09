@@ -91,6 +91,7 @@ import {
   type EdgeGeom,
   type Pt,
 } from "../lib/geometry";
+import type { AutoPan } from "../lib/edgePan";
 import { trackPointer } from "../lib/interactions";
 import { snap, ui } from "../lib/store";
 import type { Attribute, Cardinality, EerSection, Entity, NodeColor, RefAction, Relation } from "../lib/types";
@@ -168,6 +169,12 @@ export function EerEditor() {
     if (!eer.entities.length && cam().x === 0 && cam().y === 0) setEerCamera({ x: 80, y: 80 });
   });
 
+  /** For the gestures that reach across the board: it moves along at its edge */
+  const follow = (): AutoPan => ({
+    rect: () => el.getBoundingClientRect(),
+    pan: (dx, dy) => setEerCamera({ x: cam().x + dx, y: cam().y + dy }),
+  });
+
   const beginPan = (e: PointerEvent) => {
     let last = { x: e.clientX, y: e.clientY };
     setPanning(true);
@@ -215,6 +222,7 @@ export function EerEditor() {
         selectEer([...new Set([...base, ...hits])]);
       },
       () => setMarquee(null),
+      follow(),
     );
   };
 
@@ -279,6 +287,7 @@ export function EerEditor() {
         setDragging(false);
         setGuides([]);
       },
+      follow(),
     );
   };
 
@@ -319,6 +328,7 @@ export function EerEditor() {
         setDragging(false);
         setGuides([]);
       },
+      follow(),
     );
   };
 
@@ -379,6 +389,7 @@ export function EerEditor() {
         setConnecting(null);
         if (c?.target) connectRows(from, attr, c.target.entity, c.target.attr);
       },
+      follow(),
     );
   };
 
