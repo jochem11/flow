@@ -37,6 +37,7 @@ import {
   wrapEerSelection,
 } from "./lib/eer";
 import { Gate } from "./components/Gate";
+import { VersionBanner } from "./components/BoardDialogs";
 import { canComment, canEdit } from "./lib/access";
 import { placing, setPlacing } from "./lib/comments";
 import { Sidebar } from "./components/Sidebar";
@@ -360,6 +361,7 @@ export default function App() {
             <UpdateBanner />
             <VerifyBanner />
             <InvitesBanner />
+            <VersionBanner />
             <Editor />
           </main>
         </div>

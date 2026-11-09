@@ -10,7 +10,7 @@ import { RESIZE_DIRS, type ResizeDir, type Side } from "../lib/geometry";
 import { classKind, classParts, classText, fixOperation, ROW_NAMES, rowProblem } from "../lib/umlClass";
 import { rowShown } from "../lib/classModel";
 import { canEdit } from "../lib/access";
-import { openDocumentById } from "../lib/workspace";
+import { openDocumentById, versionMark } from "../lib/workspace";
 import { NEST } from "../lib/sequence";
 import { beginConnect, beginLaneResize, beginLine, beginNodeDrag, beginResize, blurActive } from "../lib/interactions";
 import {
@@ -137,6 +137,9 @@ export function NodeView(p: { node: FlowNode }) {
     <div
       class={`node node-${n.kind} color-${n.color}`}
       classList={{
+        // Viewing an old version: gone from the board now, or changed since
+        "version-gone": versionMark(n.id) === "gone",
+        "version-changed": versionMark(n.id) === "changed",
         selected: selected(),
         editing: editing(),
         focal: !!n.focal,
