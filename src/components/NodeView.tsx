@@ -128,6 +128,7 @@ export function NodeView(p: { node: FlowNode }) {
         class="node-text editor"
         value={n.text}
         tabDone={n.kind === "topic"}
+        multiline={MULTILINE.includes(n.kind)}
         // As it is typed: saved, and seen by others editing together
         onInput={(t) => setNodeTextLive(n.id, t)}
         onDone={(t, key) => {
@@ -646,8 +647,12 @@ export function renameOnClick(onlySelected: () => boolean, start: () => void) {
   };
 }
 
+/** Blocks holding a remark of several lines: Enter starts a new line in them */
+const MULTILINE: NodeKind[] = ["note", "callout", "comment"];
+
 /**
- * Plain-text editor that commits on blur. Enter finishes, Shift+Enter inserts a new line.
+ * Plain-text editor that commits on blur. Enter finishes, Shift+Enter inserts a new line;
+ * `multiline` the other way round (Enter: a new line, Cmd/Ctrl+Enter finishes).
  * `onDone` gets the key that finished editing ("Enter" or "Escape"), if any.
  */
 export function TextEditor(p: {
@@ -657,6 +662,8 @@ export function TextEditor(p: {
   onInput?: (text: string) => void;
   /** Tab finishes too (instead of moving the focus) */
   tabDone?: boolean;
+  /** Enter makes a new line; Cmd/Ctrl+Enter finishes */
+  multiline?: boolean;
 }) {
   let ref!: HTMLDivElement;
   let key: string | undefined;
@@ -682,7 +689,8 @@ export function TextEditor(p: {
       onPointerDown={(e) => e.stopPropagation()}
       onKeyDown={(e) => {
         e.stopPropagation();
-        if (e.key === "Escape" || (e.key === "Enter" && !e.shiftKey) || (e.key === "Tab" && p.tabDone)) {
+        const enterDone = p.multiline ? e.metaKey || e.ctrlKey : !e.shiftKey;
+        if (e.key === "Escape" || (e.key === "Enter" && enterDone) || (e.key === "Tab" && p.tabDone)) {
           e.preventDefault();
           key = e.key;
           ref.blur();

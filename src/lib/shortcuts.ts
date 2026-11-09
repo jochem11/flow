@@ -44,6 +44,7 @@ export const SHORTCUT_GROUPS: { title: string; items: Shortcut[] }[] = [
       { keys: [MOD, "C"], label: "Copy (also between boards)" },
       { keys: [MOD, "V"], label: "Paste" },
       { keys: ["Enter"], label: "Edit the text" },
+      { keys: [MOD, "Enter"], label: "Done typing in a note, callout or comment (Enter: a new line)" },
       { keys: ["Delete"], label: "Delete" },
       { keys: ["Arrows"], label: "Move (with Shift: further)" },
       { keys: ["Alt", "Arrow"], label: "Add a block that way" },
