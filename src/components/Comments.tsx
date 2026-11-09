@@ -85,7 +85,7 @@ const mine = (c: Comment) => (me() ? c.author.userId === me()!.user.id : !c.auth
 export function CommentsButton() {
   return (
     <Show when={openDoc()?.role}>
-      <button class="text-btn" classList={{ active: panelOpen() }} title="Comments" onClick={() => setPanelOpen(!panelOpen())}>
+      <button class="text-btn hdr-comments" classList={{ active: panelOpen() }} title="Comments" onClick={() => setPanelOpen(!panelOpen())}>
         <span>Comments</span>
         <Show when={openThreads().length}>
           <span class="comment-count">{openThreads().length}</span>

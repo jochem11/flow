@@ -10,7 +10,11 @@ import { startPresenting } from "../lib/present";
 import { del, get, post } from "../lib/server";
 import { toast } from "../lib/toast";
 import type { DocContent, Template, TemplateMeta } from "../lib/types";
-import { changeBoardType, createDocument, openDoc, saveNow } from "../lib/workspace";
+import { changeBoardType, createDocument, openDoc, runAutoLayout, saveNow } from "../lib/workspace";
+import { barFold, setDiagramImport, setSqlImport } from "../lib/topActions";
+import { openThreads, panelOpen, setPanelOpen } from "../lib/comments";
+import { checkCount, setChecksOpen } from "./DesignChecks";
+import { setAccessOpen } from "./ShareDialog";
 import { board, setLook } from "../lib/store";
 import { BOARD_TYPES, boardTypeOf, PICKER_GROUPS, type BoardType } from "../lib/boardTypes";
 import { BUILT_IN } from "../templates";
@@ -251,6 +255,79 @@ export function BoardMenu() {
       >
         {(close) => (
           <>
+            {/* What the top bar has no room for (see TopBar's fold) */}
+            <Show when={barFold() >= 6 && me()}>
+              <button
+                class="menu-item"
+                onClick={() => {
+                  close();
+                  setAccessOpen(true);
+                }}
+              >
+                Access: who can do what…
+              </button>
+            </Show>
+            <Show when={barFold() >= 4}>
+              <button
+                class="menu-item"
+                onClick={() => {
+                  close();
+                  setPanelOpen(!panelOpen());
+                }}
+              >
+                <span>Comments</span>
+                <Show when={openThreads().length}>
+                  <small>{openThreads().length} open</small>
+                </Show>
+              </button>
+            </Show>
+            <Show when={barFold() >= 3 && canEdit()}>
+              <Show when={doc()?.kind === "flow"}>
+                <Show when={checkCount()}>
+                  <button
+                    class="menu-item"
+                    onClick={() => {
+                      close();
+                      setChecksOpen(true);
+                    }}
+                  >
+                    <span>Checks</span>
+                    <small>{checkCount()}</small>
+                  </button>
+                </Show>
+                <button
+                  class="menu-item"
+                  onClick={() => {
+                    close();
+                    void runAutoLayout();
+                  }}
+                >
+                  Arrange automatically
+                </button>
+                <button
+                  class="menu-item"
+                  onClick={() => {
+                    close();
+                    setDiagramImport(true);
+                  }}
+                >
+                  <span>Import a diagram…</span>
+                  <small>Mermaid, draw.io, Excalidraw</small>
+                </button>
+              </Show>
+              <Show when={doc()?.kind === "eer"}>
+                <button
+                  class="menu-item"
+                  onClick={() => {
+                    close();
+                    setSqlImport(true);
+                  }}
+                >
+                  <span>Import SQL / DBML…</span>
+                </button>
+              </Show>
+              <div class="menu-sep" />
+            </Show>
             <Show when={canPresent()}>
               <button
                 class="menu-item"
