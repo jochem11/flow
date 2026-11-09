@@ -12,6 +12,8 @@ import { get } from "../lib/server";
 import { matchScore } from "../lib/match";
 import { MOD } from "../lib/shortcuts";
 import { board, setCallColors, setRelaxed } from "../lib/store";
+import { setAccessOpen } from "./ShareDialog";
+import { me } from "../lib/auth";
 import { setTheme, THEME_NAMES, type Theme } from "../lib/theme";
 import type { ExportFormat, SearchHit } from "../lib/types";
 import {
@@ -100,6 +102,7 @@ export function CommandPalette() {
     const project = currentProjectId();
     if (project) out.push({ key: "new-board", label: "New board…", sub: projectById(project)?.name, run: () => setNewBoardIn(project) });
     out.push({ key: "new-project", label: "New project", run: () => void createProject() });
+    if (doc?.role && me()) out.push({ key: "access", label: "Access: who can do what on this board", run: () => setAccessOpen(true) });
     if (flow || doc?.kind === "eer") out.push({ key: "find", label: "Find on this board", keys: [MOD, "F"], run: openFind });
     if (doc?.kind === "chart") {
       for (const f of ["png", "svg"] as ExportFormat[]) out.push({ key: `export-${f}`, label: `Export as ${f.toUpperCase()}`, run: () => void runExport(f) });

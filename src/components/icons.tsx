@@ -193,6 +193,13 @@ export const UML_ICONS: Partial<Record<NodeKind, () => JSX.Element>> = {
   ),
 };
 
+export const IconPeople = () => (
+  <Svg size={16}>
+    <circle cx="9" cy="8" r="3.2" />
+    <path d="M3 19c0-3.3 2.7-5.5 6-5.5s6 2.2 6 5.5" />
+    <path d="M16 5.2a3 3 0 0 1 0 5.6M18 13.8c2 .6 3 2.4 3 5.2" />
+  </Svg>
+);
 export const IconLine = () => (
   <Svg>
     <path d="M5 19L18 6" />

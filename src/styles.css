@@ -4682,6 +4682,9 @@ textarea.kd-input {
   border: 0;
 }
 .role-chip {
+  border: none;
+  cursor: pointer;
+  font: inherit;
   padding: 2px 8px;
   border-radius: 999px;
   background: var(--hover);
@@ -4713,6 +4716,56 @@ textarea.kd-input {
   gap: 4px;
   padding: 14px 16px 18px;
   overflow: auto;
+}
+.access-wrap {
+  position: relative;
+}
+.access-btn svg {
+  flex: none;
+}
+.access-panel {
+  position: absolute;
+  top: calc(100% + 6px);
+  right: 0;
+  z-index: 60;
+  width: min(380px, calc(100vw - 16px));
+  max-height: min(70vh, 560px);
+  overflow: auto;
+  padding: 12px 14px;
+  font-size: 13px;
+}
+.access-head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 6px;
+}
+.access-you {
+  margin: 0 0 8px;
+  color: var(--text-muted);
+}
+.access-you strong {
+  color: var(--text);
+}
+.access-list {
+  margin-bottom: 8px;
+}
+.access-legend {
+  display: grid;
+  grid-template-columns: auto 1fr;
+  gap: 2px 10px;
+  margin: 10px 0 0;
+  padding-top: 8px;
+  border-top: 1px solid var(--border);
+  color: var(--text-muted);
+  font-size: 12px;
+}
+.access-legend dt {
+  font-weight: 600;
+  color: var(--text);
+}
+.access-legend dd {
+  margin: 0;
 }
 .share-invite {
   display: flex;
