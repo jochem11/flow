@@ -6,6 +6,8 @@ import {
   board,
   checkpoint,
   deleteSelection,
+  isContainer,
+  unwrapSelection,
   duplicateSelection,
   edgeLine,
   selectedNodes,
@@ -290,10 +292,19 @@ export function ContextBar() {
             <button class="icon-btn" title="Wrap in a section (Ctrl+G)" onClick={wrapSelectionInSection}>
               <IconSection />
             </button>
+            <Show when={selectedNodes().some((n) => isContainer(n.kind) && !n.locked)}>
+              <button class="icon-btn" title="Take the frame away, keep what is in it" onClick={unwrapSelection}>
+                <span>Unwrap</span>
+              </button>
+            </Show>
             <button class="icon-btn" title="Duplicate (Ctrl+D)" onClick={duplicateSelection}>
               <IconCopy />
             </button>
-            <button class="icon-btn danger" title="Delete (Delete)" onClick={deleteSelectionTidy}>
+            <button
+              class="icon-btn danger"
+              title={selectedNodes().some((n) => isContainer(n.kind)) ? "Delete, with what is in it (Delete)" : "Delete (Delete)"}
+              onClick={deleteSelectionTidy}
+            >
               <IconTrash />
             </button>
           </FloatingBar>

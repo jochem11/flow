@@ -250,16 +250,28 @@ export function distributeSelection(axis: "x" | "y") {
   placeWithContents(distributeRects(movableSelected(), axis));
 }
 
+/** Deletes the selection; a frame (section, swimlane, package, …) with what is in it. Locked items stay. */
 export function deleteSelection() {
-  // Locked items stay
-  const sel = new Set(board.nodes.filter((n) => derived.selectedSet().has(n.id) && !n.locked).map((n) => n.id));
-  const edge = ui.selectedEdge;
+  const selected = new Set(ui.selected);
+  const picked = board.nodes.filter((n) => selected.has(n.id) && !n.locked).map((n) => n.id);
+  const sel = new Set([...withContents(picked)].filter((id) => !nodeById(id)?.locked));
+  removeNodes(sel, ui.selectedEdge);
+}
+
+/** Takes the selected frames away, keeping what is in them (it moves to the frame around, if any). */
+export function unwrapSelection() {
+  const selected = new Set(ui.selected);
+  const frames = new Set(board.nodes.filter((n) => selected.has(n.id) && !n.locked && isContainer(n.kind)).map((n) => n.id));
+  removeNodes(frames, null);
+}
+
+function removeNodes(sel: Set<string>, edge: string | null) {
   if (!sel.size && !edge) return;
   checkpoint();
   batch(() => {
     setBoard("nodes", (ns) => ns.filter((n) => !sel.has(n.id)));
     setBoard("edges", (es) => es.filter((e) => e.id !== edge && !sel.has(e.from) && !sel.has(e.to)));
-    // What was in a deleted frame now belongs to the frame around it (if any)
+    // What was in a deleted frame and stays (locked, or unwrapped) belongs to the frame around it (if any)
     assignParents(board.nodes.filter((n) => n.parent && sel.has(n.parent)).map((n) => n.id));
     clearSelection();
   });
