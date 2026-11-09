@@ -90,7 +90,8 @@ function writeItem(ym: Y.Map<unknown>, item: Item, shape: Shape) {
     } else if (value === undefined) {
       if (ym.has(key)) ym.delete(key);
     } else if (!same(ym.get(key), value)) {
-      ym.set(key, value);
+      // A copy of an object: the item may be the editor's own (see snapOf), changed in place later
+      ym.set(key, typeof value === "object" && value !== null ? JSON.parse(JSON.stringify(value)) : value);
     }
   }
   // Fields the item no longer has

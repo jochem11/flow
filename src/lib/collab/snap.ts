@@ -43,12 +43,17 @@ export function isEmptyIn(doc: Y.Doc, kind: LiveKind): boolean {
 }
 
 /** A plain copy (no store proxies, nothing shared with the original) */
-const plain = <T>(v: T): T => JSON.parse(JSON.stringify(v ?? null));
+const deepCopy = <T>(v: T): T => JSON.parse(JSON.stringify(v ?? null));
 
 type Items = Snap["lists"][string];
 
-/** A board's content as it is kept in the shared document */
-export function snapOf(content: DocContent): Snap | null {
+/**
+ * A board's content as it is kept in the shared document. `copy`: a copy of it
+ * (to keep, as a merge's base); without, the content's own objects, to write into
+ * the shared document right away (writeList copies what it sets).
+ */
+export function snapOf(content: DocContent, copy = true): Snap | null {
+  const plain = copy ? deepCopy : <T>(v: T): T => v;
   switch (content.kind) {
     case "flow": {
       const d = content.data;

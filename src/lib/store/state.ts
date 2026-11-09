@@ -5,7 +5,7 @@ import { createMemo, createRoot, createSignal } from "solid-js";
 import { createStore, unwrap } from "solid-js/store";
 import { analyze, callColor, type Bar } from "../sequence";
 import type { BoardLook, Camera, ClassDetail, CodeLanguage, DiagramType, EdgeStyle, FlowDoc, FlowNode, NodeKind } from "../types";
-import { emptyFlow } from "./nodes";
+import { emptyFlow, isContainer } from "./nodes";
 
 // ---------- state ----------
 
@@ -66,7 +66,17 @@ export const derived = createRoot(() => {
   const seq = createMemo(() => analyze(board.nodes, board.edges));
   return {
     selectedSet: createMemo(() => new Set(ui.selected)),
+    /** The selected nodes (read many times per change by the selection's bar) */
+    selected: createMemo(() => {
+      const ids = new Set(ui.selected);
+      return board.nodes.filter((n) => ids.has(n.id));
+    }),
     nodeMap: createMemo(() => new Map(board.nodes.map((n) => [n.id, n]))),
+    /** What right-angle lines go around: every block that is not a frame, as plain
+     *  rectangles (read once per change, not once per line) */
+    obstacles: createMemo(() =>
+      board.nodes.filter((n) => !isContainer(n.kind)).map((n) => ({ id: n.id, x: n.x, y: n.y, w: n.w, h: n.h })),
+    ),
     seq,
     /** Activation bars of every lifeline */
     bars: () => seq().bars,
@@ -130,18 +140,28 @@ export const FLOW_SETTINGS = { callColors: false, diagram: null, codeLanguage: n
 
 export const isSelected = (id: string) => derived.selectedSet().has(id);
 export const nodeById = (id: string): FlowNode | undefined => derived.nodeMap().get(id);
-export const selectedNodes = () => board.nodes.filter((n) => derived.selectedSet().has(n.id));
+export const selectedNodes = () => derived.selected();
 
-/** Increments on every change; workspace.ts watches it for autosave. */
+/** Increments on every change; workspace.ts watches it for autosave, collab/ to share it. */
 const [rev, setRev] = createSignal(0);
 export { rev };
 /** @internal Marks the board as changed (autosave), for the store files */
 export const touch = () => setRev((r) => r + 1);
+
+/** Increments when someone else changed the board (editing together) */
+const [remoteRev, setRemoteRev] = createSignal(0);
+export { remoteRev };
+/** @internal For applyRemoteFlow */
+export const touchRemote = () => setRemoteRev((r) => r + 1);
+
+/** Increments when only the view moved (pan, zoom): saved, but nothing to share with others. */
+const [cameraRev, setCameraRev] = createSignal(0);
+export { cameraRev };
 
 /** Plain copy without Solid proxies, ready to send to the backend. */
 export const boardSnapshot = (): FlowDoc => JSON.parse(JSON.stringify(unwrap(board)));
 
 export function setCamera(c: Partial<Camera>) {
   setBoard("camera", c);
-  touch();
+  setCameraRev((r) => r + 1);
 }

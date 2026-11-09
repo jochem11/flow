@@ -3,17 +3,25 @@
 // Shown only when there is something to say. A relaxed board (only the focus
 // points) is not checked: the button says so, and turns the checks on again.
 
-import { createMemo, createSignal, For, onCleanup, Show } from "solid-js";
+import { createEffect, createSignal, For, on, onCleanup, Show, untrack } from "solid-js";
 import { focusOn } from "../lib/camera";
 import { checkDesign, type DesignProblem } from "../lib/designChecks";
-import { board, select, setRelaxed } from "../lib/store";
+import { board, remoteRev, rev, select, setRelaxed } from "../lib/store";
 import { canEdit } from "../lib/access";
 
 export function DesignChecks() {
-  // Warnings first, then tips
-  const problems = createMemo(() =>
-    checkDesign(board.nodes, board.edges, board.diagram).sort((a, b) => Number(a.level === "tip") - Number(b.level === "tip")),
+  // Warnings first, then tips. Checked shortly after the changes stop (a whole
+  // board's check on every key or drag step would slow typing and dragging down)
+  const check = () => checkDesign(board.nodes, board.edges, board.diagram).sort((a, b) => Number(a.level === "tip") - Number(b.level === "tip"));
+  const [problems, setProblems] = createSignal<DesignProblem[]>(untrack(check));
+  let later: ReturnType<typeof setTimeout> | undefined;
+  createEffect(
+    on([rev, remoteRev, () => board.diagram, () => board.nodes.length, () => board.edges.length], () => {
+      clearTimeout(later);
+      later = setTimeout(() => setProblems(untrack(check)), 250);
+    }, { defer: true }),
   );
+  onCleanup(() => clearTimeout(later));
   const [open, setOpen] = createSignal(false);
   let wrap!: HTMLSpanElement;
   const onDoc = (e: PointerEvent) => {

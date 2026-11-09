@@ -6,6 +6,7 @@ import { containsPt, edgeGeom, type EdgeGeom, type Pt, type Shape } from "../geo
 import { analyze, messageLine, messageYAt, SEQUENCE_KINDS } from "../sequence";
 import type { FlowEdge } from "../types";
 import { checkpoint } from "./history";
+import { untrack } from "solid-js";
 import { isContainer, uid } from "./nodes";
 import { board, derived, nodeById, setBoard, setUi, touch, ui } from "./state";
 
@@ -166,11 +167,12 @@ export function edgeLine(edge: FlowEdge): EdgeGeom | null {
   }
   const ends = edgeEnds(edge);
   if (!ends) return null;
-  // A right-angle line goes around the other blocks (not frames: lines run inside those)
-  const obstacles =
-    edge.style === "elbow" && !edge.bend
-      ? board.nodes.filter((n) => n.id !== edge.from && n.id !== edge.to && !isContainer(n.kind))
-      : [];
+  // A right-angle line goes around the other blocks (not frames: lines run inside those).
+  // While something is dragged, only the lines of what moves are routed again (their
+  // ends move); the others go around what moved when it is dropped
+  const elbowed = edge.style === "elbow" && !edge.bend;
+  const all = elbowed ? (ui.dragging ? untrack(derived.obstacles) : derived.obstacles()) : [];
+  const obstacles = all.filter((n) => n.id !== edge.from && n.id !== edge.to);
   return edgeGeom(edge, ...ends, obstacles);
 }
 

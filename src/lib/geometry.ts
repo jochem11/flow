@@ -244,6 +244,8 @@ const CLEARANCE = 8;
 const CHANNEL = 20;
 /** Blocks further than this from the line's ends are not looked at */
 const REACH = 300;
+/** At most this many blocks in a line's way are tried as detours */
+const MAX_DETOURS = 6;
 
 /** How many blocks a right-angle route crosses (each segment against each block). */
 export function crossings(points: Pt[], blocks: Rect[]): number {
@@ -288,7 +290,12 @@ export function elbow(p1: Pt, n1: Pt, p2: Pt, n2: Pt, obstacles: Rect[] = []): E
   // Only blocks near the line matter
   const box = { x: Math.min(p1.x, p2.x) - REACH, y: Math.min(p1.y, p2.y) - REACH, w: Math.abs(p2.x - p1.x) + 2 * REACH, h: Math.abs(p2.y - p1.y) + 2 * REACH };
   const near = obstacles.filter((r) => intersects(r, box));
-  const blockers = near.filter((r) => crosses(plain.points, r));
+  // The blocks in the way: only the few nearest the line's start are tried as detours
+  // (a long line across a full board would otherwise try hundreds)
+  const blockers = near
+    .filter((r) => crosses(plain.points, r))
+    .sort((r, s) => Math.hypot(r.x + r.w / 2 - p1.x, r.y + r.h / 2 - p1.y) - Math.hypot(s.x + s.w / 2 - p1.x, s.y + s.h / 2 - p1.y))
+    .slice(0, MAX_DETOURS);
   if (!blockers.length) return plain;
 
   const a = { x: p1.x + n1.x * STUB, y: p1.y + n1.y * STUB };
