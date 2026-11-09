@@ -21,6 +21,7 @@ import { batch, createEffect, createRoot, createSignal, on, onCleanup } from "so
 import * as decoding from "lib0/decoding";
 import { WebsocketProvider } from "y-websocket";
 import * as Y from "yjs";
+import { unwrap } from "solid-js/store";
 import { me } from "../auth";
 import { loadComments, guest } from "../comments";
 import { applyRemoteEer, eer, eerHistoryChanged, eerRev, useSharedEerUndo } from "../eer";
@@ -89,8 +90,8 @@ export function sharePresence(fields: Partial<Pick<Peer, "cursor" | "selection" 
  */
 interface Binding {
   kind: LiveKind;
-  /** Our store, as kept in the shared document */
-  ours(): Snap;
+  /** Our store, as kept in the shared document (`copy`: to keep; else its own objects, to write now) */
+  ours(copy?: boolean): Snap;
   /** As kept in the shared document → our store, as a change from someone else */
   apply(s: Snap): void;
 }
@@ -100,20 +101,20 @@ function bindingFor(kind: string): Binding | null {
     case "flow":
       return {
         kind,
-        ours: () => snapOf({ kind: "flow", data: board as never })!,
+        ours: (copy = true) => snapOf({ kind: "flow", data: (copy ? board : unwrap(board)) as never }, copy)!,
         // A setting the shared document does not have yet stays as loaded
         apply: (s) => applyRemoteFlow(s.lists.nodes as unknown as FlowNode[], s.lists.edges as unknown as FlowEdge[], s.values as FlowSettings),
       };
     case "eer":
       return {
         kind,
-        ours: () => snapOf({ kind: "eer", data: eer as never })!,
+        ours: (copy = true) => snapOf({ kind: "eer", data: (copy ? eer : unwrap(eer)) as never }, copy)!,
         apply: (s) => applyRemoteEer(s.lists.entities as unknown as Entity[], s.lists.relations as unknown as Relation[], s.lists.sections as unknown as EerSection[]),
       };
     case "kanban":
       return {
         kind,
-        ours: () => snapOf({ kind: "kanban", data: kanban as never })!,
+        ours: (copy = true) => snapOf({ kind: "kanban", data: (copy ? kanban : unwrap(kanban)) as never }, copy)!,
         apply: (s) => {
           const cols = (s.lists.columns as unknown as KanbanColumn[]).map((c) => ({ ...c, cards: [] as KanbanCard[] }));
           const byId = new Map(cols.map((c) => [c.id, c]));
@@ -217,7 +218,7 @@ function connect(open: OpenDoc): () => void {
   const binding = bindingFor(open.kind);
   const isEmpty = () => !binding || isEmptyIn(doc, binding.kind);
   const shared = () => readSnap(doc, binding!.kind);
-  const write = () => binding && doc.transact(() => writeSnap(doc, binding.kind, binding.ours()), LOCAL);
+  const write = () => binding && doc.transact(() => writeSnap(doc, binding.kind, binding.ours(false)), LOCAL);
   let synced = false;
   let mayFill = false;
   // The board as loaded, and whether we changed it before it was live. Opened

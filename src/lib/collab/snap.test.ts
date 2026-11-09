@@ -51,4 +51,15 @@ describe("boards in the shared document", () => {
       ["Two (renamed)", undefined],
     ]);
   });
+
+  it("writes the editor's own objects without sharing them with the shared document", () => {
+    const content = structuredClone(flow) as unknown as { data: { nodes: { id: string; lanes?: { id: string; name: string }[] }[] } };
+    content.data.nodes[0].lanes = [{ id: "l1", name: "Lane" }];
+    const doc = new Y.Doc();
+    writeSnap(doc, "flow", snapOf(content as unknown as DocContent, false)!);
+    // Changed in place afterwards (as the store does): the shared document keeps what was written
+    content.data.nodes[0].lanes![0].name = "Changed";
+    const lanes = (readSnap(doc, "flow").lists.nodes[0] as Record<string, unknown>).lanes as { name: string }[];
+    expect(lanes[0].name).toBe("Lane");
+  });
 });

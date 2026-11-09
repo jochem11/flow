@@ -8,7 +8,7 @@ import { freeEndsIn, isBetweenLifelines, makeMessage, moveFreeEnds } from "./edg
 import { assignParents, frameAt, growFrames, updateFrames, withContents } from "./frames";
 import { checkpoint, resetHistory } from "./history";
 import { canBeFocal, createNode, hasText, isConnectable, isContainer, isResizable, snap, uid } from "./nodes";
-import { board, derived, nodeById, setBoard, setUi, touch, ui, type FlowSettings } from "./state";
+import { board, derived, nodeById, setBoard, setUi, touch, touchRemote, ui, type FlowSettings } from "./state";
 
 // ---------- selection ----------
 
@@ -411,6 +411,7 @@ export function setChartBlockSvg(id: string, svg: string, save: boolean) {
  * Not a change of ours: no undo step, no autosave.
  */
 export function applyRemoteFlow(nodes: FlowNode[], edges: FlowEdge[], settings: FlowSettings = {}) {
+  touchRemote();
   batch(() => {
     if (settings.callColors !== undefined) setBoard("callColors", settings.callColors || undefined);
     if (settings.diagram !== undefined) setBoard("diagram", settings.diagram);

@@ -14,7 +14,7 @@ import { chartRev, chartSnapshot, emptyChart, replaceChart } from "./chart/store
 import { storedSvg } from "./chart/render";
 import { eerRev, eerSnapshot, replaceEer } from "./eer";
 import { loadPersonal, loadTrash, noteOpened } from "./personal";
-import { addNode, applyLayout, board, boardSnapshot, createNode, replaceBoard, rev, setChartBlockSvg, setDiagram } from "./store";
+import { addNode, applyLayout, board, boardSnapshot, cameraRev, createNode, replaceBoard, rev, setChartBlockSvg, setDiagram } from "./store";
 import { WELCOME } from "../templates";
 import { toast } from "./toast";
 import type { Brand, ChartDoc, DiagramType, DocContent, Document, DocumentKind, DocumentMeta, ExportFormat, Project, Role, SharedBoard } from "./types";
@@ -151,6 +151,8 @@ function dropOpenDoc() {
 // Every change to the flowchart or kanban store schedules a save.
 createRoot(() => {
   createEffect(on(rev, markDirty, { defer: true }));
+  // The view (pan, zoom) is kept with the board too
+  createEffect(on(cameraRev, markDirty, { defer: true }));
   createEffect(on(kanbanRev, markDirty, { defer: true }));
   createEffect(on(eerRev, markDirty, { defer: true }));
   createEffect(on(chartRev, markDirty, { defer: true }));
