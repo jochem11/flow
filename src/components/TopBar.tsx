@@ -13,6 +13,7 @@ import { CodeImportDialog } from "./CodeImportDialog";
 import { DiagramImportDialog } from "./DiagramImportDialog";
 import { CodeFlowDialog } from "./CodeFlowDialog";
 import { DesignChecks } from "./DesignChecks";
+import { setAccessOpen } from "./ShareDialog";
 import { CardLinksMenu } from "./CardLinksMenu";
 import type { CodeLanguage, ExportFormat, Folder } from "../lib/types";
 import {
@@ -199,7 +200,14 @@ export function TopBar() {
                   if (e.key === "Enter" || e.key === "Escape") e.currentTarget.blur();
                 }}
               />
-              <Show when={canEdit()} fallback={<span class="role-chip">{ROLE_LABEL[doc().role]}</span>}>
+              <Show
+                when={canEdit()}
+                fallback={
+                  <button class="role-chip" title="What you can do here, and who else has access" onClick={() => setAccessOpen(true)}>
+                    {ROLE_LABEL[doc().role]}
+                  </button>
+                }
+              >
                 <SaveIndicator />
               </Show>
             </div>

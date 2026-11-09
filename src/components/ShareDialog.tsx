@@ -7,9 +7,11 @@
 // so someone can edit one board and only view another.
 // The owner and co-owners change things; others see who has access.
 // An invitation is always a mail asking whether they want to join.
+// Access (next to the people on the board): who can do what on this board,
+// changed right there; Share has the link and the rest.
 
 import { BoardMenu } from "./BoardDialogs";
-import { createResource, createSignal, For, Show } from "solid-js";
+import { createResource, createSignal, For, onCleanup, Show } from "solid-js";
 import { errMsg } from "../lib/api";
 import { me, setLoginRequested } from "../lib/auth";
 import { ROLE_LABEL, roleCanManage } from "../lib/roles";
@@ -22,6 +24,7 @@ import { CommentsButton } from "./Comments";
 import { Dialog } from "./Dialog";
 import { BoardIcon } from "./kinds";
 import { PresenceAvatars } from "./Presence";
+import { IconPeople } from "./icons";
 
 /** Roles for one board, and for a whole project (which can also be co-owner) */
 const BOARD_ROLES: Role[] = ["viewer", "commenter", "editor"];
@@ -39,12 +42,41 @@ const fullAccess = (role: Role) => role === "owner" || role === "coOwner";
 /** The address of a board's share link: the web version, served by the server. */
 export const shareUrl = (token: string) => `${inTauri ? serverUrl() : location.origin}/b/${token}`;
 
-/** People, Comments and Share (logged in) or Log in (a guest) in the top bar. */
+/** What each role may do on a board */
+export const ROLE_MEANS: Record<Role, string> = {
+  none: "No access",
+  viewer: "sees it",
+  commenter: "sees it and comments",
+  editor: "sees, comments and changes it",
+  coOwner: "also decides who has access",
+  owner: "also decides who has access (owns the project)",
+};
+
+/** What you may do, in your own words */
+const YOU_CAN: Record<Role, string> = {
+  none: "you have no access",
+  viewer: "you can see it",
+  commenter: "you can see it and comment",
+  editor: "you can see it, comment and change it",
+  coOwner: "you can change it and decide who has access",
+  owner: "you can change it and decide who has access",
+};
+
+/** The Access panel is open (the role chip and the command palette open it too) */
+const [accessOpen, setAccessOpen] = createSignal(false);
+export { setAccessOpen };
+
+/** Share's dialog is open (from Share, or from the Access panel) */
+const [shareOpen, setShareOpen] = createSignal(false);
+
+/** People, Access, Comments and Share (logged in) or Log in (a guest) in the top bar. */
 export function ShareActions() {
-  const [open, setOpen] = createSignal(false);
   return (
     <div class="header-actions">
       <PresenceAvatars />
+      <Show when={me() && openDoc()?.role}>
+        <AccessButton />
+      </Show>
       <CommentsButton />
       <BoardMenu />
       <Show
@@ -55,10 +87,10 @@ export function ShareActions() {
           </button>
         }
       >
-        <button class="text-btn share-btn" onClick={() => setOpen(true)}>
+        <button class="text-btn share-btn" onClick={() => setShareOpen(true)}>
           Share
         </button>
-        <Show when={open() && openDoc()}>{(doc) => <ShareDialog documentId={doc().id} onClose={() => setOpen(false)} />}</Show>
+        <Show when={shareOpen() && openDoc()}>{(doc) => <ShareDialog documentId={doc().id} onClose={() => setShareOpen(false)} />}</Show>
       </Show>
     </div>
   );
@@ -262,6 +294,124 @@ export function ShareDialog(p: { documentId: string; onClose: () => void }) {
         )}
       </Show>
     </Dialog>
+  );
+}
+
+/** The Access button: how many have access, and the panel with who can do what. */
+function AccessButton() {
+  let wrap!: HTMLSpanElement;
+  const doc = () => openDoc();
+  // Loaded when it opens (and again after a change)
+  const [access, { refetch }] = createResource(
+    () => (accessOpen() ? doc()?.id : undefined),
+    (id) => get<BoardAccess>(`/documents/${id}/access`),
+  );
+  const onDoc = (e: PointerEvent) => {
+    if (accessOpen() && !wrap.contains(e.target as Node)) setAccessOpen(false);
+  };
+  const onKey = (e: KeyboardEvent) => e.key === "Escape" && accessOpen() && setAccessOpen(false);
+  document.addEventListener("pointerdown", onDoc);
+  window.addEventListener("keydown", onKey);
+  onCleanup(() => {
+    document.removeEventListener("pointerdown", onDoc);
+    window.removeEventListener("keydown", onKey);
+    setAccessOpen(false);
+  });
+  const myRole = () => doc()?.role ?? "viewer";
+  return (
+    <span class="access-wrap" ref={wrap}>
+      <button
+        class="text-btn access-btn"
+        classList={{ pressed: accessOpen() }}
+        aria-expanded={accessOpen()}
+        title="Who can do what on this board"
+        onClick={() => setAccessOpen(!accessOpen())}
+      >
+        <IconPeople />
+        <span>{ROLE_LABEL[myRole()]}</span>
+      </button>
+      <Show when={accessOpen() && doc()}>
+        {(d) => (
+          <AccessPanel
+            documentId={d().id}
+            projectId={d().projectId}
+            access={access()}
+            error={access.error ? errMsg(access.error) : null}
+            onChange={() => void refetch()}
+            onShare={() => {
+              setAccessOpen(false);
+              setShareOpen(true);
+            }}
+          />
+        )}
+      </Show>
+    </span>
+  );
+}
+
+function AccessPanel(p: { documentId: string; projectId: string; access: BoardAccess | undefined; error: string | null; onChange: () => void; onShare: () => void }) {
+  const manage = () => roleCanManage(p.access?.role ?? "none");
+  /** Someone's role on this board, as it counts */
+  const roleOf = (m: BoardAccess["members"][number]) => (fullAccess(m.projectRole) ? m.projectRole : (m.boardRole ?? m.projectRole));
+  const invite = async (email: string, role: Role, wholeProject: boolean) => {
+    await post<Invite>(`/projects/${p.projectId}/invites`, { email, role, documentId: wholeProject ? null : p.documentId });
+    toast(`Invitation sent to ${email}; they get access when they accept`);
+    p.onChange();
+  };
+  return (
+    <div class="access-panel panel" role="dialog" aria-label="Who can do what on this board">
+      <div class="access-head">
+        <strong>Who can do what here</strong>
+        <span class="spacer" />
+        <button class="link-btn" onClick={p.onShare} title="The board's link, inviting people, and the rest">
+          Link and more…
+        </button>
+      </div>
+      <Show when={p.access} fallback={<p class="import-note">{p.error ?? "Loading…"}</p>}>
+        {(a) => (
+          <>
+            <p class="access-you">
+              Your access: <strong>{ROLE_LABEL[a().role]}</strong>, {YOU_CAN[a().role]}.
+            </p>
+            <div class="access-list">
+              <For each={a().members.filter((m) => roleOf(m) !== "none")}>
+                {(m) => (
+                  <div class="share-person">
+                    <Who id={m.user.id} name={m.user.name} email={m.user.email} avatarUrl={m.user.avatarUrl} />
+                    <Show
+                      when={manage() && !fullAccess(m.projectRole) && m.user.id !== me()?.user.id}
+                      fallback={
+                        <span class="share-role" title={ROLE_MEANS[roleOf(m)]}>
+                          {ROLE_LABEL[roleOf(m)]}
+                        </span>
+                      }
+                    >
+                      <BoardRoleSelect projectRole={m.projectRole} boardRole={m.boardRole} onChange={(role) => setBoardRole(p.documentId, m.user.id, role).then(p.onChange)} />
+                    </Show>
+                  </div>
+                )}
+              </For>
+            </div>
+            <Show when={manage()}>
+              <InviteForm board onInvite={invite} />
+            </Show>
+            <dl class="access-legend">
+              <For each={["viewer", "commenter", "editor", "coOwner"] as Role[]}>
+                {(r) => (
+                  <>
+                    <dt>{ROLE_LABEL[r]}</dt>
+                    <dd>{ROLE_MEANS[r]}</dd>
+                  </>
+                )}
+              </For>
+            </dl>
+            <Show when={!manage()}>
+              <p class="share-hint">Only the owner and co-owners change who has access.</p>
+            </Show>
+          </>
+        )}
+      </Show>
+    </div>
   );
 }
 

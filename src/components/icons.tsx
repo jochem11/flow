@@ -198,6 +198,13 @@ export const IconCode = () => (
     <path d="M8 7l-5 5 5 5M16 7l5 5-5 5M13.5 4.5l-3 15" />
   </Svg>
 );
+export const IconPeople = () => (
+  <Svg size={16}>
+    <circle cx="9" cy="8" r="3.2" />
+    <path d="M3 19c0-3.3 2.7-5.5 6-5.5s6 2.2 6 5.5" />
+    <path d="M16 5.2a3 3 0 0 1 0 5.6M18 13.8c2 .6 3 2.4 3 5.2" />
+  </Svg>
+);
 export const IconLine = () => (
   <Svg>
     <path d="M5 19L18 6" />
