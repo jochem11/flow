@@ -11,3 +11,8 @@ graphify-out/
 
 # production server settings (passwords)
 prod.env
+
+# not part of the project: the desktop app's own lock file, Office files and their temporary copies
+src-tauri/Cargo.lock
+*.xlsx
+~$*
