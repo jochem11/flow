@@ -56,6 +56,7 @@ import "./styles.css";
 import "./lib/collab";
 // Live notices: others' changes to projects and to your access
 import "./lib/events";
+import "./lib/inView";
 import { selectNextBlock } from "./lib/a11y";
 import { navOpen, setNavOpen } from "./lib/layout";
 import { IconMenu } from "./components/icons";
