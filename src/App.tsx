@@ -1,4 +1,4 @@
-import { createEffect, Match, onCleanup, onMount, Switch } from "solid-js";
+import { createEffect, Match, on, onCleanup, onMount, Switch } from "solid-js";
 import { fitView, pastePoint, resetZoom, zoomBy } from "./lib/camera";
 import { openDoc, ready, saveNow, view } from "./lib/workspace";
 import {
@@ -57,6 +57,8 @@ import "./lib/collab";
 // Live notices: others' changes to projects and to your access
 import "./lib/events";
 import { selectNextBlock } from "./lib/a11y";
+import { navOpen, setNavOpen } from "./lib/layout";
+import { IconMenu } from "./components/icons";
 
 const isTyping = (t: EventTarget | null) =>
   t instanceof HTMLElement && !!t.closest("input, textarea, [contenteditable]");
@@ -65,6 +67,8 @@ const isTyping = (t: EventTarget | null) =>
 const hasTextSelection = () => !!window.getSelection()?.toString();
 
 export default function App() {
+  // Small screens: opening a board or project closes the drawer
+  createEffect(on(view, () => setNavOpen(false), { defer: true }));
   // Copy, cut and paste on the flowchart and the EER diagram (see store/clipboard.ts)
   const onCopy = (e: ClipboardEvent, cut: boolean) => {
     if (isTyping(e.target) || hasTextSelection()) return;
@@ -343,8 +347,13 @@ export default function App() {
           </div>
         }
       >
-        <div class="app">
+        <div class="app" classList={{ "nav-open": navOpen() }}>
           <Sidebar />
+          {/* Small screens: the sidebar is a drawer */}
+          <button class="nav-toggle icon-btn" aria-label={navOpen() ? "Hide the boards" : "Show the boards"} aria-expanded={navOpen()} onClick={() => setNavOpen(!navOpen())}>
+            <IconMenu />
+          </button>
+          <div class="nav-backdrop" onClick={() => setNavOpen(false)} />
           <main class="main">
             <OfflineBanner />
             <UpdateBanner />

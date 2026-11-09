@@ -500,6 +500,11 @@ export const IconBell = () => (
     <path d="M10 20a2 2 0 0 0 4 0" />
   </Svg>
 );
+export const IconMenu = () => (
+  <Svg size={18}>
+    <path d="M4 7h16M4 12h16M4 17h16" />
+  </Svg>
+);
 export const IconMore = () => (
   <Svg size={16}>
     <circle cx="5" cy="12" r="1.2" />
