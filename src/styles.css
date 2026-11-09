@@ -7520,8 +7520,9 @@ body.presenting .find-bar {
 
 /* ---------- small screens ---------- */
 
-/* Below 900px: the sidebar is a drawer, the top bar scrolls instead of squeezing the name */
-@media (max-width: 900px) {
+/* Below 900px (or on a short screen, as a phone on its side): the sidebar is a drawer,
+   the top bar scrolls instead of squeezing the name */
+@media (max-width: 900px), (max-height: 500px) {
   .app {
     grid-template-columns: 1fr;
   }
@@ -7606,56 +7607,58 @@ body.presenting .find-bar {
   }
 }
 
-/* Below 700px (or a short window): the canvas tools along the bottom, panels as sheets */
-@media (max-width: 700px), (max-height: 560px) {
-  .toolbar {
-    top: auto;
-    bottom: 10px;
-    left: 50%;
-    transform: translateX(-50%);
-    flex-direction: row;
-    max-width: calc(100% - 20px);
-    overflow-x: auto;
-    scrollbar-width: none;
-  }
-  .toolbar::-webkit-scrollbar {
-    display: none;
-  }
-  .toolbar > * {
-    flex-shrink: 0;
-  }
-  .toolbar {
-    align-items: center;
-  }
-  .toolbar > .uml-wrap,
-  .toolbar .content-tools {
-    display: flex;
-    flex-direction: row;
-  }
-  .toolbar .tool-sep {
-    width: 1px;
-    height: auto;
-    margin: 6px 3px;
-  }
-  /* Its flyouts open above it */
-  .uml-panel,
-  .icon-panel {
-    position: fixed;
-    left: 8px;
-    right: 8px;
-    bottom: 68px;
-    width: auto;
-  }
-  /* Zoom and the map at the top, out of the tools' way */
-  .zoom,
-  .minimap,
-  .minimap-toggle {
-    top: 10px;
-    bottom: auto;
-  }
-  .minimap-toggle {
-    top: 56px;
-  }
+/* The canvas tools along the bottom (Toolbar.tsx decides: a narrow board area, or no
+   room for the column, as on a landscape phone or a short window). In two rows when
+   one does not fit; not scrolling, so their panels are not cut off */
+.toolbar.along {
+  top: auto;
+  bottom: 10px;
+  left: 0;
+  right: 0;
+  margin: 0 auto;
+  width: fit-content;
+  max-width: calc(100% - 16px);
+  transform: none;
+  flex-direction: row;
+  flex-wrap: wrap;
+  justify-content: center;
+  align-items: center;
+}
+.toolbar.along > .uml-wrap,
+.toolbar.along .content-tools {
+  display: flex;
+  flex-direction: row;
+}
+/* Their panels are placed against the toolbar, not the button */
+.toolbar.along .uml-wrap {
+  position: static;
+}
+.toolbar.along .tool-sep {
+  width: 1px;
+  height: 26px;
+  margin: 0 3px;
+}
+/* Its panels open above it, inside the window */
+.toolbar.along .uml-panel,
+.toolbar.along .icon-panel {
+  top: auto;
+  right: auto;
+  left: 50%;
+  bottom: calc(100% + 8px);
+  transform: translateX(-50%);
+  max-width: calc(100vw - 16px);
+  max-height: var(--room-above, 260px);
+  overflow: auto;
+}
+/* Zoom and the map at the top, out of the tools' way */
+.tools-along .zoom,
+.tools-along .minimap,
+.tools-along .minimap-toggle {
+  top: 10px;
+  bottom: auto;
+}
+.tools-along .minimap-toggle {
+  top: 56px;
 }
 
 @media (max-width: 700px) {

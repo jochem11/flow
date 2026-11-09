@@ -1,4 +1,4 @@
-import { createSignal, For, onCleanup, Show, type JSX } from "solid-js";
+import { createEffect, createSignal, For, on, onCleanup, onMount, Show, type JSX } from "solid-js";
 import { IconPanel } from "./IconPanel";
 import { addImages } from "../lib/files";
 import { pastePoint } from "../lib/camera";
@@ -260,10 +260,41 @@ export function currentToolGroups(): ToolDef[][] {
   return type.tools ? typedGroups(type) : GROUPS;
 }
 
+/** Narrower than this, the tools run along the bottom */
+const NARROW_TOOLS = 700;
+
 export function Toolbar() {
   const groups = currentToolGroups;
+  // A column on the left when it fits; else a row (two if needed) along the bottom.
+  // Measured, not guessed from the screen size: a whiteboard's tools need more
+  // height than a flowchart's, and a landscape phone or a short window has little
+  const [along, setAlong] = createSignal(false);
+  let nav!: HTMLElement;
+  const fit = () => {
+    const area = nav.offsetParent as HTMLElement | null;
+    if (!area) return;
+    const buttons = nav.querySelectorAll(".tool-btn").length;
+    const seps = nav.querySelectorAll(".tool-sep").length;
+    const columnHeight = buttons * 42 + seps * 7 + 12;
+    const next = area.clientWidth <= NARROW_TOOLS || columnHeight > area.clientHeight - 24;
+    if (next !== along()) setAlong(next);
+    // The room above the tools at the bottom, for their panels
+    nav.style.setProperty("--room-above", `${Math.max(120, nav.offsetTop - 16)}px`);
+  };
+  onMount(() => {
+    const observer = new ResizeObserver(fit);
+    if (nav.offsetParent) observer.observe(nav.offsetParent);
+    observer.observe(nav);
+    fit();
+    onCleanup(() => observer.disconnect());
+  });
+  // Zoom and the map make room when the tools are at the bottom
+  createEffect(() => document.documentElement.classList.toggle("tools-along", along()));
+  onCleanup(() => document.documentElement.classList.remove("tools-along"));
+  // Other tools (another board type): measured again
+  createEffect(on(groups, () => queueMicrotask(fit), { defer: true }));
   return (
-    <nav class="toolbar panel" aria-label="Tools">
+    <nav class="toolbar panel" classList={{ along: along() }} aria-label="Tools" ref={nav}>
       <For each={groups()}>
         {(group, i) => (
           <>

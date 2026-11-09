@@ -33,6 +33,7 @@ import { ConfirmButton } from "./ConfirmButton";
 import type { DocumentKind, ItemKind, TrashItem } from "../lib/types";
 import { BoardIcon } from "./kinds";
 import { Menu } from "./Menu";
+import { setNavOpen } from "../lib/layout";
 import { TimerIndicator } from "./TimerIndicator";
 import { AccountMenu } from "./AccountMenu";
 import { NewBoardDialog } from "./BoardDialogs";
@@ -468,7 +469,14 @@ const sharedProjects = () => projects().filter((p) => p.role && p.role !== "owne
 
 export function Sidebar() {
   return (
-    <aside class="sidebar">
+    <aside
+      class="sidebar"
+      onClick={(e) => {
+        // A drawer (small screens): picking a board or project closes it, also the one already open
+        const row = (e.target as HTMLElement).closest(".tree-row");
+        if (row && !(e.target as HTMLElement).closest("button.twisty, .row-actions, input")) setNavOpen(false);
+      }}
+    >
       <div class="sidebar-head">
         <span class="logo" aria-hidden="true" />
         <span class="app-name">Flow</span>
