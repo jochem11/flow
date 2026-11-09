@@ -48,13 +48,15 @@ export function addNode(node: FlowNode) {
 /**
  * A diagram from another tool (`api.importDiagram`), as one undo step: on an
  * empty board where it starts (and the board takes its type), else to the right
- * of what is there. Returns the bounds of what was added, selected.
+ * of what is there, or centred at `at` (pasted). Returns the bounds of what was added, selected.
  */
-export function insertDiagram(imp: { nodes: FlowNode[]; edges: FlowEdge[]; diagram: DiagramType | null }) {
+export function insertDiagram(imp: { nodes: FlowNode[]; edges: FlowEdge[]; diagram: DiagramType | null }, at?: { x: number; y: number }) {
   if (!imp.nodes.length && !imp.edges.length) return null;
   const empty = !board.nodes.length;
-  const dx = empty ? 0 : snap(Math.max(...board.nodes.map((n) => n.x + n.w)) + 160);
-  const dy = empty ? 0 : snap(Math.min(...board.nodes.map((n) => n.y)));
+  // Pasted (`at`): centred there; else to the right of what is on the board
+  const box = at && !empty ? bounds(imp.nodes) : null;
+  const dx = box ? snap(at!.x - box.x - box.w / 2) : empty ? 0 : snap(Math.max(...board.nodes.map((n) => n.x + n.w)) + 160);
+  const dy = box ? snap(at!.y - box.y - box.h / 2) : empty ? 0 : snap(Math.min(...board.nodes.map((n) => n.y)));
   const nodes = imp.nodes.map((n) => ({ ...n, x: n.x + dx, y: n.y + dy }));
   const move = (p: { x: number; y: number } | null | undefined) => (p ? { x: p.x + dx, y: p.y + dy } : p);
   const edges = imp.edges.map((e) => ({ ...e, fromPoint: move(e.fromPoint), toPoint: move(e.toPoint) }));

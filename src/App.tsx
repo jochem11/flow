@@ -1,5 +1,6 @@
 import { createEffect, Match, on, onCleanup, onMount, Switch } from "solid-js";
 import { fitView, pastePoint, resetZoom, zoomBy } from "./lib/camera";
+import { diagramFormat, pasteDiagram, pasteTables, tablesFormat } from "./lib/pasteDiagram";
 import { openDoc, ready, saveNow, view } from "./lib/workspace";
 import {
   clearSelection,
@@ -92,12 +93,26 @@ export default function App() {
     if (kind === "flow" && images.length) {
       e.preventDefault();
       void addImages(images, pastePoint());
-    } else if (kind === "flow") onFlowPaste(e, pastePoint(), openDoc()?.id, copyImage);
-    else if (kind === "eer") {
+    } else if (kind === "flow") {
+      // A diagram from another tool (Mermaid, draw.io, Excalidraw) becomes blocks and lines
+      const text = e.clipboardData?.getData("text/plain") ?? "";
+      if (!fromClipboard(e, "flow") && diagramFormat(text)) {
+        e.preventDefault();
+        void pasteDiagram(text, pastePoint());
+      } else onFlowPaste(e, pastePoint(), openDoc()?.id, copyImage);
+    } else if (kind === "eer") {
       const clip = fromClipboard<EerClip>(e, "eer");
-      if (!clip) return;
-      e.preventDefault();
-      pasteEer(clip, eerPastePoint());
+      if (clip) {
+        e.preventDefault();
+        pasteEer(clip, eerPastePoint());
+        return;
+      }
+      // Tables written elsewhere: a Mermaid ER diagram, SQL or DBML
+      const text = e.clipboardData?.getData("text/plain") ?? "";
+      if (tablesFormat(text)) {
+        e.preventDefault();
+        void pasteTables(text, eerPastePoint());
+      }
     }
   };
   const onCopyEvent = (e: ClipboardEvent) => onCopy(e, false);
