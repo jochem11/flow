@@ -103,6 +103,7 @@ import { checkSchema, type Problem } from "../lib/eerChecks";
 import { AlignMenu } from "./AlignMenu";
 import { guidesFor, nearestLine, snapBox, snapLines, SNAP_REACH, type Guide } from "../lib/snapping";
 import { CardLinksMenu } from "./CardLinksMenu";
+import { versionMark } from "../lib/workspace";
 
 const COLORS: NodeColor[] = ["white", "yellow", "green", "blue", "purple", "pink"];
 
@@ -544,7 +545,7 @@ function EntityView(p: {
   return (
     <div
       class={`eer-entity color-${e.color ?? "white"}`}
-      classList={{ selected: selected(), target: p.target === "table" }}
+      classList={{ selected: selected(), target: p.target === "table", "version-gone": versionMark(e.id) === "gone", "version-changed": versionMark(e.id) === "changed" }}
       data-entity-id={e.id}
       style={{ transform: `translate(${e.x}px, ${e.y}px)`, width: `${ENTITY_W}px`, height: `${entityHeight(e)}px` }}
       onPointerDown={(ev) => {

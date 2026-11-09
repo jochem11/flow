@@ -17,7 +17,8 @@ import { loadPersonal, loadTrash, noteOpened } from "./personal";
 import { addNode, applyLayout, board, boardSnapshot, cameraRev, createNode, replaceBoard, rev, setChartBlockSvg, setDiagram } from "./store";
 import { WELCOME } from "../templates";
 import { toast } from "./toast";
-import type { Brand, ChartDoc, DiagramType, DocContent, Document, DocumentKind, DocumentMeta, ExportFormat, FlowDoc, Project, Role, SharedBoard } from "./types";
+import type { Brand, ChartDoc, DiagramType, DocContent, Document, DocumentKind, DocumentMeta, ExportFormat, FlowDoc, Project, Role, SharedBoard, Version } from "./types";
+import { diffVersion, type VersionDiff } from "./versionDiff";
 
 // ---------- state ----------
 
@@ -31,7 +32,27 @@ export type View =
  * The open document without its content (that lives in a per-kind store), with
  * what the user may do with it, and the share link it was opened through.
  */
-export type OpenDoc = Omit<Document, "content"> & { kind: DocumentKind; role: Role; share?: string };
+export type OpenDoc = Omit<Document, "content"> & {
+  kind: DocumentKind;
+  role: Role;
+  share?: string;
+  /** An old version shown read-only (see viewVersion): its id */
+  preview?: string;
+};
+
+/** The old version being looked at, and what changed since */
+export interface VersionPreview {
+  id: string;
+  name: string | null;
+  createdAt: number;
+  diff: VersionDiff;
+  /** The role on the board itself (the preview is read-only) */
+  role: Role;
+}
+const [preview, setPreview] = createSignal<VersionPreview | null>(null);
+export { preview };
+/** How an item of the version being looked at differs from now, if it does */
+export const versionMark = (id: string) => preview()?.diff.marks.get(id);
 
 const [projects, setProjects] = createSignal<Project[]>([]);
 const [docsByProject, setDocsByProject] = createSignal<Record<string, DocumentMeta[]>>({});
@@ -269,13 +290,52 @@ export async function openDocumentById(docId: string) {
   }
 }
 
+/** A board's content into the editors' stores */
+function loadContent(content: DocContent) {
+  if (content.kind === "flow") replaceBoard(content.data);
+  else if (content.kind === "text") setTextRaw(content.data.markdown);
+  else if (content.kind === "kanban") replaceKanban(content.data);
+  else if (content.kind === "chart") replaceChart(content.data);
+  else if (content.kind === "eer") replaceEer(content.data);
+  else otherContent = content;
+}
+
+/**
+ * Shows an old version of the open board, read-only, with what changed since
+ * marked: not editing together and not saved, so nothing of it reaches the board.
+ * Its parts can be copied, to paste on the board after `leavePreview`.
+ */
+export async function viewVersion(version: { id: string; name?: string | null; createdAt: number }) {
+  const d = openDoc();
+  if (!d) return;
+  await saveNow();
+  const now = currentDocument()?.content;
+  const old = await get<Version>(`/documents/${d.id}/versions/${version.id}`);
+  if (openDoc()?.id !== d.id || !now) return;
+  const role = preview()?.role ?? d.role;
+  batch(() => {
+    loadContent(old.content);
+    setPreview({ id: version.id, name: version.name ?? null, createdAt: version.createdAt, diff: diffVersion(old.content, now), role });
+    setOpenDoc({ ...d, role: "viewer", preview: version.id });
+  });
+  if (old.content.kind === "flow") requestAnimationFrame(() => fitIfNeeded());
+}
+
+/** Back from an old version to the board as it is now. */
+export async function leavePreview() {
+  const d = openDoc();
+  if (!d?.preview) return;
+  await openDocument(d.projectId, d.id, d.share ? { token: d.share, role: preview()?.role ?? "viewer" } : undefined, true);
+}
+
 /**
  * Opens a board. Through a share link, `shared` gives its token and what the
  * link lets this person do; else their role comes with the project's boards.
+ * `again`: also when it is open (back from an old version).
  */
-export async function openDocument(projectId: string, docId: string, shared?: { token: string; role: Role }) {
+export async function openDocument(projectId: string, docId: string, shared?: { token: string; role: Role }, again = false) {
   const v = view();
-  if (v.type === "doc" && v.docId === docId && openDoc()?.share === shared?.token) return;
+  if (!again && v.type === "doc" && v.docId === docId && openDoc()?.share === shared?.token) return;
   await flushIfDirty();
   useShareToken(shared?.token ?? null);
   try {
@@ -283,12 +343,8 @@ export async function openDocument(projectId: string, docId: string, shared?: { 
     const { content, ...rest } = doc;
     batch(() => {
       dropOpenDoc();
-      if (content.kind === "flow") replaceBoard(content.data);
-      else if (content.kind === "text") setTextRaw(content.data.markdown);
-      else if (content.kind === "kanban") replaceKanban(content.data);
-      else if (content.kind === "chart") replaceChart(content.data);
-      else if (content.kind === "eer") replaceEer(content.data);
-      else otherContent = content;
+      setPreview(null);
+      loadContent(content);
       // From the server's list of this project's boards; boards of the desktop app's own files are the user's own
       const role = shared?.role ?? docsOf(projectId).find((d) => d.id === docId)?.role ?? "owner";
       setOpenDoc({ ...rest, kind: content.kind, role, share: shared?.token });
@@ -609,8 +665,9 @@ export { accessLost };
  */
 export async function checkOpenAccess() {
   const doc = openDoc();
-  // The desktop app's own files have no role: nothing to check
-  if (!doc?.role) return;
+  // The desktop app's own files have no role: nothing to check. An old version
+  // shown read-only keeps that role (checked again when going back to now)
+  if (!doc?.role || doc.preview) return;
   let role: Role | null = null;
   try {
     if (doc.share) role = (await get<SharedBoard>(`/share/${doc.share}`)).role;

@@ -116,6 +116,41 @@ button:disabled {
   grid-template-columns: var(--sidebar-w, 260px) 1fr;
 }
 
+/* An old version shown (see VersionBanner): what is gone from the board now, and what changed since */
+.version-banner {
+  background: color-mix(in srgb, var(--accent) 10%, var(--panel));
+}
+.version-key {
+  padding: 0 6px;
+  border-radius: 5px;
+  border: 2px solid;
+  font-size: 12px;
+}
+.version-key.gone {
+  border-color: var(--danger, #e5484d);
+}
+.version-key.changed {
+  border-color: #f0a020;
+}
+.node.version-gone .node-body,
+.kanban-card.version-gone,
+.eer-entity.version-gone {
+  outline: 2.5px solid var(--danger, #e5484d);
+  outline-offset: 2px;
+}
+.node.version-changed .node-body,
+.kanban-card.version-changed,
+.eer-entity.version-changed {
+  outline: 2.5px solid #f0a020;
+  outline-offset: 2px;
+}
+.edge.version-gone .edge-line {
+  stroke: var(--danger, #e5484d);
+}
+.edge.version-changed .edge-line {
+  stroke: #f0a020;
+}
+
 /* The sidebar's menu button and backdrop: only on small screens (see the end of the file) */
 .app > .nav-toggle,
 .app > .nav-backdrop {

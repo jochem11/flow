@@ -10,7 +10,9 @@ import { startPresenting } from "../lib/present";
 import { del, get, post } from "../lib/server";
 import { toast } from "../lib/toast";
 import type { DocContent, Template, TemplateMeta } from "../lib/types";
-import { changeBoardType, createDocument, openDoc, runAutoLayout, saveNow } from "../lib/workspace";
+import { changeBoardType, createDocument, leavePreview, openDoc, preview, runAutoLayout, saveNow, viewVersion } from "../lib/workspace";
+import { roleCanEdit } from "../lib/roles";
+import { whenLive } from "../lib/collab";
 import { barFold, setCodeFlow, setCodeImport, setDiagramImport, setSqlImport } from "../lib/topActions";
 import { openThreads, panelOpen, setPanelOpen } from "../lib/comments";
 import { checkCount, setChecksOpen } from "./DesignChecks";
@@ -177,6 +179,55 @@ function SaveTemplateDialog(p: { onClose: () => void }) {
 
 // ---------- version history ----------
 
+/**
+ * Over the board while an old version is shown (read-only): which version, what
+ * changed since, and the way back (or restoring it). Its parts can be copied.
+ */
+export function VersionBanner() {
+  const [busy, setBusy] = createSignal(false);
+  const restore = async () => {
+    const v = preview();
+    const d = openDoc();
+    if (!v || !d || !confirm("Restore this version? The board as it is now is kept as a version too.")) return;
+    setBusy(true);
+    try {
+      await leavePreview();
+      // Live again first: else the board's live state, which has not got it yet, could win
+      await whenLive();
+      await restoreVersion(d.id, v.id);
+      toast("Restored. Undo (Ctrl+Z) or restore “Before restore” to go back.");
+    } catch (e) {
+      toast(errMsg(e), "error");
+    } finally {
+      setBusy(false);
+    }
+  };
+  return (
+    <Show when={preview()}>
+      {(v) => (
+        <div class="verify-banner version-banner" role="status">
+          <span>
+            <strong>{v().name ?? "Saved automatically"}</strong>, {when(v().createdAt)}: read-only. Since then:{" "}
+            {v().diff.summary || "nothing changed"}.
+            <Show when={v().diff.marks.size}>
+              {" "}
+              <span class="version-key gone">gone now</span> <span class="version-key changed">changed since</span>
+            </Show>
+          </span>
+          <Show when={roleCanEdit(v().role)}>
+            <button class="text-btn" disabled={busy()} onClick={restore}>
+              Restore this version
+            </button>
+          </Show>
+          <button class="text-btn primary" disabled={busy()} onClick={() => void leavePreview()}>
+            Back to now
+          </button>
+        </div>
+      )}
+    </Show>
+  );
+}
+
 function HistoryDialog(p: { docId: string; onClose: () => void }) {
   const [versions, { refetch }] = createResource(() => listVersions(p.docId));
   const [name, setName] = createSignal("");
@@ -225,6 +276,16 @@ function HistoryDialog(p: { docId: string; onClose: () => void }) {
                     <Show when={v.createdBy}> · {v.createdBy}</Show>
                   </small>
                 </div>
+                <button
+                  class="text-btn"
+                  title="See this version (read-only), with what changed since marked"
+                  onClick={() => {
+                    p.onClose();
+                    void viewVersion(v).catch((e) => toast(errMsg(e), "error"));
+                  }}
+                >
+                  View
+                </button>
                 <ConfirmButton class="text-btn" confirmLabel="Restore this?" onConfirm={() => restore(v.id)}>
                   {busy() === v.id ? "Restoring…" : "Restore"}
                 </ConfirmButton>

@@ -35,7 +35,7 @@ import {
 } from "../lib/kanban";
 import { activeTimer, now, startTimer, stopTimer, syncTimerWithBoard } from "../lib/timer";
 import type { KanbanCard, KanbanColumn, NodeColor } from "../lib/types";
-import { openDoc } from "../lib/workspace";
+import { openDoc, versionMark } from "../lib/workspace";
 import { ConfirmButton } from "./ConfirmButton";
 import {
   IconCheck,
@@ -275,10 +275,10 @@ function Column(p: { column: KanbanColumn; index: number }) {
           </span>
         </Show>
         <span class="kanban-column-actions">
-          <button class="icon-btn small" title="Add card" onClick={() => setComposing(id())}>
-            <IconPlus />
-          </button>
           <Show when={canEdit()}>
+            <button class="icon-btn small" title="Add card" onClick={() => setComposing(id())}>
+              <IconPlus />
+            </button>
             <ColumnMenu column={p.column} />
           </Show>
         </span>
@@ -301,9 +301,12 @@ function Column(p: { column: KanbanColumn; index: number }) {
         <Show
           when={composing() === id()}
           fallback={
-            <button class="kanban-add-card" onClick={() => setComposing(id())}>
-              <IconPlus /> Add card
-            </button>
+            // Only for those who may change the board (not when viewing it, or an old version of it)
+            <Show when={canEdit()}>
+              <button class="kanban-add-card" onClick={() => setComposing(id())}>
+                <IconPlus /> Add card
+              </button>
+            </Show>
           }
         >
           <Show when={canEdit()}>
@@ -401,6 +404,8 @@ function Card(p: { card: KanbanCard; columnId: string; index: number; indicator:
     <div
       class="kanban-card"
       classList={{
+        "version-gone": versionMark(p.card.id) === "gone",
+        "version-changed": versionMark(p.card.id) === "changed",
         "drop-before": p.indicator === "before",
         "drop-after": p.indicator === "after",
         dragging: dragging() === p.card.id,

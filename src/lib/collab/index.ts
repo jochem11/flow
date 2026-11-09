@@ -43,6 +43,21 @@ export type Status = "off" | "connecting" | "live" | "offline";
 const [status, setStatus] = createSignal<Status>("off");
 export { status };
 
+/**
+ * Resolves when the open board is live (synced with its room), or after `wait`
+ * ms (no connection, a board of the desktop app's own). A big change made right
+ * after opening a board (restoring a version) goes in after this, so it reaches
+ * the live state like any edit instead of racing it.
+ */
+export function whenLive(wait = 6000): Promise<void> {
+  return new Promise((resolve) => {
+    if (status() === "live" || status() === "off") return resolve();
+    const started = Date.now();
+    const tick = () => (status() === "live" || Date.now() - started > wait ? resolve() : setTimeout(tick, 50));
+    tick();
+  });
+}
+
 /** Someone else on the board (from awareness) */
 export interface Peer {
   clientId: number;
@@ -269,7 +284,10 @@ function connect(open: OpenDoc): () => void {
   p.on("status", ({ status: s }: { status: string }) => setStatus(s === "connected" ? (synced ? "live" : "connecting") : s === "connecting" ? "connecting" : "offline"));
   // The server cut the connection (access changed, the board was deleted): check now
   let checking: ReturnType<typeof setTimeout> | undefined;
+  let leaving = false;
   p.on("connection-close", () => {
+    // Closed by us (another board, an old version shown): nothing to check
+    if (leaving) return;
     clearTimeout(checking);
     checking = setTimeout(() => void checkOpenAccess(), 200);
   });
@@ -347,6 +365,8 @@ function connect(open: OpenDoc): () => void {
   p.awareness.on("change", onAwareness);
 
   return () => {
+    leaving = true;
+    clearTimeout(checking);
     disposeWrite();
     p.awareness.off("change", onAwareness);
     if (undo) {
@@ -371,6 +391,8 @@ createRoot(() => {
     on(
       () => {
         const d = openDoc();
+        // An old version shown read-only (see viewVersion) is not the live board
+        if (d?.preview) return null;
         return d?.role ? `${d.id}|${d.share ?? ""}|${d.role}` : null;
       },
       (key) => {

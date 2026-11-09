@@ -5,6 +5,7 @@ import { edgeBetween, edgeToPoint, endLabelPoint, lineEnd, normRect, pointAlong,
 import { SEQUENCE_KINDS } from "../lib/sequence";
 import { beginEdgeMove, beginEndDrag, beginLabelDrag, blurActive } from "../lib/interactions";
 import { board, callColorOf, checkpoint, DEFAULT_CAPS, edgeLine, isFreeEnd, nodeById, selectEdge, setEdgeEnd, setEdgeLabel, setUi, ui, setEdgeLabelLive } from "../lib/store";
+import { versionMark } from "../lib/workspace";
 
 /**
  * The line of an edge, computed once and shared by everything that draws it (the
@@ -162,7 +163,7 @@ function EdgeView(p: { edge: FlowEdge }) {
       {(g) => (
         <g
           class="edge"
-          classList={{ selected: active() }}
+          classList={{ selected: active(), "version-gone": versionMark(p.edge.id) === "gone", "version-changed": versionMark(p.edge.id) === "changed" }}
           // A call and its return in the call's color (line and arrowheads use --edge)
           style={callColorOf(p.edge.id) ? { "--edge": `var(--${callColorOf(p.edge.id)}-stroke)` } : undefined}
         >
