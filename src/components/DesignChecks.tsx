@@ -9,6 +9,13 @@ import { checkDesign, type DesignProblem } from "../lib/designChecks";
 import { board, remoteRev, rev, select, setRelaxed } from "../lib/store";
 import { canEdit } from "../lib/access";
 
+/** The list is open (the top bar's "…" menu opens it too, when the bar has no room for the button) */
+const [open, setOpen] = createSignal(false);
+export const setChecksOpen = setOpen;
+/** How many checks say something now (for the "…" menu) */
+const [count, setCount] = createSignal(0);
+export const checkCount = count;
+
 export function DesignChecks() {
   // Warnings first, then tips. Checked shortly after the changes stop (a whole
   // board's check on every key or drag step would slow typing and dragging down)
@@ -22,7 +29,11 @@ export function DesignChecks() {
     }, { defer: true }),
   );
   onCleanup(() => clearTimeout(later));
-  const [open, setOpen] = createSignal(false);
+  createEffect(() => setCount(board.relaxed ? 0 : problems().length));
+  onCleanup(() => {
+    setOpen(false);
+    setCount(0);
+  });
   let wrap!: HTMLSpanElement;
   const onDoc = (e: PointerEvent) => {
     if (open() && !wrap.contains(e.target as Node)) setOpen(false);

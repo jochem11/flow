@@ -1,7 +1,8 @@
 // Header above an open document: breadcrumb (project / folders / document),
 // editable name, save status, and actions for the document kind.
 
-import { createSignal, For, Show } from "solid-js";
+import { createEffect, createSignal, For, on, onCleanup, Show } from "solid-js";
+import { codeFlow, codeImport, diagramImport, setBarFold, setCodeFlow, setCodeImport, setDiagramImport, setSqlImport, sqlImport } from "../lib/topActions";
 import { canRedoEer, canUndoEer, redoEer, undoEer } from "../lib/eer";
 import { DIALECTS, SqlDialog, type SchemaFormat } from "./SqlDialog";
 import { board, canRedo, canUndo, redo, undo } from "../lib/store";
@@ -85,18 +86,17 @@ const [mermaidOpen, setMermaidOpen] = createSignal(false);
 /** Undo/redo, SQL import and SQL export for an EER diagram. */
 function EerActions() {
   const [preview, setPreview] = createSignal<SchemaFormat | null>(null);
-  const [importing, setImporting] = createSignal(false);
   return (
     <div class="header-actions">
       <Show when={canEdit()}>
-        <button class="icon-btn" title="Undo (Ctrl+Z)" disabled={!canUndoEer()} onClick={undoEer}>
+        <button class="icon-btn hdr-undo" title="Undo (Ctrl+Z)" disabled={!canUndoEer()} onClick={undoEer}>
           <IconUndo />
         </button>
-        <button class="icon-btn" title="Redo (Ctrl+Shift+Z)" disabled={!canRedoEer()} onClick={redoEer}>
+        <button class="icon-btn hdr-undo" title="Redo (Ctrl+Shift+Z)" disabled={!canRedoEer()} onClick={redoEer}>
           <IconRedo />
         </button>
-        <span class="divider" />
-        <button class="text-btn" title="Add tables from a SQL script or DBML (dbdiagram.io)" onClick={() => setImporting(true)}>
+        <span class="divider hdr-undo" />
+        <button class="text-btn hdr-import" title="Add tables from a SQL script or DBML (dbdiagram.io)" onClick={() => setSqlImport(true)}>
           <IconImport />
           <span>Import SQL / DBML</span>
         </button>
@@ -155,25 +155,70 @@ function EerActions() {
       <Show when={mermaidOpen()}>
         <MermaidDialog onClose={() => setMermaidOpen(false)} />
       </Show>
-      <Show when={importing()}>
-        <SqlImportDialog onClose={() => setImporting(false)} />
+      <Show when={sqlImport()}>
+        <SqlImportDialog onClose={() => setSqlImport(false)} />
       </Show>
     </div>
   );
 }
 
 const [codePreview, setCodePreview] = createSignal<CodeLanguage | null>(null);
-const [codeImport, setCodeImport] = createSignal(false);
-const [diagramImport, setDiagramImport] = createSignal(false);
-const [codeFlow, setCodeFlow] = createSignal(false);
+
+/** Removes the fold classes, then adds them up to `level` (each level hides more, see topActions.ts) */
+function setFoldClasses(header: HTMLElement, level: number) {
+  for (let l = 1; l <= MAX_FOLD; l++) header.classList.toggle(`fold-${l}`, l <= level);
+}
+const MAX_FOLD = 6;
+
+/** Folds the bar as little as possible so that it fits (measured: what fits depends on the board and the window) */
+function fitBar(header: HTMLElement) {
+  let level = 0;
+  for (; level <= MAX_FOLD; level++) {
+    setFoldClasses(header, level);
+    if (header.scrollWidth <= header.clientWidth + 1) break;
+  }
+  setBarFold(Math.min(level, MAX_FOLD));
+}
 
 export function TopBar() {
+  let observer: ResizeObserver | undefined;
+  let changes: MutationObserver | undefined;
+  onCleanup(() => {
+    observer?.disconnect();
+    changes?.disconnect();
+  });
+  // Measured again when the window changes size, and when the bar's content does
+  // (its text, a button more or less: folded, the bar's parts keep their size, so
+  // only measuring again shows that it fits unfolded again)
+  const watch = (header: HTMLElement) => {
+    observer?.disconnect();
+    changes?.disconnect();
+    let queued = false;
+    const later = () => {
+      if (queued) return;
+      queued = true;
+      requestAnimationFrame(() => {
+        queued = false;
+        fitBar(header);
+      });
+    };
+    observer = new ResizeObserver(later);
+    observer.observe(header);
+    changes = new MutationObserver(later);
+    changes.observe(header, { childList: true, subtree: true, characterData: true });
+    void document.fonts?.ready.then(later);
+    later();
+  };
+  createEffect(on([() => openDoc()?.id, () => openDoc()?.name, () => board.diagram, () => canEdit()], () => {
+    const header = document.querySelector<HTMLElement>(".doc-header");
+    if (header) requestAnimationFrame(() => fitBar(header));
+  }));
   return (
     <Show when={openDoc()}>
       {(doc) => {
         const project = () => projectById(doc().projectId);
         return (
-          <header class="doc-header">
+          <header class="doc-header" ref={watch}>
             <div class="crumbs">
               <button class="crumb" onClick={() => openProject(doc().projectId)}>
                 {project()?.name ?? "Project"}
@@ -256,22 +301,22 @@ export function TopBar() {
             <Show when={doc().kind === "flow"}>
               <div class="header-actions">
                 <Show when={canEdit()}>
-                  <button class="icon-btn" title="Undo (Ctrl+Z)" disabled={!canUndo()} onClick={undo}>
+                  <button class="icon-btn hdr-undo" title="Undo (Ctrl+Z)" disabled={!canUndo()} onClick={undo}>
                     <IconUndo />
                   </button>
-                  <button class="icon-btn" title="Redo (Ctrl+Shift+Z)" disabled={!canRedo()} onClick={redo}>
+                  <button class="icon-btn hdr-undo" title="Redo (Ctrl+Shift+Z)" disabled={!canRedo()} onClick={redo}>
                     <IconRedo />
                   </button>
-                  <span class="divider" />
+                  <span class="divider hdr-undo" />
                   <DesignChecks />
-                  <button class="text-btn" title="Arrange automatically" onClick={runAutoLayout}>
+                  <button class="text-btn hdr-arrange" title="Arrange automatically" onClick={runAutoLayout}>
                     <IconLayout />
                     <span>Arrange</span>
                   </button>
                   <Menu
                     align="right"
                     button={(toggle) => (
-                      <button class="text-btn" title="Add a diagram from Mermaid, draw.io or Excalidraw, classes from code, or an activity from a codebase" onClick={toggle}>
+                      <button class="text-btn hdr-import" title="Add a diagram from Mermaid, draw.io or Excalidraw, classes from code, or an activity from a codebase" onClick={toggle}>
                         <IconImport />
                         <span>Import</span>
                       </button>

@@ -1772,19 +1772,57 @@ button.crumb:hover {
   }
 }
 
+/* The top bar folds up to fit (TopBar measures it; see topActions.ts):
+   1 only the board's name (not the project and folders), 2 icons only,
+   3 Arrange/Import/Checks into "…", 4 Comments and the people too, 5 undo, redo
+   and the save state, 6 Access. It never scrolls or cuts buttons off */
+.doc-header {
+  overflow: hidden;
+}
+.doc-header > * {
+  flex-shrink: 0;
+}
+.doc-header > .crumbs {
+  flex-shrink: 1;
+  min-width: 150px;
+}
+/* Only the board's name */
+.doc-header.fold-1 .crumbs .crumb,
+.doc-header.fold-1 .crumbs .crumb-sep {
+  display: none;
+}
+/* Icons only; the words stay for screen readers (the button's name) */
+.doc-header.fold-2 .text-btn:has(svg) > span {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+}
+.doc-header.fold-3 .hdr-arrange,
+.doc-header.fold-3 .menu-wrap:has(> .hdr-import),
+.doc-header.fold-3 .hdr-import,
+.doc-header.fold-3 .eer-checks-btn {
+  display: none;
+}
+.doc-header.fold-4 .hdr-comments,
+.doc-header.fold-4 .presence {
+  display: none;
+}
+.doc-header.fold-5 .hdr-undo,
+.doc-header.fold-5 .save-state {
+  display: none;
+}
+.doc-header.fold-5 > .crumbs {
+  min-width: 90px;
+}
+/* Its panel still opens (from "…"): only the button goes */
+.doc-header.fold-6 .access-btn {
+  display: none;
+}
+
 @media (max-width: 640px) {
-  .save-state {
-    display: none;
-  }
-  /* Icons only; the words stay for screen readers (the button's name) */
-  .text-btn:has(svg) > span {
-    position: absolute;
-    width: 1px;
-    height: 1px;
-    overflow: hidden;
-    clip-path: inset(50%);
-    white-space: nowrap;
-  }
   .doc-name {
     max-width: 120px;
   }
@@ -7575,22 +7613,14 @@ body.presenting .find-bar {
   }
   .doc-header {
     gap: 8px;
-    overflow-x: auto;
-    scrollbar-width: none;
-  }
-  .doc-header::-webkit-scrollbar {
-    display: none;
-  }
-  .doc-header > * {
-    flex-shrink: 0;
   }
   /* Only the board's name, not the project and folders before it */
   .crumbs .crumb,
   .crumbs .crumb-sep {
     display: none;
   }
-  .crumbs {
-    min-width: 120px;
+  .doc-header > .crumbs {
+    min-width: 110px;
   }
   /* Panels and menus fit the window */
   .eer-checks,
