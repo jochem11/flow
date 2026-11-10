@@ -1,15 +1,91 @@
 # Flow
 
-An app for project flows: flowcharts (with UML and mind maps), text documents, kanban boards
-and EER diagrams, organised in projects and folders. People log in (email + password or Google),
-share projects and boards with view / comment / edit rights, publish a board through a
-link (also for guests without an account), comment on it, and edit it together in real time.
+Flow is one place for the drawings and notes around a project: flowcharts and UML diagrams,
+database designs, kanban boards, charts and text documents, kept together in projects and
+folders. You run it on your own computer or server, and use it in the browser or as a desktop
+app for Windows and Mac. Several people can work on the same board at the same time.
 
-Also: copy and paste between boards, smart guides, align and distribute, Alt+Arrow to add
-the next block, locking, sections that grow around what is put in them, images and icons,
-follow someone's view, presenting sections as slides, find (Ctrl+F) and a minimap; templates
-and version history; on kanban boards dates, priorities, "blocked by", filters, a list and a
-timeline; on EER diagrams DBML import and export, indexes and schema checks.
+![An order process drawn as a swimlane flowchart in Flow](docs/images/flowchart.png)
+
+The pictures here are one example project, a web shop, with a board of each kind.
+
+## What you can make
+
+**Diagrams.** Flowcharts, swimlanes, mind maps, whiteboards, and UML: class, sequence, state,
+activity and use case diagrams. Lines route themselves around blocks, smart guides help you
+line things up, and *Arrange* lays out a messy diagram for you. Export as SVG, PNG or Mermaid;
+paste Mermaid, or import draw.io and Excalidraw files.
+
+![A sequence diagram of logging in](docs/images/sequence.png)
+
+Whiteboard templates such as a customer journey give a head start:
+
+![A customer journey: what a customer does, thinks and feels per stage](docs/images/journey.png)
+
+**Database designs.** Draw tables, columns and keys, and join them by dragging one column onto
+another table. Flow writes the SQL for PostgreSQL, MySQL, SQLite, SQL Server and Oracle, and
+reads existing SQL (also `pg_dump` and `mysqldump`) or DBML back into a diagram. Checks point out
+problems in the schema.
+
+![A database design with four tables](docs/images/eer.png)
+
+**Kanban boards.** Columns and cards with labels, priorities, dates, subtasks, estimates and a
+timer. Look at the same cards as a board, a list or a timeline, and link a card to the diagram or
+table it is about.
+
+![A sprint board with cards in four columns](docs/images/kanban.png)
+
+**Documents.** Text documents with headings, lists and checklists, stored as Markdown.
+
+![Meeting notes with decisions and action items](docs/images/document.png)
+
+**Charts.** Columns, bars, lines, areas, scatter and share charts from a small table of numbers;
+paste the cells straight from a spreadsheet.
+
+![A line chart of monthly revenue, next to its numbers](docs/images/chart.png)
+
+**Templates.** Start from an org chart, customer journey, fishbone, retrospective, scrum board,
+bug tracker, web shop schema, meeting notes and more, or save your own.
+
+## Working together
+
+- **Share** a project or a single board with people as viewer, commenter or editor, or publish a
+  board through a link that also works for guests without an account.
+- **Edit at the same time.** Everyone on a board sees each other's cursors and changes as they
+  happen. Undo only undoes your own changes.
+- **Comment** on a board, a block, a table, a card or a spot; reply and resolve.
+- **Version history.** Look at an older version of a board and what changed since.
+- **Present.** Sections of a board become slides.
+
+## Getting Flow
+
+Flow has no central service: you run the server yourself, and your data stays with you.
+
+**Try it** (needs [Docker](https://www.docker.com/products/docker-desktop/)):
+
+```bash
+git clone https://github.com/jochem11/flow.git
+cd flow
+docker compose up --build
+```
+
+Then open http://localhost:8080 and sign up. A new account starts with a *Welcome to Flow*
+project that has one board of each kind. In this setup mails (the sign-up confirmation, password
+resets, invitations) are not sent but written to the `outbox` folder.
+
+**Run it for real**, for yourself or a team: see [Development and production](#development-and-production)
+below. `prod.env.example` lists the settings (address, mail, Google sign-in), and Flow can be
+reached from other devices through a private network such as Tailscale, a Cloudflare Tunnel, or
+any proxy with https.
+
+**The desktop app** for Windows and Mac is on the [Releases](https://github.com/jochem11/flow/releases/latest)
+page. It is the same Flow in its own window, and it offers to update itself when there is a
+newer version. The released builds start out pointing at the author's own server: on the login
+screen, open *Server* at the bottom and fill in the address of yours. They are not signed with a paid
+certificate, so Windows asks *More info → Run anyway* and macOS *System Settings → Privacy &
+Security → Open Anyway* the first time.
+
+## For developers
 
 ```
 crates/flow-core   the documents (models) and everything made from them: SQL for 5 databases,
