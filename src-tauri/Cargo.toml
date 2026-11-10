@@ -30,4 +30,7 @@ uuid = { workspace = true }
 keyring = "4.2.0"
 tauri-plugin-deep-link = "2"
 tauri-plugin-single-instance = { version = "2", features = ["deep-link"] }
+# Updating itself from the releases on GitHub (and restarting after it)
+tauri-plugin-updater = "2"
+tauri-plugin-process = "2"
 

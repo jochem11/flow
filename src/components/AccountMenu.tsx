@@ -6,7 +6,7 @@ import { logout, me, resendVerification } from "../lib/auth";
 import { errMsg } from "../lib/api";
 import { get, inTauri, post } from "../lib/server";
 import { reloadProjects, saveNow } from "../lib/workspace";
-import { updateReady } from "../lib/version";
+import { appUpdate, installAppUpdate, updateReady } from "../lib/version";
 import { inviteWhat, roleWords, type InviteInfo } from "./Gate";
 import { toast } from "../lib/toast";
 import { Menu } from "./Menu";
@@ -155,8 +155,38 @@ export function OfflineBanner() {
 /** A newer version is on the server than the one running in this tab: reload for it. */
 export function UpdateBanner() {
   const [hidden, setHidden] = createSignal(false);
+  const [installing, setInstalling] = createSignal(false);
+  const install = async () => {
+    setInstalling(true);
+    try {
+      // What is not saved yet goes first
+      await saveNow();
+      await installAppUpdate();
+    } catch (e) {
+      toast(`The update could not be installed: ${errMsg(e)}`, "error");
+      setInstalling(false);
+    }
+  };
   return (
-    <Show when={updateReady() && !hidden()}>
+    <Show
+      when={updateReady() && !hidden()}
+      fallback={
+        // The desktop app: a newer one to download
+        <Show when={appUpdate() && !hidden()}>
+          <div class="verify-banner">
+            <span>Flow {appUpdate()} is available.</span>
+            <Show when={!installing()} fallback={<span class="verify-sent">Downloading…</span>}>
+              <button class="link-btn" onClick={install}>
+                Update and restart
+              </button>
+              <button class="icon-btn small" title="Hide" onClick={() => setHidden(true)}>
+                ×
+              </button>
+            </Show>
+          </div>
+        </Show>
+      }
+    >
       <div class="verify-banner">
         <span>Flow has been updated. Reload to use the new version.</span>
         <button

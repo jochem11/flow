@@ -1,9 +1,13 @@
 # Builds the desktop app (Flow) for Windows and Mac and puts the installers on a
-# release, to download from the repository's Releases page.
+# release. Installed apps find that release themselves and offer to update.
 #
-# Start it by pushing a tag that begins with app-v:
-#   git tag app-v0.1.0 && git push origin app-v0.1.0
-# or from the Actions tab (Run workflow), which makes or updates the release "app-latest".
+# A new version: push a tag with its number, higher than the last one:
+#   git tag app-v0.2.1 && git push origin app-v0.2.1
+# The number after app-v becomes the app's version.
+#
+# Needs the repository secret TAURI_SIGNING_PRIVATE_KEY (Settings → Secrets and
+# variables → Actions): the key updates are signed with, so an installed app only
+# accepts updates from here. Its public half is in src-tauri/tauri.conf.json.
 #
 # The server the app talks to is VITE_SERVER_URL in .env.production (the login
 # screen can switch to another one). The apps are not signed with a paid certificate:
@@ -14,13 +18,9 @@ name: Desktop app
 on:
   push:
     tags: ["app-v*"]
-  workflow_dispatch:
 
 permissions:
   contents: write
-
-env:
-  RELEASE_TAG: ${{ github.ref_type == 'tag' && github.ref_name || 'app-latest' }}
 
 jobs:
   build:
@@ -31,17 +31,12 @@ jobs:
           - name: Windows
             os: windows-latest
             args: --bundles nsis
-            files: target/release/bundle/nsis/*.exe
           # One app for both Apple Silicon and Intel Macs
           - name: Mac
             os: macos-latest
-            args: --target universal-apple-darwin --bundles dmg
-            files: target/universal-apple-darwin/release/bundle/dmg/*.dmg
+            args: --target universal-apple-darwin --bundles app,dmg
     name: ${{ matrix.name }}
     runs-on: ${{ matrix.os }}
-    defaults:
-      run:
-        shell: bash
     steps:
       - uses: actions/checkout@v4
 
@@ -58,18 +53,31 @@ jobs:
 
       - run: npm ci
 
-      - name: Build the app
-        run: npm run app:build -- ${{ matrix.args }}
+      - name: The version, from the tag
+        shell: bash
+        run: |
+          node -e '
+            const fs = require("fs");
+            const file = "src-tauri/tauri.conf.json";
+            const conf = JSON.parse(fs.readFileSync(file, "utf8"));
+            conf.version = process.env.GITHUB_REF_NAME.replace(/^app-v/, "");
+            fs.writeFileSync(file, JSON.stringify(conf, null, 2) + "\n");
+            console.log("Flow", conf.version);
+          '
+
+      # Builds, makes the release, and adds the installers and latest.json
+      # (what installed apps read to see whether there is a newer version)
+      - uses: tauri-apps/tauri-action@v0
         env:
+          GITHUB_TOKEN: ${{ github.token }}
+          TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
+          TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ""
           # Ad-hoc signing: without it an Apple Silicon Mac calls the downloaded app "damaged"
           APPLE_SIGNING_IDENTITY: "-"
-
-      - name: Put the installer on the release
-        env:
-          GH_TOKEN: ${{ github.token }}
-        run: |
-          gh release view "$RELEASE_TAG" >/dev/null 2>&1 \
-            || gh release create "$RELEASE_TAG" --target "$GITHUB_SHA" --title "Flow desktop app ($RELEASE_TAG)" \
-                 --notes "Installers for Windows (.exe) and Mac (.dmg). They talk to the server set in .env.production." \
-            || true
-          gh release upload "$RELEASE_TAG" ${{ matrix.files }} --clobber
+        with:
+          tagName: ${{ github.ref_name }}
+          releaseName: Flow __VERSION__
+          releaseBody: Installers for Windows (.exe) and Mac (.dmg). An installed Flow offers this update by itself.
+          releaseDraft: false
+          prerelease: false
+          args: ${{ matrix.args }}

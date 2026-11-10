@@ -101,6 +101,20 @@ npm run server:prod:logs     # whether mail and Google sign-in are on
 npm run server:prod:stop
 ```
 
+### Releasing the desktop app
+
+GitHub builds Flow for Windows and Mac (`.github/workflows/desktop-app.yml`) when a tag
+with the new version is pushed, and puts the installers on a release:
+
+```bash
+git tag app-v0.2.1 && git push origin app-v0.2.1
+```
+
+An installed Flow looks at the latest release when it starts and offers *Update and restart*
+(`src/lib/version.ts`). Updates are signed: the private key is the repository secret
+`TAURI_SIGNING_PRIVATE_KEY`, its public half is in `src-tauri/tauri.conf.json`. Without that
+key no installed app accepts an update any more, so keep a copy of it.
+
 To reach production from the internet: set `PUBLIC_URL` to its `https://` address
 (cookies are then secure) and either turn on the Cloudflare Tunnel in `prod.env`
 (no ports to open, works on this Mac and in the cloud alike) or put a TLS proxy
