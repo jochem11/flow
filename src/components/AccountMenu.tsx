@@ -34,6 +34,11 @@ export function Avatar(p: { name: string; url?: string | null; size?: number }) 
 }
 
 export function AccountMenu() {
+  // The desktop app: which version is installed (the web version is always the server's)
+  const [appVersion] = createResource(
+    () => inTauri,
+    () => import("@tauri-apps/api/app").then((a) => a.getVersion()).catch(() => undefined),
+  );
   const [uploading, setUploading] = createSignal(false);
   const [settings, setSettings] = createSignal(false);
   return (
@@ -96,6 +101,10 @@ export function AccountMenu() {
                 <button class="menu-item" onClick={logout}>
                   <span>Log out</span>
                 </button>
+                <Show when={appVersion()}>
+                  <div class="menu-sep" />
+                  <div class="menu-title">Flow {appVersion()}</div>
+                </Show>
               </>
             )}
           </Menu>
