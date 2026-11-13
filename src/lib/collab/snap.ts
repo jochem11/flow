@@ -21,9 +21,12 @@ const ATTRIBUTES: Shape = { children: { attributes: {} } };
 const KINDS: Record<LiveKind, { root: string; lists: Record<string, [string, Shape]> }> = {
   flow: { root: "flow", lists: { nodes: ["flow.nodes", {}], edges: ["flow.edges", {}] } },
   eer: { root: "eer", lists: { entities: ["eer.entities", ATTRIBUTES], relations: ["eer.relations", {}], sections: ["eer.sections", {}] } },
-  kanban: { root: "kanban", lists: { columns: ["kanban.columns", {}], cards: ["kanban.cards", {}], labels: ["kanban.labels", {}] } },
+  kanban: { root: "kanban", lists: { columns: ["kanban.columns", {}], cards: ["kanban.cards", {}], labels: ["kanban.labels", {}], sprints: ["kanban.sprints", {}] } },
   chart: { root: "chart", lists: {} },
 };
+
+/** A kanban board's single values (the rest of it is lists) */
+export const KANBAN_VALUES = ["key", "nextNumber"] as const;
 
 export const isLive = (kind: string): kind is LiveKind => kind in KINDS;
 
@@ -74,8 +77,10 @@ export function snapOf(content: DocContent, copy = true): Snap | null {
           columns: plain(d.columns.map(({ cards: _, ...c }) => c)) as unknown as Items,
           cards: plain(d.columns.flatMap((c) => c.cards.map((card) => ({ ...card, _column: c.id })))) as unknown as Items,
           labels: plain(d.labels ?? []) as unknown as Items,
+          sprints: plain(d.sprints ?? []) as unknown as Items,
         },
-        values: {},
+        // The ticket ids' key and counter, once the board has them
+        values: Object.fromEntries(KANBAN_VALUES.filter((k) => d[k] != null).map((k) => [k, d[k]])),
       };
     }
     case "chart": {
@@ -92,7 +97,7 @@ export function readSnap(doc: Y.Doc, kind: LiveKind): Snap {
   const r = root(doc, kind);
   const lists: Snap["lists"] = {};
   for (const [key, [name, shape]] of Object.entries(KINDS[kind].lists)) lists[key] = readList(list(doc, name), shape);
-  const keys = kind === "flow" ? Object.keys(FLOW_SETTINGS) : kind === "chart" ? ["doc"] : [];
+  const keys = kind === "flow" ? Object.keys(FLOW_SETTINGS) : kind === "chart" ? ["doc"] : kind === "kanban" ? [...KANBAN_VALUES] : [];
   return { lists, values: Object.fromEntries(keys.filter((k) => r.has(k)).map((k) => [k, r.get(k)])) };
 }
 

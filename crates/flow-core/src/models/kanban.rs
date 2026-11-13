@@ -19,6 +19,58 @@ pub struct KanbanDoc {
     /// Labels that cards on this board can use
     #[serde(default)]
     pub labels: Vec<KanbanLabel>,
+    /// The prefix of the cards' ticket ids: `WEB` in `WEB-12`
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[specta(optional)]
+    pub key: Option<String>,
+    /// The number the next new card gets (numbers are never used twice)
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[specta(optional)]
+    pub next_number: Option<u32>,
+    /// Sprints, in the order they are planned. A card without a sprint is in the backlog.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    #[specta(optional)]
+    pub sprints: Vec<Sprint>,
+}
+
+/// A sprint: a few weeks of work, with the cards picked for it (`KanbanCard::sprint_id`).
+#[derive(Debug, Clone, Serialize, Deserialize, Type)]
+#[serde(rename_all = "camelCase")]
+pub struct Sprint {
+    pub id: String,
+    pub name: String,
+    /// What the sprint is for
+    #[serde(default)]
+    pub goal: String,
+    /// `YYYY-MM-DD`
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[specta(optional)]
+    pub start_date: Option<String>,
+    /// `YYYY-MM-DD`
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[specta(optional)]
+    pub end_date: Option<String>,
+    #[serde(default)]
+    pub state: SprintState,
+    /// The day it was completed, `YYYY-MM-DD`
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[specta(optional)]
+    pub completed_on: Option<String>,
+    /// How many cards were not done when it was completed (they moved on)
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[specta(optional)]
+    pub carried_over: Option<u32>,
+}
+
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize, Type)]
+#[serde(rename_all = "lowercase")]
+pub enum SprintState {
+    /// Planned, not started
+    #[default]
+    Planned,
+    Active,
+    /// Completed: its cards no longer show on the board
+    Done,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, Type)]
@@ -55,6 +107,18 @@ pub struct CardLink {
 #[serde(rename_all = "camelCase")]
 pub struct KanbanCard {
     pub id: String,
+    /// The number in its ticket id (`12` in `WEB-12`)
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[specta(optional)]
+    pub number: Option<u32>,
+    /// The sprint it is planned in; none: the backlog
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[specta(optional)]
+    pub sprint_id: Option<String>,
+    /// Its place in the backlog and in its sprint: lower comes first
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[specta(optional)]
+    pub rank: Option<f64>,
     pub title: String,
     pub description: String,
     /// Original estimate, in hours

@@ -7821,3 +7821,628 @@ body.presenting .find-bar {
     padding-right: 16px;
   }
 }
+
+/* ---------- kanban: ticket ids, sprints, backlog, summary ---------- */
+.ticket-key {
+  flex: none;
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 11.5px;
+  font-weight: 600;
+  color: var(--text-muted);
+  white-space: nowrap;
+}
+.kanban-card-badges .ticket-key {
+  align-self: center;
+  margin-right: 2px;
+}
+.kd-key {
+  padding: 2px 7px;
+  border: 0;
+  border-radius: 6px;
+  background: var(--hover);
+  font-size: 12px;
+  cursor: pointer;
+}
+.kd-key:hover {
+  color: var(--accent);
+  background: var(--accent-soft);
+}
+.kd-top > .kd-key + * {
+  margin-left: 8px;
+  margin-right: auto;
+}
+.kd-top > .kd-key:nth-last-child(2) {
+  margin-right: auto;
+}
+.kanban-toolbar .spacer,
+.backlog-head .spacer,
+.sum-sprint header .spacer {
+  flex: 1;
+}
+.ticket-key-btn {
+  height: 28px;
+  padding: 0 9px;
+  border: 1px solid transparent;
+  border-radius: 8px;
+  background: none;
+  color: var(--text-muted);
+  font: inherit;
+  font-size: 12.5px;
+  cursor: pointer;
+}
+.ticket-key-btn strong {
+  margin-left: 3px;
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  color: var(--text);
+}
+.ticket-key-btn:not(:disabled):hover {
+  border-color: var(--panel-border);
+  background: var(--panel);
+}
+.ticket-key-btn:disabled {
+  cursor: default;
+}
+.kanban-search.ticket-key-input {
+  width: 84px;
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  text-transform: uppercase;
+}
+.sprint-scope {
+  max-width: 220px;
+  font-weight: 550;
+}
+.kanban-list-sprint {
+  white-space: nowrap;
+}
+.kanban-list-sprint.archived {
+  color: var(--text-muted);
+}
+
+.sprint-state {
+  flex: none;
+  padding: 1px 8px;
+  border-radius: 999px;
+  background: var(--hover);
+  color: var(--text-muted);
+  font-size: 11.5px;
+  font-weight: 650;
+  white-space: nowrap;
+}
+.sprint-state.active {
+  background: var(--accent-soft);
+  color: var(--accent);
+}
+.sprint-state.done {
+  background: var(--green-fill);
+  color: var(--text);
+}
+.backlog-dates,
+.backlog-count {
+  font-size: 12.5px;
+  color: var(--text-muted);
+  white-space: nowrap;
+}
+.backlog-left {
+  font-size: 12.5px;
+  font-weight: 600;
+  white-space: nowrap;
+}
+.backlog-left.over {
+  color: var(--danger);
+}
+
+.kanban-backlog {
+  flex: 1;
+  min-height: 0;
+  overflow: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  padding: 12px 24px 32px;
+}
+.backlog-list {
+  flex: none;
+  padding: 6px 8px 8px;
+  box-shadow: none;
+}
+.backlog-list.active {
+  border-color: color-mix(in srgb, var(--accent) 45%, var(--panel-border));
+}
+.backlog-list.drop-end {
+  outline: 2px dashed var(--accent);
+  outline-offset: -3px;
+}
+.backlog-head {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px;
+  min-height: 36px;
+  padding: 2px 4px;
+}
+.backlog-head h3 {
+  margin: 0;
+  font-size: 14px;
+  font-weight: 650;
+}
+.backlog-fold {
+  display: grid;
+  place-items: center;
+  width: 22px;
+  height: 22px;
+  padding: 0;
+  border: 0;
+  border-radius: 6px;
+  background: none;
+  color: var(--text-muted);
+  cursor: pointer;
+}
+.backlog-fold:hover {
+  background: var(--hover);
+}
+.backlog-goal {
+  margin: 0 4px 6px 34px;
+  font-size: 12.5px;
+  color: var(--text-muted);
+  white-space: pre-wrap;
+}
+.backlog-rows {
+  display: flex;
+  flex-direction: column;
+  border: 1px solid var(--panel-border);
+  border-radius: 8px;
+  overflow: hidden;
+}
+.backlog-empty {
+  padding: 14px;
+  font-size: 12.5px;
+  color: var(--text-muted);
+  text-align: center;
+  border-style: dashed;
+}
+.backlog-row {
+  position: relative;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-height: 36px;
+  padding: 4px 10px;
+  background: var(--panel);
+  font-size: 13px;
+  cursor: pointer;
+  outline: none;
+}
+.backlog-row + .backlog-row {
+  border-top: 1px solid var(--panel-border);
+}
+.backlog-row:hover {
+  background: var(--hover);
+}
+.backlog-row:focus-visible {
+  box-shadow: inset 0 0 0 2px var(--accent);
+}
+.backlog-row.dragging {
+  opacity: 0.4;
+}
+.backlog-row.drop-before::before {
+  content: "";
+  position: absolute;
+  left: 0;
+  right: 0;
+  top: -2px;
+  height: 3px;
+  border-radius: 2px;
+  background: var(--accent);
+  z-index: 1;
+}
+.backlog-row .ticket-key {
+  min-width: 58px;
+}
+.backlog-title {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+.backlog-title-text {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-weight: 550;
+}
+.backlog-title .label-chip,
+.backlog-title .badge {
+  flex: none;
+}
+.backlog-row.done .backlog-title-text {
+  color: var(--text-muted);
+  text-decoration: line-through;
+}
+.backlog-sub {
+  display: inline-flex;
+  color: var(--text-muted);
+}
+.backlog-sub svg {
+  width: 14px;
+  height: 14px;
+}
+.backlog-status {
+  flex: none;
+  max-width: 130px;
+  height: 24px;
+  padding: 0 6px;
+  border: 1px solid transparent;
+  border-radius: 6px;
+  background: var(--hover);
+  color: var(--text);
+  font: inherit;
+  font-size: 12px;
+  font-weight: 550;
+  cursor: pointer;
+}
+.backlog-status[class*="color-"] {
+  background: var(--fill);
+}
+.backlog-status:hover:not(:disabled),
+.backlog-status:focus-visible {
+  border-color: var(--accent);
+  outline: none;
+}
+.backlog-status:disabled {
+  opacity: 1;
+  cursor: default;
+}
+.backlog-add {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  margin-top: 6px;
+  padding: 5px 9px;
+  border: 0;
+  border-radius: 7px;
+  background: none;
+  color: var(--text-muted);
+  font: inherit;
+  font-size: 13px;
+  cursor: pointer;
+}
+.backlog-add:hover {
+  background: var(--hover);
+  color: var(--text);
+}
+.backlog-add-input {
+  margin-top: 6px;
+}
+
+.sprint-form {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  font-size: 13px;
+}
+.sprint-form label {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+.sprint-form label > span {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--text-muted);
+}
+.sprint-form-dates {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 10px;
+}
+.sprint-form-dates input {
+  min-width: 0;
+}
+.sprint-goal-input {
+  height: auto;
+  padding-top: 7px;
+  padding-bottom: 7px;
+  resize: vertical;
+  font: inherit;
+  font-size: 13px;
+}
+.sprint-form-note {
+  margin: 0;
+  color: var(--text-muted);
+}
+.sprint-form-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+  margin-top: 4px;
+}
+.sprint-complete-counts {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 10px;
+}
+.sprint-complete-counts > div {
+  display: flex;
+  flex-direction: column;
+  padding: 10px 12px;
+  border: 1px solid var(--panel-border);
+  border-radius: 10px;
+}
+.sprint-complete-counts strong {
+  font-size: 22px;
+  line-height: 1.2;
+}
+.sprint-complete-counts span {
+  color: var(--text-muted);
+  font-size: 12.5px;
+}
+
+.kanban-summary {
+  flex: 1;
+  min-height: 0;
+  overflow: auto;
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+  align-content: start;
+  gap: 14px;
+  padding: 12px 24px 32px;
+}
+.sum-tiles,
+.sum-wide {
+  grid-column: 1 / -1;
+}
+.sum-tiles {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+  gap: 14px;
+}
+.sum-tile {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding: 12px 14px;
+  box-shadow: none;
+}
+.sum-tile-label {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--text-muted);
+}
+.sum-tile strong {
+  font-size: 28px;
+  font-weight: 650;
+  line-height: 1.15;
+  font-variant-numeric: tabular-nums;
+}
+.sum-tile.warn strong {
+  color: var(--danger);
+}
+.sum-tile-note {
+  font-size: 12px;
+  color: var(--text-muted);
+}
+.sum-panel {
+  min-width: 0;
+  padding: 14px 16px 16px;
+  background: var(--panel);
+  border: 1px solid var(--panel-border);
+  border-radius: var(--radius);
+}
+.sum-panel h3 {
+  margin: 0;
+  font-size: 14px;
+  font-weight: 650;
+}
+.sum-note {
+  margin: 2px 0 0;
+  font-size: 12px;
+  color: var(--text-muted);
+}
+.sum-nosprint {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 10px;
+  font-size: 13px;
+}
+.sum-nosprint p {
+  flex: 1;
+  min-width: 200px;
+  margin: 0;
+  color: var(--text-muted);
+}
+.sum-nosprint strong {
+  color: var(--text);
+}
+.sum-sprint header {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+.sum-sprint .backlog-goal {
+  margin: 6px 0 0;
+}
+.sum-sprint-meters {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+  gap: 16px;
+  margin-top: 12px;
+}
+.sum-bars {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin-top: 12px;
+}
+.sum-bar-row {
+  display: grid;
+  grid-template-columns: minmax(90px, 34%) 1fr 32px;
+  align-items: center;
+  gap: 10px;
+  font-size: 13px;
+}
+.sum-bar-label {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  min-width: 0;
+}
+.sum-bar-label > span:not(.priority-icon) {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.sum-bar-label small {
+  flex: none;
+  color: var(--text-muted);
+  font-size: 11.5px;
+}
+.sum-bar-track {
+  height: 8px;
+  border-radius: 4px;
+  background: var(--hover);
+}
+.sum-bar {
+  display: block;
+  height: 100%;
+  min-width: 0;
+  border-radius: 4px;
+  background: var(--accent);
+  transition: width 0.2s;
+}
+.sum-bar-value {
+  text-align: right;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+}
+.sum-time {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(90px, 1fr));
+  gap: 10px;
+  margin: 12px 0;
+}
+.sum-time > div {
+  display: flex;
+  flex-direction: column;
+}
+.sum-time strong {
+  font-size: 18px;
+  font-variant-numeric: tabular-nums;
+}
+.sum-time span {
+  font-size: 12px;
+  color: var(--text-muted);
+}
+.sum-meter {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+  font-size: 12.5px;
+  color: var(--text-muted);
+}
+.sum-meter-track {
+  height: 8px;
+  border-radius: 4px;
+  background: var(--hover);
+  overflow: hidden;
+}
+.sum-meter-track > div {
+  height: 100%;
+  border-radius: 4px;
+  background: var(--accent);
+  transition: width 0.2s;
+}
+.sum-meter.over .sum-meter-track > div {
+  background: var(--danger);
+}
+.sum-meter.over > span {
+  color: var(--danger);
+}
+.sum-cards {
+  display: flex;
+  flex-direction: column;
+  margin-top: 8px;
+}
+.sum-card {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 6px;
+  border: 0;
+  border-radius: 7px;
+  background: none;
+  color: var(--text);
+  font: inherit;
+  font-size: 13px;
+  text-align: left;
+  cursor: pointer;
+}
+.sum-card:hover {
+  background: var(--hover);
+}
+.sum-card-title {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.sum-table-wrap {
+  margin-top: 10px;
+  overflow-x: auto;
+}
+.sum-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 13px;
+}
+.sum-table th {
+  padding: 6px 10px;
+  border-bottom: 1px solid var(--panel-border);
+  color: var(--text-muted);
+  font-size: 12px;
+  font-weight: 600;
+  text-align: left;
+  white-space: nowrap;
+}
+.sum-table td {
+  padding: 7px 10px;
+  border-bottom: 1px solid var(--panel-border);
+  white-space: nowrap;
+}
+.sum-table tr:last-child td {
+  border-bottom: 0;
+}
+.sum-table .num {
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+}
+.sum-sprint-name {
+  font-weight: 600;
+}
+.sum-row-action {
+  text-align: right;
+}
+@media (max-width: 640px) {
+  .kanban-backlog,
+  .kanban-summary {
+    padding-left: 12px;
+    padding-right: 12px;
+  }
+  .backlog-row {
+    flex-wrap: wrap;
+  }
+  .backlog-title {
+    flex-basis: calc(100% - 80px);
+  }
+}
+/* Five views do not fit a phone: only the one that is open keeps its name */
+@media (max-width: 640px) {
+  .kanban-toolbar .segmented button:not(.active) {
+    gap: 0;
+    font-size: 0;
+  }
+}

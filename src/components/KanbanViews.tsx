@@ -1,20 +1,27 @@
-// Above a kanban board: the view (board, list, timeline) and the filter. And the
-// list view: every card in a table that sorts by any column.
+// Above a kanban board: the view (summary, backlog, board, list, timeline), the
+// sprint the board shows, and the filter. And the list view: every card in a
+// table that sorts by any column.
 
 import { createMemo, createSignal, For, Show } from "solid-js";
 import { me } from "../lib/auth";
-import { allCards, findCard, formatHours, kanban, labelById, labels, setOpenCardId } from "../lib/kanban";
-import { filter, setFilter, setView, updateFilter, view, visible, type KanbanView } from "../lib/kanbanView";
+import { canEdit } from "../lib/access";
+import { allCards, boardKey, cardKey, findCard, formatHours, isArchived, kanban, labelById, labels, plannedSprints, setBoardKey, setOpenCardId, sprintById, sprintOf, sprints } from "../lib/kanban";
+import { filter, scope, setFilter, setScope, setView, updateFilter, view, visible, type KanbanView } from "../lib/kanbanView";
+import { stateOf } from "../lib/tickets";
+import { toast } from "../lib/toast";
+import { openSprintDialog, sprintDates, sprintLeft } from "./KanbanBacklog";
 import { personById } from "../lib/people";
 import { isFiltering, NO_FILTER, PRIORITIES, priorityRank } from "../lib/planning";
 import type { KanbanCard, Priority } from "../lib/types";
 import { openDoc } from "../lib/workspace";
 import { Avatar } from "./AccountMenu";
-import { IconKanban, IconList, IconTimeline } from "./icons";
+import { IconBacklog, IconKanban, IconList, IconSummary, IconTimeline } from "./icons";
 import { LabelContent } from "./KanbanCardDialog";
 import { BlockedChip, DueChip, PriorityIcon } from "./Planning";
 
 const VIEWS: { view: KanbanView; label: string; icon: () => any }[] = [
+  { view: "summary", label: "Summary", icon: IconSummary },
+  { view: "backlog", label: "Backlog", icon: IconBacklog },
   { view: "board", label: "Board", icon: IconKanban },
   { view: "list", label: "List", icon: IconList },
   { view: "timeline", label: "Timeline", icon: IconTimeline },
@@ -34,6 +41,11 @@ export function KanbanToolbar() {
           )}
         </For>
       </div>
+      <Show when={view() === "board"}>
+        <SprintScope />
+      </Show>
+      {/* The summary is about every card */}
+      <Show when={view() !== "summary"}>
       <input
         class="kanban-search"
         type="search"
@@ -71,14 +83,103 @@ export function KanbanToolbar() {
           Clear
         </button>
       </Show>
+      </Show>
+      <span class="spacer" />
+      <TicketKey />
     </div>
   );
 }
 
-type SortKey = "status" | "title" | "assignees" | "priority" | "due" | "labels" | "time";
+/** Which cards the board shows: a sprint, the backlog, or everything. With what is left of a running sprint. */
+function SprintScope() {
+  const sprint = () => sprintById(scope());
+  const left = () => (sprint() ? sprintLeft(sprint()!) : null);
+  return (
+    <Show when={sprints().length}>
+      <select class="kanban-filter-select sprint-scope" title="What the board shows" aria-label="What the board shows" value={scope()} onChange={(e) => setScope(e.currentTarget.value, openDoc()?.id)}>
+        <For each={plannedSprints()}>{(s) => <option value={s.id}>{stateOf(s) === "active" ? `${s.name} (active)` : s.name}</option>}</For>
+        <option value="backlog">Backlog</option>
+        <option value="all">All cards</option>
+      </select>
+      <Show when={sprint()}>
+        {(s) => (
+          <>
+            <Show when={sprintDates(s())}>
+              <span class="backlog-dates" title={s().goal || undefined}>
+                {sprintDates(s())}
+              </span>
+            </Show>
+            <Show when={left()}>{(l) => <span class="backlog-left" classList={{ over: l().over }}>{l().text}</span>}</Show>
+            <Show when={canEdit()}>
+              <Show
+                when={stateOf(s()) === "active"}
+                fallback={
+                  <button class="text-btn small" onClick={() => openSprintDialog("start", s().id)}>
+                    Start sprint
+                  </button>
+                }
+              >
+                <button class="text-btn small" onClick={() => openSprintDialog("complete", s().id)}>
+                  Complete sprint
+                </button>
+              </Show>
+            </Show>
+          </>
+        )}
+      </Show>
+    </Show>
+  );
+}
+
+/** The key the ticket ids start with (`WEB` in `WEB-12`); click to change it. */
+function TicketKey() {
+  const [editing, setEditing] = createSignal(false);
+  const commit = (value: string) => {
+    setEditing(false);
+    if (value.trim() && !setBoardKey(value)) toast("A key is 2 to 6 letters or digits, starting with a letter", "error");
+  };
+  return (
+    <Show when={kanban.key}>
+      <Show
+        when={editing()}
+        fallback={
+          <button class="ticket-key-btn" disabled={!canEdit()} title="The key every ticket id starts with. Click to change it" onClick={() => setEditing(true)}>
+            Key <strong>{boardKey()}</strong>
+          </button>
+        }
+      >
+        <input
+          class="kanban-search ticket-key-input"
+          aria-label="Ticket key"
+          value={boardKey()}
+          maxLength={6}
+          ref={(el) =>
+            queueMicrotask(() => {
+              el.focus();
+              el.select();
+            })
+          }
+          onInput={(e) => (e.currentTarget.value = e.currentTarget.value.toUpperCase())}
+          onKeyDown={(e) => {
+            if (e.key === "Enter") e.currentTarget.blur();
+            if (e.key === "Escape") {
+              e.currentTarget.value = "";
+              e.currentTarget.blur();
+            }
+          }}
+          onBlur={(e) => commit(e.currentTarget.value)}
+        />
+      </Show>
+    </Show>
+  );
+}
+
+type SortKey = "id" | "status" | "sprint" | "title" | "assignees" | "priority" | "due" | "labels" | "time";
 const COLUMNS: { key: SortKey; label: string }[] = [
+  { key: "id", label: "ID" },
   { key: "title", label: "Title" },
   { key: "status", label: "Status" },
+  { key: "sprint", label: "Sprint" },
   { key: "assignees", label: "Assigned to" },
   { key: "priority", label: "Priority" },
   { key: "due", label: "Due" },
@@ -93,6 +194,14 @@ export function KanbanList() {
   const order = createMemo(() => new Map(kanban.columns.flatMap((c, ci) => c.cards.map((card, i) => [card.id, ci * 10_000 + i] as const))));
   const value = (c: KanbanCard, key: SortKey): string | number => {
     switch (key) {
+      case "id":
+        return c.number ?? Number.MAX_SAFE_INTEGER;
+      case "sprint": {
+        // As they are planned; the backlog after them, the completed ones last
+        const s = sprintOf(c);
+        if (!s) return 1e6;
+        return (stateOf(s) === "done" ? 2e6 : 0) + sprints().indexOf(s);
+      }
       case "status":
         return order().get(c.id) ?? 0;
       case "title":
@@ -144,6 +253,9 @@ export function KanbanList() {
               const col = () => findCard(c.id)?.column;
               return (
                 <tr onClick={() => setOpenCardId(c.id)} classList={{ done: !!col()?.done }}>
+                  <td>
+                    <span class="ticket-key">{cardKey(c)}</span>
+                  </td>
                   <td class="kanban-list-title">
                     <Show when={c.parentId}>
                       <span class="kanban-list-sub">↳ </span>
@@ -153,6 +265,9 @@ export function KanbanList() {
                   </td>
                   <td>
                     <span class={`kanban-list-status ${col()?.color ? `color-${col()!.color}` : ""}`}>{col()?.title}</span>
+                  </td>
+                  <td class="kanban-list-sprint" classList={{ archived: isArchived(c) }}>
+                    {sprintOf(c)?.name ?? ""}
                   </td>
                   <td>
                     <span class="kanban-card-assignees">

@@ -377,6 +377,17 @@ export const IconList = () => (
     <path d="M9 6h11M9 12h11M9 18h11M4.5 6h.01M4.5 12h.01M4.5 18h.01" />
   </Svg>
 );
+export const IconBacklog = () => (
+  <Svg size={16}>
+    <rect x="4" y="4" width="16" height="5" rx="1.5" />
+    <path d="M4 13.5h16M4 18.5h10" />
+  </Svg>
+);
+export const IconSummary = () => (
+  <Svg size={16}>
+    <path d="M4 20V10M10 20V4M16 20v-7M21 20H3" />
+  </Svg>
+);
 export const IconTimeline = () => (
   <Svg size={16}>
     <path d="M4 4v16M8 7h7M11 12h8M7 17h6" />

@@ -16,6 +16,7 @@ import { focusOn } from "./camera";
 import { eer, entityRect, setEerCamera, setEerSelected } from "./eer";
 import { setOpenCardId } from "./kanban";
 import { board, isContainer, select, uid } from "./store";
+import { nextNumber } from "./tickets";
 import type { CardLink, DocumentMeta, FlowNode, KanbanCard, KanbanDoc, NodeKind } from "./types";
 import { docsOf, openDoc, openDocument } from "./workspace";
 import { changeClosedBoard } from "./collab";
@@ -276,8 +277,12 @@ export function createLinkedCard(boardId: string, title: string, nodeId: string 
   const docId = openDoc()?.id;
   if (!docId || !title.trim()) return Promise.resolve();
   return changeBoard(boardId, (b) => {
+    // Numbered like the others, once the board has ticket ids
+    const number = b.key ? nextNumber(b) : undefined;
+    if (number) b.nextNumber = number + 1;
     const card: KanbanCard = {
       id: uid(),
+      number,
       title: title.trim(),
       description: "",
       labelIds: [],
