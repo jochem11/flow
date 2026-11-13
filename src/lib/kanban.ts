@@ -7,6 +7,7 @@
 // As in Jira: every card has a ticket id (`WEB-12`: the board's key and the
 // card's number), and is in a sprint or in the backlog (tickets.ts).
 
+import { cleanHex } from "./colors";
 import { createSignal } from "solid-js";
 import { createStore, produce, reconcile, unwrap } from "solid-js/store";
 import { me } from "./auth";
@@ -167,13 +168,14 @@ export function renameColumn(id: string, title: string) {
   touch();
 }
 
-/** Sets or clears (`null`) the color or icon of a column. */
-export function setColumnStyle(id: string, style: { color?: NodeColor | null; icon?: KanbanIcon | null }) {
+/** Sets or clears (`null`) the color (a named one, or `tint`: one of one's own) or icon of a column. */
+export function setColumnStyle(id: string, style: { color?: NodeColor | null; tint?: string | null; icon?: KanbanIcon | null }) {
   setKanban(
     "columns",
     (c) => c.id === id,
     produce((col) => {
       if (style.color !== undefined) col.color = style.color ?? undefined;
+      if (style.tint !== undefined) col.tint = cleanHex(style.tint) ?? undefined;
       if (style.icon !== undefined) col.icon = style.icon ?? undefined;
     }),
   );
@@ -347,7 +349,7 @@ export function setDone(cardId: string, done: boolean) {
 
 // ---------- labels ----------
 
-const LABEL_COLORS: NodeColor[] = ["blue", "green", "yellow", "pink", "purple", "white"];
+const LABEL_COLORS: NodeColor[] = ["blue", "green", "yellow", "pink", "purple", "teal", "orange", "red", "gray", "white"];
 
 export function addLabel(name: string): string | null {
   const value = name.trim();
@@ -366,6 +368,7 @@ export function updateLabel(id: string, changes: Partial<Omit<KanbanLabel, "id">
     produce((label) => {
       Object.assign(label, changes);
       if (changes.icon === null) label.icon = undefined;
+      if (changes.tint !== undefined) label.tint = cleanHex(changes.tint) ?? undefined;
     }),
   );
   touch();

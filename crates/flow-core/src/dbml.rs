@@ -311,6 +311,7 @@ impl Reader {
             y: 0.0,
             attributes: vec![],
             color: None,
+            tint: None,
             comment: None,
             indexes: vec![],
         };
@@ -786,6 +787,7 @@ impl Reader {
                     w: right + PAD - x0,
                     h: bottom + PAD,
                     color: None,
+                    tint: None,
                 });
                 right += PAD;
             }
@@ -1220,6 +1222,7 @@ mod tests {
             w: 400.0,
             h: 500.0,
             color: None,
+            tint: None,
         });
         let dbml = to_dbml(&doc);
         let got = read_dbml(&dbml);

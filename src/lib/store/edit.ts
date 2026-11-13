@@ -3,7 +3,8 @@
 import { batch } from "solid-js";
 import { produce, reconcile, unwrap } from "solid-js/store";
 import { alignRects, bounds, distributeRects, intersects, portAt, type AlignTo, type Pt } from "../geometry";
-import type { Arranged, DiagramType, FlowDoc, FlowEdge, FlowNode, NodeColor } from "../types";
+import { cleanHex, type ColorChoice } from "../colors";
+import type { Arranged, DiagramType, FlowDoc, FlowEdge, FlowNode } from "../types";
 import { freeEndsIn, isBetweenLifelines, makeMessage, moveFreeEnds } from "./edges";
 import { assignParents, frameAt, growFrames, updateFrames, withContents } from "./frames";
 import { checkpoint, resetHistory } from "./history";
@@ -164,11 +165,19 @@ export function setNodeTextLive(id: string, text: string) {
   touch();
 }
 
-export function setSelectionColor(color: NodeColor) {
+/** A named color for the selection, or a color of one's own (`tint`; a named color takes it away again). */
+export function setSelectionColor(choice: ColorChoice) {
   const sel = derived.selectedSet();
   if (!sel.size) return;
   checkpoint();
-  setBoard("nodes", (n) => sel.has(n.id) && !n.locked, "color", color);
+  setBoard(
+    "nodes",
+    (n) => sel.has(n.id) && !n.locked,
+    produce((n) => {
+      if (choice.color) n.color = choice.color;
+      if (choice.tint !== undefined) n.tint = cleanHex(choice.tint) ?? undefined;
+    }),
+  );
   touch();
 }
 

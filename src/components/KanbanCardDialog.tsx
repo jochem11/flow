@@ -1,6 +1,8 @@
 // The card dialog, laid out like a work item in Azure Boards: description,
 // subtasks and discussion on the left; status, parent, labels and effort on the right.
 
+import { colorClass, tintVars } from "../lib/colors";
+import { ColorPicker } from "./ColorPicker";
 import { canComment, canEdit } from "../lib/access";
 import { startThread } from "../lib/comments";
 import { openDoc } from "../lib/workspace";
@@ -48,7 +50,7 @@ import { people, personById } from "../lib/people";
 import { Avatar } from "./AccountMenu";
 import { Menu } from "./Menu";
 import { activeTimer, now, startTimer, stopTimer } from "../lib/timer";
-import type { KanbanCard, KanbanComment, KanbanLabel, KanbanTimeEntry, NodeColor } from "../lib/types";
+import type { KanbanCard, KanbanComment, KanbanLabel, KanbanTimeEntry } from "../lib/types";
 import { ConfirmButton } from "./ConfirmButton";
 import { IconClose, IconPlay, IconStop, IconSubtasks, IconTrash, KANBAN_ICON_KEYS, KANBAN_ICONS } from "./icons";
 import { MarkdownView, onMarkdownKeyDown } from "./Markdown";
@@ -56,7 +58,6 @@ import { RichTextEditor } from "./RichTextEditor";
 import { Links } from "./CardLinks";
 import { PlanningFields } from "./Planning";
 
-const COLORS: NodeColor[] = ["white", "yellow", "green", "blue", "purple", "pink"];
 
 const formatDate = (ms: number) =>
   new Date(ms).toLocaleString("en-GB", { day: "numeric", month: "short", hour: "2-digit", minute: "2-digit" });
@@ -476,7 +477,7 @@ function Labels(p: { card: KanbanCard }) {
             <For each={labels()}>
               {(l) => (
                 <button
-                  class={`label-chip color-${l.color}`}
+                  class={`label-chip ${colorClass(l.color, l.tint)}`} style={tintVars(l.tint)}
                   classList={{ off: !has(l.id) }}
                   title={l.description || (has(l.id) ? "Remove label" : "Add label")}
                   onClick={() => toggleCardLabel(p.card.id, l.id)}
@@ -523,16 +524,7 @@ function LabelEditor(p: { label: KanbanLabel }) {
         </ConfirmButton>
       </div>
       <div class="kd-swatches">
-        <For each={COLORS}>
-          {(c) => (
-            <button
-              class={`swatch color-${c}`}
-              classList={{ active: p.label.color === c }}
-              title={c}
-              onClick={() => updateLabel(p.label.id, { color: c })}
-            />
-          )}
-        </For>
+        <ColorPicker color={p.label.color} tint={p.label.tint} onPick={(c) => updateLabel(p.label.id, { ...(c.color ? { color: c.color } : {}), ...(c.tint !== undefined ? { tint: c.tint } : {}) })} />
       </div>
       <IconPicker value={p.label.icon ?? null} onChange={(icon) => updateLabel(p.label.id, { icon: icon ?? undefined })} />
     </div>

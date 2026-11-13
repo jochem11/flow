@@ -154,6 +154,10 @@ pub enum NodeColor {
     Blue,
     Purple,
     Pink,
+    Red,
+    Orange,
+    Teal,
+    Gray,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, Type)]
@@ -168,6 +172,10 @@ pub struct Node {
     pub h: f64,
     pub text: String,
     pub color: NodeColor,
+    /// A color of one's own (`#rrggbb`, from the color wheel): used instead of `color`
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[specta(optional)]
+    pub tint: Option<String>,
     /// The frame (section, swimlane, package, ...) this node belongs to: it moves
     /// along with that frame. Set when the node is added or dropped inside one.
     #[serde(default, skip_serializing_if = "Option::is_none")]

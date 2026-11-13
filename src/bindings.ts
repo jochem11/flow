@@ -454,6 +454,8 @@ export type EerSection = {
 	w: number,
 	h: number,
 	color?: NodeColor | null,
+	/**  A color of one's own (`#rrggbb`, from the color wheel): used instead of `color` */
+	tint?: string | null,
 };
 
 /**  A table. */
@@ -466,6 +468,8 @@ export type Entity = {
 	attributes: Attribute[],
 	/**  Header color; missing means white */
 	color?: NodeColor | null,
+	/**  A color of one's own (`#rrggbb`, from the color wheel): used instead of `color` */
+	tint?: string | null,
 	/**  Written to the SQL as a comment above the table */
 	comment?: string | null,
 	/**  Indexes on its columns (the primary key and unique columns have their own) */
@@ -579,6 +583,8 @@ export type KanbanColumn = {
 	id: string,
 	title: string,
 	color?: NodeColor | null,
+	/**  A color of one's own (`#rrggbb`, from the color wheel): used instead of `color` */
+	tint?: string | null,
 	icon?: KanbanIcon | null,
 	/**  Cards in this column count as done (e.g. "Done", "Archived"). */
 	done?: boolean,
@@ -610,12 +616,14 @@ export type KanbanDoc = {
  *  The icons a column or label can have. The drawings live in the frontend
  *  (`KANBAN_ICONS` in src/components/icons.tsx).
  */
-export type KanbanIcon = "bug" | "feature" | "idea" | "design" | "research" | "docs" | "test" | "deploy" | "star" | "flag";
+export type KanbanIcon = "bug" | "feature" | "idea" | "design" | "research" | "docs" | "test" | "deploy" | "star" | "flag" | "rocket" | "bolt" | "heart" | "lock" | "chat" | "mail" | "calendar" | "clock" | "person" | "team" | "cart" | "money" | "chart" | "tool" | "database" | "cloud" | "phone" | "globe" | "home" | "check";
 
 export type KanbanLabel = {
 	id: string,
 	name: string,
 	color: NodeColor,
+	/**  A color of one's own (`#rrggbb`, from the color wheel): used instead of `color` */
+	tint?: string | null,
 	description?: string,
 	icon?: KanbanIcon | null,
 };
@@ -680,6 +688,8 @@ export type Node = {
 	h: number,
 	text: string,
 	color: NodeColor,
+	/**  A color of one's own (`#rrggbb`, from the color wheel): used instead of `color` */
+	tint?: string | null,
 	/**
 	 *  The frame (section, swimlane, package, ...) this node belongs to: it moves
 	 *  along with that frame. Set when the node is added or dropped inside one.
@@ -710,7 +720,7 @@ export type Node = {
 	focal?: boolean | null,
 };
 
-export type NodeColor = "white" | "yellow" | "green" | "blue" | "purple" | "pink";
+export type NodeColor = "white" | "yellow" | "green" | "blue" | "purple" | "pink" | "red" | "orange" | "teal" | "gray";
 
 export type NodeKind = "box" | "diamond" | "note" | "pill" | 
 /**  Free text without a box */

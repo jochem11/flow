@@ -1274,7 +1274,7 @@ fn er_diagram(lines: &[String]) -> DiagramImport {
         if let Some(i) = entities.iter().position(|e| e.name == name) {
             return i;
         }
-        entities.push(Entity { id: uid(), name, x: 0.0, y: 0.0, attributes: vec![], color: None, comment: None, indexes: vec![] });
+        entities.push(Entity { id: uid(), name, x: 0.0, y: 0.0, attributes: vec![], color: None, tint: None, comment: None, indexes: vec![] });
         entities.len() - 1
     }
 

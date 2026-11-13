@@ -31,6 +31,10 @@ pub struct EerSection {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     #[specta(optional)]
     pub color: Option<NodeColor>,
+    /// A color of one's own (`#rrggbb`, from the color wheel): used instead of `color`
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[specta(optional)]
+    pub tint: Option<String>,
 }
 
 /// A table.
@@ -47,6 +51,10 @@ pub struct Entity {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     #[specta(optional)]
     pub color: Option<NodeColor>,
+    /// A color of one's own (`#rrggbb`, from the color wheel): used instead of `color`
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[specta(optional)]
+    pub tint: Option<String>,
     /// Written to the SQL as a comment above the table
     #[serde(default, skip_serializing_if = "Option::is_none")]
     #[specta(optional)]

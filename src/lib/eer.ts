@@ -2,6 +2,7 @@
 // Tables are entities with attributes (columns); relations are foreign keys.
 // SQL is made from this in Rust (src-tauri/src/commands/eer.rs).
 
+import { cleanHex, type ColorChoice } from "./colors";
 import { batch, createSignal } from "solid-js";
 import { createStore, produce, reconcile, unwrap } from "solid-js/store";
 import type { Attribute, Camera, Cardinality, ColumnPair, DataType, EerDoc, EerSection, Entity, NodeColor, Relation, SqlImport, TableIndex } from "./types";
@@ -270,14 +271,28 @@ export function nudgeEerSelection(dx: number, dy: number) {
   growEerSections(selection().ids, was);
 }
 
-export function setEerSelectionColor(color: NodeColor) {
+/** A named color for the selection, or a color of one's own (`tint`; a named color takes it away again). */
+export function setEerSelectionColor(choice: ColorChoice) {
   const ids = new Set(selection().ids);
   if (!ids.size) return;
   eerCheckpoint();
   batch(() => {
-    setEer("entities", (e) => ids.has(e.id), "color", color);
-    setEer("sections", (s) => ids.has(s.id), "color", color);
+    setEer("entities", (e) => ids.has(e.id), paint(choice));
+    setEer("sections", (s) => ids.has(s.id), paint(choice));
   });
+  touch();
+}
+
+const paint = (choice: ColorChoice) =>
+  produce((x: { color?: NodeColor | null; tint?: string | null }) => {
+    if (choice.color) x.color = choice.color;
+    if (choice.tint !== undefined) x.tint = cleanHex(choice.tint) ?? undefined;
+  });
+
+/** The color of one table (from its panel). */
+export function setEntityColor(id: string, choice: ColorChoice) {
+  eerCheckpoint();
+  setEer("entities", (e) => e.id === id, paint(choice));
   touch();
 }
 

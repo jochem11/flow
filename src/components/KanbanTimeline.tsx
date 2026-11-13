@@ -3,6 +3,7 @@
 // the due date; drag along an empty row to give a card its dates. Arrows run from
 // a card to the cards waiting for it ("blocked by").
 
+import { colorClass, tintVars } from "../lib/colors";
 import { createMemo, For, onMount, Show } from "solid-js";
 import { canEdit } from "../lib/access";
 import { trackPointer } from "../lib/interactions";
@@ -188,13 +189,13 @@ function Row(p: { card: KanbanCard; xOf: (day: string) => number; from: string }
       <button class="kt-title" style={{ width: `${TITLE_W}px` }} onClick={() => setOpenCardId(p.card.id)} classList={{ done: done() }}>
         <Show when={p.card.priority}>{(pr) => <PriorityIcon priority={pr()} />}</Show>
         <span class="kt-title-text">{p.card.title}</span>
-        <span class={`kt-status ${column()?.color ? `color-${column()!.color}` : ""}`}>{column()?.title}</span>
+        <span class={`kt-status ${colorClass(column()?.color, column()?.tint)}`} style={tintVars(column()?.tint)}>{column()?.title}</span>
       </button>
       <div class="kt-track" classList={{ empty: !span(), editable: canEdit() }} onPointerDown={draw} title={span() ? undefined : canEdit() ? "Drag here to plan this card" : undefined}>
         <Show when={span()}>
           {(s) => (
             <div
-              class={`kt-bar ${column()?.color ? `color-${column()!.color}` : ""}`}
+              class={`kt-bar ${colorClass(column()?.color, column()?.tint)}`}
               classList={{
                 done: done(),
                 overdue: isOverdue(p.card, done()),
@@ -202,7 +203,7 @@ function Row(p: { card: KanbanCard; xOf: (day: string) => number; from: string }
                 // Too short for its name: that goes beside it
                 narrow: daysBetween(s().from, s().to) < 3,
               }}
-              style={{ left: `${p.xOf(s().from) + 2}px`, width: `${(daysBetween(s().from, s().to) + 1) * DAY_W - 4}px` }}
+              style={{ ...tintVars(column()?.tint), left: `${p.xOf(s().from) + 2}px`, width: `${(daysBetween(s().from, s().to) + 1) * DAY_W - 4}px` }}
               title={`${p.card.title}: ${shortDay(s().from)}${s().to !== s().from ? ` – ${shortDay(s().to)}` : ""}`}
               onPointerDown={(e) => drag(e, "move")}
             >

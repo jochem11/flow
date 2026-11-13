@@ -1,6 +1,7 @@
+import { ColorPicker } from "./ColorPicker";
 import { createMemo, For, Show } from "solid-js";
 import { bounds, type Rect } from "../lib/geometry";
-import type { FlowEdge, NodeColor } from "../lib/types";
+import type { FlowEdge } from "../lib/types";
 import {
   addLane,
   board,
@@ -41,15 +42,6 @@ import { FloatingBar, grow } from "./FloatingBar";
 import { CardLinksMenu } from "./CardLinksMenu";
 import { CapMenu, EndLabelsMenu, NEXT_PATTERN, NEXT_SIDE, PATTERN_NAMES, RELATIONS, SIDE_NAMES, STYLES } from "./EdgeMenus";
 
-const COLORS: NodeColor[] = ["white", "yellow", "green", "blue", "purple", "pink"];
-const COLOR_NAMES: Record<NodeColor, string> = {
-  white: "White",
-  yellow: "Yellow",
-  green: "Green",
-  blue: "Blue",
-  purple: "Purple",
-  pink: "Pink",
-};
 
 
 /** Floating bar above the selection: color, duplicate, delete; for an edge its style and arrowheads. */
@@ -133,22 +125,18 @@ export function ContextBar() {
     const sel = selectedNodes();
     return sel.length && sel.every((n) => n.color === sel[0].color) ? sel[0].color : null;
   };
+  /** The color of their own that all of the selection has, if they do */
+  const currentTint = () => {
+    const sel = selectedNodes();
+    return sel.length && sel[0].tint && sel.every((n) => n.tint === sel[0].tint) ? sel[0].tint : null;
+  };
 
   return (
     <>
       <Show when={!hidden() && nodeBox()}>
         {(box) => (
           <FloatingBar box={box()}>
-            <For each={COLORS}>
-              {(c) => (
-                <button
-                  class={`swatch color-${c}`}
-                  classList={{ active: currentColor() === c }}
-                  title={COLOR_NAMES[c]}
-                  onClick={() => setSelectionColor(c)}
-                />
-              )}
-            </For>
+            <ColorPicker compact color={currentColor()} tint={currentTint()} onPick={setSelectionColor} />
             <span class="divider" />
             <Show when={frame()}>
               {(n) => (

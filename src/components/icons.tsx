@@ -633,6 +633,179 @@ export const KANBAN_ICONS: Record<KanbanIcon, { label: string; icon: () => JSX.E
         <path d="M5 21V4M5 4h11l-2 4 2 4H5" />
       </Svg>
     ),
+  },  rocket: {
+    label: "Launch",
+    icon: () => (
+      <Svg size={14}>
+        <path d="M12 15l-3-3c.5-4 3-7.5 8-9 1.5 5-1 8.5-5 12zM9 12l-4 1 2-4.5M12 15l-1 4 4.5-2M5 19l2.5-2.5" />
+        <circle cx="14.5" cy="8.5" r="1.2" />
+      </Svg>
+    ),
+  },
+  bolt: {
+    label: "Quick",
+    icon: () => (
+      <Svg size={14}>
+        <path d="M13 3L5 14h6l-1 7 8-11h-6z" />
+      </Svg>
+    ),
+  },
+  heart: {
+    label: "Favourite",
+    icon: () => (
+      <Svg size={14}>
+        <path d="M12 20s-7-4.3-7-9.5A4 4 0 0112 8a4 4 0 017 2.5C19 15.7 12 20 12 20z" />
+      </Svg>
+    ),
+  },
+  lock: {
+    label: "Security",
+    icon: () => (
+      <Svg size={14}>
+        <rect x="5" y="11" width="14" height="9" rx="2" />
+        <path d="M8 11V8a4 4 0 018 0v3" />
+      </Svg>
+    ),
+  },
+  chat: {
+    label: "Discussion",
+    icon: () => (
+      <Svg size={14}>
+        <path d="M5 5h14a1 1 0 011 1v9a1 1 0 01-1 1h-7l-4 4v-4H5a1 1 0 01-1-1V6a1 1 0 011-1z" />
+      </Svg>
+    ),
+  },
+  mail: {
+    label: "Mail",
+    icon: () => (
+      <Svg size={14}>
+        <rect x="3" y="6" width="18" height="12" rx="2" />
+        <path d="M3.5 7.5l8.5 6 8.5-6" />
+      </Svg>
+    ),
+  },
+  calendar: {
+    label: "Planning",
+    icon: () => (
+      <Svg size={14}>
+        <rect x="4" y="5" width="16" height="15" rx="2" />
+        <path d="M4 10h16M8 3v4M16 3v4" />
+      </Svg>
+    ),
+  },
+  clock: {
+    label: "Time",
+    icon: () => (
+      <Svg size={14}>
+        <circle cx="12" cy="12" r="8.5" />
+        <path d="M12 7.5V12l3 2" />
+      </Svg>
+    ),
+  },
+  person: {
+    label: "Person",
+    icon: () => (
+      <Svg size={14}>
+        <circle cx="12" cy="8" r="3.5" />
+        <path d="M5 20a7 7 0 0114 0" />
+      </Svg>
+    ),
+  },
+  team: {
+    label: "Team",
+    icon: () => (
+      <Svg size={14}>
+        <circle cx="9" cy="9" r="3" />
+        <path d="M3 19a6 6 0 0112 0M16 6.2a3 3 0 010 5.6M17.5 14.5A5.5 5.5 0 0121 19" />
+      </Svg>
+    ),
+  },
+  cart: {
+    label: "Shop",
+    icon: () => (
+      <Svg size={14}>
+        <path d="M3 4h2.5l2 10h9.5l2-7H7" />
+        <circle cx="9" cy="18.5" r="1.3" />
+        <circle cx="16" cy="18.5" r="1.3" />
+      </Svg>
+    ),
+  },
+  money: {
+    label: "Money",
+    icon: () => (
+      <Svg size={14}>
+        <circle cx="12" cy="12" r="8.5" />
+        <path d="M14.5 9.2c-.5-.8-1.4-1.2-2.5-1.2-1.5 0-2.5.8-2.5 2s1 1.7 2.5 2 2.5.8 2.5 2-1 2-2.5 2c-1.1 0-2-.4-2.5-1.2M12 6.5V8M12 16v1.5" />
+      </Svg>
+    ),
+  },
+  chart: {
+    label: "Numbers",
+    icon: () => (
+      <Svg size={14}>
+        <path d="M4 20V10M10 20V4M16 20v-7M21 20H3" />
+      </Svg>
+    ),
+  },
+  tool: {
+    label: "Maintenance",
+    icon: () => (
+      <Svg size={14}>
+        <path d="M14.5 6.5a4 4 0 00-5.2 5.2L4 17l3 3 5.3-5.3a4 4 0 005.2-5.2l-2.5 2.5-2-2z" />
+      </Svg>
+    ),
+  },
+  database: {
+    label: "Data",
+    icon: () => (
+      <Svg size={14}>
+        <ellipse cx="12" cy="6.5" rx="7" ry="3" />
+        <path d="M5 6.5v11c0 1.7 3.1 3 7 3s7-1.3 7-3v-11M5 12c0 1.7 3.1 3 7 3s7-1.3 7-3" />
+      </Svg>
+    ),
+  },
+  cloud: {
+    label: "Cloud",
+    icon: () => (
+      <Svg size={14}>
+        <path d="M7 18a4 4 0 01-.5-8A5.5 5.5 0 0117 8.5a4.5 4.5 0 01.5 9.5z" />
+      </Svg>
+    ),
+  },
+  phone: {
+    label: "Mobile",
+    icon: () => (
+      <Svg size={14}>
+        <rect x="7" y="3" width="10" height="18" rx="2" />
+        <path d="M11 17.5h2" />
+      </Svg>
+    ),
+  },
+  globe: {
+    label: "Web",
+    icon: () => (
+      <Svg size={14}>
+        <circle cx="12" cy="12" r="8.5" />
+        <path d="M3.5 12h17M12 3.5c2.5 2.5 3.5 5.3 3.5 8.5s-1 6-3.5 8.5c-2.5-2.5-3.5-5.3-3.5-8.5s1-6 3.5-8.5z" />
+      </Svg>
+    ),
+  },
+  home: {
+    label: "Home",
+    icon: () => (
+      <Svg size={14}>
+        <path d="M4 11l8-7 8 7M6 9.5V20h12V9.5M10 20v-5h4v5" />
+      </Svg>
+    ),
+  },
+  check: {
+    label: "Approved",
+    icon: () => (
+      <Svg size={14}>
+        <circle cx="12" cy="12" r="8.5" />
+        <path d="M8 12.5l3 3 5-6" />
+      </Svg>
+    ),
   },
 };
 

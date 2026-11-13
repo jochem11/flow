@@ -3,6 +3,7 @@
 // dragged between them and into order. And the dialogs for a sprint: its name
 // and dates (also to start it), and completing it.
 
+import { colorClass, tintVars } from "../lib/colors";
 import { createSignal, For, Show } from "solid-js";
 import { canEdit } from "../lib/access";
 import {
@@ -493,7 +494,7 @@ function Row(p: { card: KanbanCard; dropBefore: boolean; onOver: (firstHalf: boo
         <span class="backlog-title-text">{p.card.title}</span>
         <For each={cardLabels()}>
           {(l) => (
-            <span class={`label-chip small color-${l!.color}`}>
+            <span class={`label-chip small ${colorClass(l!.color, l!.tint)}`} style={tintVars(l!.tint)}>
               <LabelContent label={l!} />
             </span>
           )}
@@ -512,7 +513,7 @@ function Row(p: { card: KanbanCard; dropBefore: boolean; onOver: (firstHalf: boo
         </span>
       </Show>
       <select
-        class={`backlog-status ${column()?.color ? `color-${column()!.color}` : ""}`}
+        class={`backlog-status ${colorClass(column()?.color, column()?.tint)}`} style={tintVars(column()?.tint)}
         title="Status"
         aria-label="Status"
         value={column()?.id}

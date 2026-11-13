@@ -333,6 +333,7 @@ mod tests {
             h: 60.0,
             text: id.to_uppercase(),
             color: NodeColor::White,
+            tint: None,
             parent: None,
             lanes: None,
             locked: None,
