@@ -88,8 +88,9 @@ function SprintDialog(p: { sprint: Sprint; start: boolean; onClose: () => void }
   const [goal, setGoal] = createSignal(p.sprint.goal ?? "");
   const [from, setFrom] = createSignal(from0);
   const [to, setTo] = createSignal(p.sprint.endDate ?? (p.start ? addDays(from0, 13) : ""));
-  /** Whole weeks, when the dates are that */
+  /** Whole weeks, when the dates are that; "none" without dates */
   const weeks = () => {
+    if (!from() && !to()) return "none";
     if (!from() || !to()) return "";
     const days = daysBetween(from(), to()) + 1;
     return days > 0 && days % 7 === 0 && WEEKS.includes(days / 7) ? String(days / 7) : "";
@@ -126,6 +127,11 @@ function SprintDialog(p: { sprint: Sprint; start: boolean; onClose: () => void }
             class="kd-select"
             value={weeks()}
             onChange={(e) => {
+              if (e.currentTarget.value === "none") {
+                setFrom("");
+                setTo("");
+                return;
+              }
               const n = Number(e.currentTarget.value);
               if (!n) return;
               const start = from() || today();
@@ -133,13 +139,14 @@ function SprintDialog(p: { sprint: Sprint; start: boolean; onClose: () => void }
               setTo(addDays(start, n * 7 - 1));
             }}
           >
+            <option value="none">No dates</option>
             <option value="">Custom</option>
             <For each={WEEKS}>{(n) => <option value={n}>{n === 1 ? "1 week" : `${n} weeks`}</option>}</For>
           </select>
         </label>
         <div class="sprint-form-dates">
           <label>
-            <span>Start</span>
+            <span>Start (optional)</span>
             <input
               class="kd-input"
               type="date"
@@ -153,7 +160,7 @@ function SprintDialog(p: { sprint: Sprint; start: boolean; onClose: () => void }
             />
           </label>
           <label>
-            <span>End</span>
+            <span>End (optional)</span>
             <input class="kd-input" type="date" value={to()} min={from() || undefined} onChange={(e) => setTo(e.currentTarget.value)} />
           </label>
         </div>
@@ -310,8 +317,20 @@ function List(p: { sprint: Sprint | null; folded: boolean; onToggle: () => void 
         <Show when={state() === "active"}>
           <span class="sprint-state active">Active</span>
         </Show>
-        <Show when={p.sprint && sprintDates(p.sprint)}>
-          <span class="backlog-dates">{sprintDates(p.sprint!)}</span>
+        <Show
+          when={p.sprint && sprintDates(p.sprint)}
+          fallback={
+            // No dates yet: they are optional, set from here
+            <Show when={p.sprint && canEdit()}>
+              <button class="kd-link backlog-add-dates" onClick={() => openSprintDialog("edit", p.sprint!.id)}>
+                Add dates
+              </button>
+            </Show>
+          }
+        >
+          <button class="backlog-dates as-button" disabled={!canEdit()} title="Change the dates" onClick={() => openSprintDialog("edit", p.sprint!.id)}>
+            {sprintDates(p.sprint!)}
+          </button>
         </Show>
         <Show when={left()}>{(l) => <span class="backlog-left" classList={{ over: l().over }}>{l().text}</span>}</Show>
         <span class="backlog-count">

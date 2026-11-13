@@ -8581,3 +8581,21 @@ body.presenting .find-bar {
   height: 22px;
   margin: 0;
 }
+.backlog-dates.as-button {
+  padding: 0;
+  border: 0;
+  background: none;
+  font: inherit;
+  font-size: 12.5px;
+  cursor: pointer;
+}
+.backlog-dates.as-button:not(:disabled):hover {
+  color: var(--text);
+  text-decoration: underline;
+}
+.backlog-dates.as-button:disabled {
+  cursor: default;
+}
+.backlog-add-dates {
+  font-size: 12.5px;
+}
