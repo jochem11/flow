@@ -8,6 +8,8 @@
 // Selecting works as in a flowchart: drag a rectangle on the canvas, Shift-click,
 // Ctrl+A; Ctrl+G wraps the selection in a section, which moves what lies in it.
 
+import { colorClass, tintVars } from "../lib/colors";
+import { ColorPicker } from "./ColorPicker";
 import { EerPresence, trackPointer as trackPresence } from "./Presence";
 import { EerCommentPins, PlacingOverlay } from "./Comments";
 import { canEdit } from "../lib/access";
@@ -38,6 +40,7 @@ import {
   selectEer,
   setEditingSection,
   setEerSelectionColor,
+  setEntityColor,
   setSectionTitle,
   setSectionTitleLive,
   toggleEerSelected,
@@ -94,7 +97,7 @@ import {
 import type { AutoPan } from "../lib/edgePan";
 import { trackPointer } from "../lib/interactions";
 import { snap, ui } from "../lib/store";
-import type { Attribute, Cardinality, EerSection, Entity, NodeColor, RefAction, Relation } from "../lib/types";
+import type { Attribute, Cardinality, EerSection, Entity, RefAction, Relation } from "../lib/types";
 import { IconClose, IconPlus, IconRename, IconSection, IconTrash } from "./icons";
 import { cardsLinkedTo } from "../lib/links";
 import { LinkedCardsBadge, renameOnClick, TextEditor } from "./NodeView";
@@ -106,7 +109,6 @@ import { guidesFor, nearestLine, snapBox, snapLines, SNAP_REACH, type Guide } fr
 import { CardLinksMenu } from "./CardLinksMenu";
 import { versionMark } from "../lib/workspace";
 
-const COLORS: NodeColor[] = ["white", "yellow", "green", "blue", "purple", "pink"];
 
 const ACTIONS: { value: RefAction; label: string }[] = [
   { value: "noAction", label: "No action" },
@@ -555,10 +557,10 @@ function EntityView(p: {
   const selected = () => isEerSelected(e.id);
   return (
     <div
-      class={`eer-entity color-${e.color ?? "white"}`}
+      class={`eer-entity ${colorClass(e.color ?? "white", e.tint)}`}
       classList={{ selected: selected(), target: p.target === "table", "version-gone": versionMark(e.id) === "gone", "version-changed": versionMark(e.id) === "changed" }}
       data-entity-id={e.id}
-      style={{ transform: `translate(${e.x}px, ${e.y}px)`, width: `${ENTITY_W}px`, height: `${entityHeight(e)}px` }}
+      style={{ ...tintVars(e.tint), transform: `translate(${e.x}px, ${e.y}px)`, width: `${ENTITY_W}px`, height: `${entityHeight(e)}px` }}
       onPointerDown={(ev) => {
         if (ev.button !== 0 || ui.spaceDown) return;
         ev.stopPropagation();
@@ -642,10 +644,10 @@ function SectionView(p: {
   const rename = renameOnClick(only, () => setEditingSection(s.id));
   return (
     <div
-      class={`node node-section color-${s.color ?? "white"}`}
+      class={`node node-section ${colorClass(s.color ?? "white", s.tint)}`}
       classList={{ selected: selected(), editing: editing() }}
       data-section-id={s.id}
-      style={{ transform: `translate(${s.x}px, ${s.y}px)`, width: `${s.w}px`, height: `${s.h}px` }}
+      style={{ ...tintVars(s.tint), transform: `translate(${s.x}px, ${s.y}px)`, width: `${s.w}px`, height: `${s.h}px` }}
     >
       <div class="node-body" />
       <div
@@ -704,6 +706,10 @@ function EerBar(p: { view: () => DOMRect }) {
     const c = items().map((x) => x.color ?? "white");
     return c.length && c.every((x) => x === c[0]) ? c[0] : null;
   };
+  const currentTint = () => {
+    const t = items().map((x) => x.tint ?? null);
+    return t.length && t[0] && t.every((x) => x === t[0]) ? t[0] : null;
+  };
   const section = () => {
     const ids = eerSelectedIds();
     return ids.length === 1 ? sectionById(ids[0]) : undefined;
@@ -712,16 +718,7 @@ function EerBar(p: { view: () => DOMRect }) {
     <Show when={box()}>
       {(b) => (
         <FloatingBar box={b()} camera={eer.camera} view={p.view}>
-          <For each={COLORS}>
-            {(c) => (
-              <button
-                class={`swatch color-${c}`}
-                classList={{ active: currentColor() === c }}
-                title={c[0].toUpperCase() + c.slice(1)}
-                onClick={() => setEerSelectionColor(c)}
-              />
-            )}
-          </For>
+          <ColorPicker compact color={currentColor()} tint={currentTint()} onPick={setEerSelectionColor} />
           <span class="divider" />
           <Show when={section()}>
             {(s) => (
@@ -863,16 +860,7 @@ function EntityInspector(p: { entity: Entity }) {
         <CardLinksMenu nodeId={p.entity.id} />
       </div>
       <div class="eer-colors">
-        <For each={COLORS}>
-          {(c) => (
-            <button
-              class={`swatch color-${c}`}
-              classList={{ active: (p.entity.color ?? "white") === c }}
-              title={c}
-              onClick={() => updateEntity(p.entity.id, { color: c })}
-            />
-          )}
-        </For>
+        <ColorPicker color={p.entity.color ?? "white"} tint={p.entity.tint} onPick={(c) => setEntityColor(p.entity.id, c)} />
       </div>
 
       <div class="eer-section-title">

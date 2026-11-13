@@ -260,6 +260,7 @@ impl Reader {
             y: 0.0,
             attributes,
             color: None,
+            tint: None,
             comment,
             indexes: vec![],
         });

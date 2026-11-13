@@ -2,6 +2,7 @@
 // sprint the board shows, and the filter. And the list view: every card in a
 // table that sorts by any column.
 
+import { colorClass, tintVars } from "../lib/colors";
 import { createMemo, createSignal, For, Show } from "solid-js";
 import { me } from "../lib/auth";
 import { canEdit } from "../lib/access";
@@ -264,7 +265,7 @@ export function KanbanList() {
                     <BlockedChip card={c} />
                   </td>
                   <td>
-                    <span class={`kanban-list-status ${col()?.color ? `color-${col()!.color}` : ""}`}>{col()?.title}</span>
+                    <span class={`kanban-list-status ${colorClass(col()?.color, col()?.tint)}`} style={tintVars(col()?.tint)}>{col()?.title}</span>
                   </td>
                   <td class="kanban-list-sprint" classList={{ archived: isArchived(c) }}>
                     {sprintOf(c)?.name ?? ""}
@@ -292,7 +293,7 @@ export function KanbanList() {
                   <td>
                     <For each={(c.labelIds ?? []).map(labelById).filter((l) => !!l)}>
                       {(l) => (
-                        <span class={`label-chip small color-${l!.color}`}>
+                        <span class={`label-chip small ${colorClass(l!.color, l!.tint)}`} style={tintVars(l!.tint)}>
                           <LabelContent label={l!} />
                         </span>
                       )}

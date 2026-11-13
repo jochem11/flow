@@ -1,6 +1,8 @@
 // Kanban editor: columns with cards. Cards and columns can be dragged around;
 // clicking a card opens it in a dialog (KanbanCardDialog.tsx).
 
+import { colorClass, tintVars } from "../lib/colors";
+import { ColorPicker } from "./ColorPicker";
 import { personById } from "../lib/people";
 import { Avatar } from "./AccountMenu";
 import { threadsOn } from "../lib/comments";
@@ -38,7 +40,7 @@ import {
   taskProgress,
 } from "../lib/kanban";
 import { activeTimer, now, startTimer, stopTimer, syncTimerWithBoard } from "../lib/timer";
-import type { KanbanCard, KanbanColumn, NodeColor } from "../lib/types";
+import type { KanbanCard, KanbanColumn } from "../lib/types";
 import { openDoc, versionMark } from "../lib/workspace";
 import { ConfirmButton } from "./ConfirmButton";
 import {
@@ -60,7 +62,6 @@ import { CardDialog, IconPicker, LabelContent } from "./KanbanCardDialog";
 import { BlockedChip, DueChip, PriorityIcon } from "./Planning";
 import { Menu } from "./Menu";
 
-const COLORS: NodeColor[] = ["white", "yellow", "green", "blue", "purple", "pink"];
 
 // ---------- editor UI state ----------
 
@@ -239,8 +240,10 @@ function Column(p: { column: KanbanColumn; index: number }) {
   return (
     <div
       ref={el}
-      class={`kanban-column ${p.column.color ? `color-${p.column.color} colored` : ""}`}
+      class={`kanban-column ${colorClass(p.column.color, p.column.tint)}`}
+      style={tintVars(p.column.tint)}
       classList={{
+        colored: !!colorClass(p.column.color, p.column.tint),
         "drop-before": colIndicator() === "before",
         "drop-after": colIndicator() === "after",
         dragging: dragging() === id(),
@@ -361,22 +364,7 @@ function ColumnMenu(p: { column: KanbanColumn }) {
         <div class="kanban-column-menu">
           <div class="kd-label">Color</div>
           <div class="kd-swatches">
-            <button
-              class="swatch none"
-              classList={{ active: !p.column.color }}
-              title="No color"
-              onClick={() => setColumnStyle(p.column.id, { color: null })}
-            />
-            <For each={COLORS}>
-              {(c) => (
-                <button
-                  class={`swatch color-${c}`}
-                  classList={{ active: p.column.color === c }}
-                  title={c}
-                  onClick={() => setColumnStyle(p.column.id, { color: c })}
-                />
-              )}
-            </For>
+            <ColorPicker none color={p.column.color} tint={p.column.tint} onPick={(c) => setColumnStyle(p.column.id, c)} />
           </div>
           <div class="kd-label">Icon</div>
           <IconPicker value={p.column.icon ?? null} onChange={(icon) => setColumnStyle(p.column.id, { icon })} />
@@ -465,7 +453,7 @@ function Card(p: { card: KanbanCard; columnId: string; index: number; indicator:
         <div class="kanban-card-labels">
           <For each={cardLabels()}>
             {(l) => (
-              <span class={`label-chip small color-${l!.color}`}>
+              <span class={`label-chip small ${colorClass(l!.color, l!.tint)}`} style={tintVars(l!.tint)}>
                 <LabelContent label={l!} />
               </span>
             )}

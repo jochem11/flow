@@ -393,6 +393,7 @@ pub(crate) mod tests {
                     x: 0.0,
                     y: 0.0,
                     color: None,
+                    tint: None,
                     comment: Some("People who buy".into()),
                     indexes: vec![],
                     attributes: vec![
@@ -407,6 +408,7 @@ pub(crate) mod tests {
                     x: 0.0,
                     y: 0.0,
                     color: None,
+                    tint: None,
                     comment: None,
                     indexes: vec![TableIndex {
                         id: "ix".into(),
@@ -429,6 +431,7 @@ pub(crate) mod tests {
                     x: 0.0,
                     y: 0.0,
                     color: None,
+                    tint: None,
                     comment: None,
                     indexes: vec![],
                     attributes: vec![id("p")],

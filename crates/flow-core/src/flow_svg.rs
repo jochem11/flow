@@ -38,14 +38,40 @@ fn colors(c: NodeColor) -> (&'static str, &'static str) {
         NodeColor::Blue => ("#dde9ff", "#7fa3e8"),
         NodeColor::Purple => ("#ebe4ff", "#a48ee8"),
         NodeColor::Pink => ("#ffe1ea", "#e48fab"),
+        NodeColor::Red => ("#ffdcd6", "#e2796a"),
+        NodeColor::Orange => ("#ffe6cc", "#e7a25a"),
+        NodeColor::Teal => ("#d3f2ef", "#5fbdb4"),
+        NodeColor::Gray => ("#ececea", "#9a9892"),
     }
 }
 
-/// Color of solid marks (start point, bar, crosses): white means the edge color.
-fn dot_color(c: NodeColor) -> &'static str {
-    match c {
-        NodeColor::White => EDGE,
-        other => colors(other).1,
+/// A color of one's own as `#rrggbb`, when it is one (else it is not used)
+fn tint_of(n: &Node) -> Option<(u8, u8, u8)> {
+    let hex = n.tint.as_deref()?.strip_prefix('#')?;
+    if hex.len() != 6 || !hex.bytes().all(|b| b.is_ascii_hexdigit()) {
+        return None;
+    }
+    let v = u32::from_str_radix(hex, 16).ok()?;
+    Some(((v >> 16) as u8, (v >> 8) as u8, v as u8))
+}
+
+/// Not the plain white of a new block
+fn is_colored(n: &Node) -> bool {
+    n.color != NodeColor::White || tint_of(n).is_some()
+}
+
+/// A node's fill and border: its own color (a light fill of it, as in the app), else its named one.
+fn node_colors(n: &Node) -> (String, String) {
+    match tint_of(n) {
+        Some((r, g, b)) => {
+            // 24% of the color on white, like `tintVars` in the app
+            let mix = |c: u8| (f64::from(c) * 0.24 + 255.0 * 0.76).round() as u8;
+            (format!("#{:02x}{:02x}{:02x}", mix(r), mix(g), mix(b)), format!("#{r:02x}{g:02x}{b:02x}"))
+        }
+        None => {
+            let (fill, stroke) = colors(n.color);
+            (fill.to_string(), stroke.to_string())
+        }
     }
 }
 
@@ -1020,8 +1046,10 @@ fn edge_labels_svg(edge: &Edge, g: &Geom) -> String {
 // ---------------------------------------------------------------------------
 
 fn node_svg(n: &Node, seq: &Sequence, paint: bool, lang: Option<CodeLanguage>, detail: Option<ClassDetail>, look: &Look) -> String {
-    let (fill, stroke) = colors(n.color);
-    let dot = dot_color(n.color);
+    let (own_fill, own_stroke) = node_colors(n);
+    let (fill, stroke) = (own_fill.as_str(), own_stroke.as_str());
+    // Solid marks (start point, bar, crosses): white means the edge color
+    let dot = if is_colored(n) { stroke } else { EDGE };
     let (x, y, w, h) = (n.x, n.y, n.w, n.h);
     let (cx, cy) = (x + w / 2.0, y + h / 2.0);
     // A focal block: a heavier outline in the accent
@@ -1130,12 +1158,12 @@ fn node_svg(n: &Node, seq: &Sequence, paint: bool, lang: Option<CodeLanguage>, d
         NodeKind::Actor | NodeKind::TimeEvent => figure_svg(n, fill),
         NodeKind::Class => class_svg(n, &border, stroke, lang, detail),
         NodeKind::Lifeline => {
-            let line = if n.color == NodeColor::White {
+            let line = if !is_colored(n) {
                 EDGE
             } else {
                 stroke
             };
-            let bar_fill = if n.color == NodeColor::White {
+            let bar_fill = if !is_colored(n) {
                 BG
             } else {
                 fill
@@ -1147,7 +1175,7 @@ fn node_svg(n: &Node, seq: &Sequence, paint: bool, lang: Option<CodeLanguage>, d
                 .flatten()
                 .map(|(top, bottom, level, call)| {
                     // A call's own colors, when the board colors them
-                    let (fill, line) = seq.color(paint, call.as_deref()).map_or((bar_fill, line), colors);
+                    let (fill, line) = seq.color(paint, call.as_deref()).map_or((bar_fill, line), |c| colors(c));
                     format!(
                         r#"<rect x="{}" y="{top}" width="{BAR_W}" height="{}" rx="1" fill="{fill}" stroke="{line}" stroke-width="1.5"/>"#,
                         cx - BAR_W / 2.0 + f64::from(*level) * NEST,
@@ -1326,7 +1354,7 @@ fn fragment_parts(n: &Node) -> String {
 fn frame_svg(n: &Node, fill: &str, stroke: &str) -> String {
     let (x, y, w, h) = (n.x, n.y, n.w, n.h);
     // Frames are see-through, like in the app
-    let opacity = if n.color == NodeColor::White { 0.45 } else { 0.55 };
+    let opacity = if is_colored(n) { 0.55 } else { 0.45 };
     let body = |rx: f64, extra: &str| {
         format!(
             r#"<rect x="{x}" y="{y}" width="{w}" height="{h}" rx="{rx}" fill="{fill}" fill-opacity="{opacity}" stroke="{stroke}" stroke-width="1.5"{extra}/>"#

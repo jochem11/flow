@@ -1,3 +1,4 @@
+import { colorClass, tintVars } from "../lib/colors";
 import { createEffect, createMemo, createSignal, For, Index, Match, on, onCleanup, onMount, Show, Switch } from "solid-js";
 import { cardsLinkedTo, openLinkedCard } from "../lib/links";
 import { IconCheck, IconKanban, IconLock } from "./icons";
@@ -144,7 +145,7 @@ export function NodeView(p: { node: FlowNode }) {
 
   return (
     <div
-      class={`node node-${n.kind} color-${n.color}`}
+      class={`node node-${n.kind} ${colorClass(n.color, n.tint)}`}
       classList={{
         // Viewing an old version: gone from the board now, or changed since
         "version-gone": versionMark(n.id) === "gone",
@@ -162,6 +163,7 @@ export function NodeView(p: { node: FlowNode }) {
       data-node-id={n.id}
       aria-label={n.text.trim() ? n.text.trim().split("\n")[0] : n.kind}
       style={{
+        ...tintVars(n.tint),
         transform: `translate(${n.x}px, ${n.y}px)`,
         width: `${n.w}px`,
         height: `${n.h}px`,

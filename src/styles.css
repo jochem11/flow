@@ -19,6 +19,10 @@
   --blue-fill: #dde9ff;    --blue-stroke: #7fa3e8;
   --purple-fill: #ebe4ff;  --purple-stroke: #a48ee8;
   --pink-fill: #ffe1ea;    --pink-stroke: #e48fab;
+  --red-fill: #ffdcd6;     --red-stroke: #e2796a;
+  --orange-fill: #ffe6cc;  --orange-stroke: #e7a25a;
+  --teal-fill: #d3f2ef;    --teal-stroke: #5fbdb4;
+  --gray-fill: #ececea;    --gray-stroke: #9a9892;
 
   color-scheme: light;
   font-family: ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", sans-serif;
@@ -54,6 +58,10 @@
   --blue-fill: #1f2b42;    --blue-stroke: #5b80c8;
   --purple-fill: #2b2442;  --purple-stroke: #8a73d6;
   --pink-fill: #3d2430;    --pink-stroke: #c4708e;
+  --red-fill: #40241f;     --red-stroke: #c96a5c;
+  --orange-fill: #3d2e1c;  --orange-stroke: #b9803f;
+  --teal-fill: #1c3432;    --teal-stroke: #4a9a92;
+  --gray-fill: #3c3c43;    --gray-stroke: #8d8c98;
 
   color-scheme: dark;
 }
@@ -78,6 +86,10 @@
     --blue-fill: #1f2b42;    --blue-stroke: #5b80c8;
     --purple-fill: #2b2442;  --purple-stroke: #8a73d6;
     --pink-fill: #3d2430;    --pink-stroke: #c4708e;
+    --red-fill: #40241f;     --red-stroke: #c96a5c;
+    --orange-fill: #3d2e1c;  --orange-stroke: #b9803f;
+    --teal-fill: #1c3432;    --teal-stroke: #4a9a92;
+    --gray-fill: #3c3c43;    --gray-stroke: #8d8c98;
 
     color-scheme: dark;
   }
@@ -437,6 +449,10 @@ button:disabled {
 .color-blue   { --fill: var(--blue-fill);   --stroke: var(--blue-stroke); }
 .color-purple { --fill: var(--purple-fill); --stroke: var(--purple-stroke); }
 .color-pink   { --fill: var(--pink-fill);   --stroke: var(--pink-stroke); }
+.color-red    { --fill: var(--red-fill);    --stroke: var(--red-stroke); }
+.color-orange { --fill: var(--orange-fill); --stroke: var(--orange-stroke); }
+.color-teal   { --fill: var(--teal-fill);   --stroke: var(--teal-stroke); }
+.color-gray   { --fill: var(--gray-fill);   --stroke: var(--gray-stroke); }
 
 .node-body {
   position: absolute;
@@ -3894,9 +3910,8 @@ textarea.kd-input {
   color: var(--text-muted);
 }
 
+/* Its color comes from its color class (or its own color): no default here, that would win from the class */
 .eer-entity {
-  --fill: var(--white-fill);
-  --stroke: var(--white-stroke);
   position: absolute;
   left: 0;
   top: 0;
@@ -8445,4 +8460,124 @@ body.presenting .find-bar {
     gap: 0;
     font-size: 0;
   }
+}
+
+/* ---------- the color wheel ---------- */
+.swatch {
+  flex: none;
+  padding: 0;
+  cursor: pointer;
+}
+.swatch.wheel {
+  background: conic-gradient(#f44, #fc3, #6d4, #3cc, #46f, #c4f, #f44);
+  border-color: var(--panel-border);
+}
+.color-wheel {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  width: 196px;
+  padding: 10px;
+}
+.color-wheel-disc {
+  position: relative;
+  width: 176px;
+  height: 176px;
+  border-radius: 50%;
+  background:
+    radial-gradient(closest-side, #fff, rgba(255, 255, 255, 0)),
+    conic-gradient(#f00, #ff0, #0f0, #0ff, #00f, #f0f, #f00);
+  box-shadow: inset 0 0 0 1px rgba(0, 0, 0, 0.12);
+  cursor: crosshair;
+  touch-action: none;
+  outline: none;
+}
+/* Darker with less brightness */
+.color-wheel-disc::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  border-radius: 50%;
+  background: #000;
+  opacity: calc(1 - var(--v, 1));
+  pointer-events: none;
+}
+.color-wheel-disc:focus-visible {
+  box-shadow: 0 0 0 2px var(--panel), 0 0 0 4px var(--accent);
+}
+.color-wheel-knob {
+  position: absolute;
+  z-index: 1;
+  width: 14px;
+  height: 14px;
+  margin: -7px 0 0 -7px;
+  border: 2px solid #fff;
+  border-radius: 50%;
+  box-shadow: 0 0 0 1px rgba(0, 0, 0, 0.45);
+  pointer-events: none;
+}
+.color-wheel-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 12px;
+  color: var(--text-muted);
+}
+.color-wheel-row input[type="range"] {
+  flex: 1;
+  min-width: 0;
+  height: 10px;
+  margin: 0;
+  border-radius: 5px;
+  background: linear-gradient(to right, var(--from), var(--to));
+  appearance: none;
+  -webkit-appearance: none;
+}
+.color-wheel-row input[type="range"]::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  width: 14px;
+  height: 14px;
+  border: 2px solid #fff;
+  border-radius: 50%;
+  background: var(--text);
+  box-shadow: 0 0 0 1px rgba(0, 0, 0, 0.45);
+  cursor: pointer;
+}
+.color-wheel-row input[type="range"]::-moz-range-thumb {
+  width: 10px;
+  height: 10px;
+  border: 2px solid #fff;
+  border-radius: 50%;
+  background: var(--text);
+  box-shadow: 0 0 0 1px rgba(0, 0, 0, 0.45);
+  cursor: pointer;
+}
+.color-wheel-preview {
+  flex: none;
+  width: 28px;
+  height: 28px;
+  border: 1.5px solid var(--stroke);
+  border-radius: 8px;
+}
+.color-wheel-hex {
+  flex: 1;
+  min-width: 0;
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+}
+.color-panel {
+  display: flex;
+  flex-direction: column;
+}
+.color-panel-swatches {
+  display: grid;
+  grid-template-columns: repeat(5, 22px);
+  justify-content: space-between;
+  gap: 8px;
+  width: 196px;
+  padding: 12px 10px 4px;
+}
+.color-panel-swatches .swatch {
+  width: 22px;
+  height: 22px;
+  margin: 0;
 }

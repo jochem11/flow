@@ -81,6 +81,10 @@ pub struct KanbanColumn {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     #[specta(optional)]
     pub color: Option<NodeColor>,
+    /// A color of one's own (`#rrggbb`, from the color wheel): used instead of `color`
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[specta(optional)]
+    pub tint: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     #[specta(optional)]
     pub icon: Option<KanbanIcon>,
@@ -180,6 +184,10 @@ pub struct KanbanLabel {
     pub id: String,
     pub name: String,
     pub color: NodeColor,
+    /// A color of one's own (`#rrggbb`, from the color wheel): used instead of `color`
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[specta(optional)]
+    pub tint: Option<String>,
     #[serde(default)]
     pub description: String,
     #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -237,4 +245,24 @@ pub enum KanbanIcon {
     Deploy,
     Star,
     Flag,
+    Rocket,
+    Bolt,
+    Heart,
+    Lock,
+    Chat,
+    Mail,
+    Calendar,
+    Clock,
+    Person,
+    Team,
+    Cart,
+    Money,
+    Chart,
+    Tool,
+    Database,
+    Cloud,
+    Phone,
+    Globe,
+    Home,
+    Check,
 }
