@@ -13,7 +13,7 @@ import { createStore, produce, reconcile, unwrap } from "solid-js/store";
 import { me } from "./auth";
 import { uid } from "./store";
 import type { KanbanCard, KanbanColumn, KanbanDoc, KanbanIcon, KanbanLabel, KanbanTimeEntry, NodeColor, Priority, Sprint } from "./types";
-import { addDays, makesLoop, openBlockers, today } from "./planning";
+import { makesLoop, openBlockers, today } from "./planning";
 import { byRank, cleanKey, keyFromName, lastRank, needsNumbers, nextNumber, nextSprintName, numberCards, openSprints, rankBetween, stateOf, ticketId } from "./tickets";
 
 export const [kanban, setKanban] = createStore<KanbanDoc>({ columns: [], labels: [] });
@@ -658,15 +658,13 @@ export function updateSprint(id: string, changes: Partial<Pick<Sprint, "name" | 
   touch();
 }
 
-/** Starts a sprint. Without dates it runs for two weeks from today. */
+/** Starts a sprint. Its dates are optional: without them it just runs until it is completed. */
 export function startSprint(id: string) {
   setKanban(
     "sprints",
     (s) => s.id === id,
     produce((sprint) => {
       sprint.state = "active";
-      sprint.startDate ??= today();
-      sprint.endDate ??= addDays(sprint.startDate, 13);
       sprint.completedOn = undefined;
       sprint.carriedOver = undefined;
     }),
