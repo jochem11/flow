@@ -77,6 +77,8 @@ export type {
   KanbanCard,
   CardLink,
   KanbanLabel,
+  Sprint,
+  SprintState,
   KanbanComment,
   KanbanTimeEntry,
   KanbanIcon,

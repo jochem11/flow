@@ -11,6 +11,10 @@ import {
   addLabel,
   addSubtask,
   cardById,
+  cardKey,
+  planCard,
+  plannedSprints,
+  sprintOf,
   deleteCard,
   deleteComment,
   deleteTimeEntry,
@@ -39,6 +43,7 @@ import {
   toggleAssignee,
 } from "../lib/kanban";
 import { me } from "../lib/auth";
+import { toast } from "../lib/toast";
 import { people, personById } from "../lib/people";
 import { Avatar } from "./AccountMenu";
 import { Menu } from "./Menu";
@@ -82,7 +87,18 @@ export function CardDialog(p: { cardId: string; onOpen: (id: string) => void; on
             <div class="kanban-dialog-backdrop" onMouseDown={(e) => e.target === e.currentTarget && close()}>
               <div class="kanban-dialog panel" role="dialog" aria-label="Card">
                 <div class="kd-top">
-                  <Show when={parent()} fallback={<span class="kd-kind">Card</span>}>
+                  <Show when={cardKey(card())}>
+                    {(key) => (
+                      <button
+                        class="ticket-key kd-key"
+                        title="Copy the ticket id"
+                        onClick={() => void navigator.clipboard?.writeText(key()).then(() => toast(`Copied ${key()}`))}
+                      >
+                        {key()}
+                      </button>
+                    )}
+                  </Show>
+                  <Show when={parent()} fallback={<Show when={!cardKey(card())}><span class="kd-kind">Card</span></Show>}>
                     {(par) => (
                       <button class="kd-parent-link" onClick={() => p.onOpen(par().id)} title="Open parent card">
                         <IconSubtasks /> Subtask of <strong>{par().title}</strong>
@@ -134,6 +150,18 @@ export function CardDialog(p: { cardId: string; onOpen: (id: string) => void; on
                         <For each={kanban.columns}>{(c) => <option value={c.id}>{c.title}</option>}</For>
                       </select>
                     </Field>
+                    <Show when={plannedSprints().length || sprintOf(card())}>
+                      <Field label="Sprint">
+                        <select class="kd-select" value={sprintOf(card())?.id ?? ""} onChange={(e) => planCard(p.cardId, e.currentTarget.value || null)}>
+                          <option value="">Backlog</option>
+                          <For each={plannedSprints()}>{(s) => <option value={s.id}>{s.state === "active" ? `${s.name} (active)` : s.name}</option>}</For>
+                          {/* In a completed sprint: shown, as that is where it is */}
+                          <Show when={sprintOf(card())?.state === "done"}>
+                            <option value={sprintOf(card())!.id}>{sprintOf(card())!.name} (completed)</option>
+                          </Show>
+                        </select>
+                      </Field>
+                    </Show>
                     <Field label="Parent">
                       <select
                         class="kd-select"

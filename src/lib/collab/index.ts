@@ -29,7 +29,7 @@ import { applyRemoteKanban, kanban, kanbanRev } from "../kanban";
 import { applyRemoteChart, chartRev, chartSnapshot } from "../chart/store";
 import { currentShareToken, inTauri, serverUrl, sessionToken } from "../server";
 import { applyRemoteFlow, board, type FlowSettings, historyChanged, rev, touch, useSharedUndo, type SharedUndo } from "../store";
-import type { DocContent, Document, EerSection, Entity, FlowEdge, FlowNode, KanbanCard, KanbanColumn, KanbanLabel, Relation } from "../types";
+import type { DocContent, Document, EerSection, Entity, FlowEdge, FlowNode, KanbanCard, KanbanColumn, KanbanLabel, Relation, Sprint } from "../types";
 import { checkOpenAccess, docsOf, markDirty, openDoc, type OpenDoc } from "../workspace";
 import { api } from "../api";
 import { unsavedBase } from "../offline";
@@ -138,7 +138,14 @@ function bindingFor(kind: string): Binding | null {
             // A card whose column someone deleted meanwhile goes to the first column
             (byId.get(_column ?? "") ?? cols[0])?.cards.push(rest);
           }
-          applyRemoteKanban({ columns: cols, labels: s.lists.labels as unknown as KanbanLabel[] });
+          applyRemoteKanban({
+            columns: cols,
+            labels: s.lists.labels as unknown as KanbanLabel[],
+            sprints: (s.lists.sprints ?? []) as unknown as Sprint[],
+            // What the shared document does not have yet stays as loaded
+            key: (s.values.key as string | undefined) ?? kanban.key,
+            nextNumber: (s.values.nextNumber as number | undefined) ?? kanban.nextNumber,
+          });
         },
       };
     case "chart":

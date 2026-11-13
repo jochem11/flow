@@ -74,7 +74,11 @@ export function diffVersion(old: DocContent, now: DocContent): VersionDiff {
       const n = now.data as typeof old.data;
       const cards = (d: typeof old.data) => d.columns.flatMap((c) => c.cards.map((card) => ({ ...card, _column: c.id })));
       const columns = (d: typeof old.data) => d.columns.map(({ cards: _, ...c }) => c);
-      summary = join([say(compare(cards(old.data), cards(n), marks), "card", "cards"), say(compare(columns(old.data), columns(n), marks), "column", "columns")]);
+      summary = join([
+        say(compare(cards(old.data), cards(n), marks), "card", "cards"),
+        say(compare(columns(old.data), columns(n), marks), "column", "columns"),
+        say(compare(old.data.sprints ?? [], n.sprints ?? [], marks), "sprint", "sprints"),
+      ]);
       break;
     }
     case "eer": {

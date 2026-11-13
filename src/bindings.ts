@@ -544,6 +544,12 @@ export type ItemKind = "project" | "document";
 
 export type KanbanCard = {
 	id: string,
+	/**  The number in its ticket id (`12` in `WEB-12`) */
+	number?: number | null,
+	/**  The sprint it is planned in; none: the backlog */
+	sprintId?: string | null,
+	/**  Its place in the backlog and in its sprint: lower comes first */
+	rank?: number | null,
 	title: string,
 	description: string,
 	/**  Original estimate, in hours */
@@ -592,6 +598,12 @@ export type KanbanDoc = {
 	columns: KanbanColumn[],
 	/**  Labels that cards on this board can use */
 	labels?: KanbanLabel[],
+	/**  The prefix of the cards' ticket ids: `WEB` in `WEB-12` */
+	key?: string | null,
+	/**  The number the next new card gets (numbers are never used twice) */
+	nextNumber?: number | null,
+	/**  Sprints, in the order they are planned. A card without a sprint is in the backlog. */
+	sprints?: Sprint[],
 };
 
 /**
@@ -908,6 +920,29 @@ export type SharedBoard = {
 	/**  What the person who opened the link may do */
 	role: Role,
 };
+
+/**  A sprint: a few weeks of work, with the cards picked for it (`KanbanCard::sprint_id`). */
+export type Sprint = {
+	id: string,
+	name: string,
+	/**  What the sprint is for */
+	goal?: string,
+	/**  `YYYY-MM-DD` */
+	startDate?: string | null,
+	/**  `YYYY-MM-DD` */
+	endDate?: string | null,
+	state?: SprintState,
+	/**  The day it was completed, `YYYY-MM-DD` */
+	completedOn?: string | null,
+	/**  How many cards were not done when it was completed (they moved on) */
+	carriedOver?: number | null,
+};
+
+export type SprintState = 
+/**  Planned, not started */
+"planned" | "active" | 
+/**  Completed: its cards no longer show on the board */
+"done";
 
 /**  The databases SQL can be generated for. */
 export type SqlDialect = "postgres" | "mysql" | "sqlite" | "sqlserver" | "oracle";

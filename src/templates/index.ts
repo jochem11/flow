@@ -4,6 +4,7 @@
 
 import { createNode, uid } from "../lib/store";
 import { fishbone, funnel, journey, layers, orgChart, pyramid, quadrant, serviceBlueprint, timeline, venn } from "./diagrams";
+import { addDays, today } from "../lib/planning";
 import type { Attribute, DiagramType, DocContent, DocumentKind, Entity, FlowEdge, FlowNode, KanbanCard, KanbanColumn, NodeColor, Relation } from "../lib/types";
 
 export interface BuiltIn {
@@ -200,16 +201,26 @@ function scrum(): DocContent {
     { id: uid(), name: "Bug", color: "pink" as NodeColor, description: "" },
     { id: uid(), name: "Chore", color: "white" as NodeColor, description: "" },
   ];
+  // A sprint that runs now, with the next one planned and more in the backlog
+  const sprint = { id: uid(), name: "Sprint 1", goal: "People can order and pay", state: "active" as const, startDate: today(), endDate: addDays(today(), 13) };
+  const next = { id: uid(), name: "Sprint 2", goal: "", state: "planned" as const };
+  const now = { sprintId: sprint.id };
   return {
     kind: "kanban",
     data: {
       labels,
+      sprints: [sprint, next],
       columns: [
-        column("Backlog", [card("Search for products", { labelIds: [labels[0].id], priority: "medium" }), card("Update dependencies", { labelIds: [labels[2].id], priority: "low" })]),
-        column("Sprint", [card("Checkout page", { labelIds: [labels[0].id], priority: "high", expectedHours: 8 })]),
-        column("In progress", [card("Login fails on Safari", { labelIds: [labels[1].id], priority: "urgent" })], { color: "blue" }),
+        column("To do", [
+          card("Checkout page", { ...now, labelIds: [labels[0].id], priority: "high", expectedHours: 8 }),
+          card("Order confirmation mail", { ...now, labelIds: [labels[0].id], priority: "medium", expectedHours: 3 }),
+          card("Search for products", { sprintId: next.id, labelIds: [labels[0].id], priority: "medium", expectedHours: 5 }),
+          card("Wish list", { labelIds: [labels[0].id], priority: "low" }),
+          card("Update dependencies", { labelIds: [labels[2].id], priority: "low" }),
+        ]),
+        column("In progress", [card("Login fails on Safari", { ...now, labelIds: [labels[1].id], priority: "urgent", expectedHours: 2 })], { color: "blue" }),
         column("Review", [], { color: "purple" }),
-        column("Done", [], { done: true, color: "green" }),
+        column("Done", [card("Product page", { ...now, labelIds: [labels[0].id], expectedHours: 6, spentHours: 5 })], { done: true, color: "green" }),
       ],
     },
   };
@@ -295,7 +306,7 @@ export const BUILT_IN: BuiltIn[] = [
   { id: "blueprint", kind: "flow", diagram: "whiteboard", name: "Service blueprint", description: "What customers see, and what is behind it", make: serviceBlueprint },
   { id: "layers", kind: "flow", diagram: "whiteboard", name: "Layered architecture", description: "A system in layers, each using the one below", make: layers },
   { id: "shop", kind: "eer", name: "Web shop", description: "Customers, orders, order lines and products", make: shop },
-  { id: "scrum", kind: "kanban", name: "Scrum board", description: "Backlog to done, with labels and priorities", make: scrum },
+  { id: "scrum", kind: "kanban", name: "Scrum board", description: "Sprints and a backlog, with labels and priorities", make: scrum },
   { id: "bugs", kind: "kanban", name: "Bug tracker", description: "From new to closed, labelled by severity", make: bugs },
   { id: "revenue", kind: "chart", name: "Monthly revenue", description: "Two years side by side, month by month", make: revenueChart },
   { id: "visitors", kind: "chart", name: "Where visitors come from", description: "One whole split into its parts", make: visitorsChart },

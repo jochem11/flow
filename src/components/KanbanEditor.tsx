@@ -6,16 +6,20 @@ import { Avatar } from "./AccountMenu";
 import { threadsOn } from "../lib/comments";
 import { canEdit } from "../lib/access";
 import { createEffect, createSignal, For, Match, on, onCleanup, onMount, Show, Switch } from "solid-js";
-import { filter, loadView, setFilter, view, visible } from "../lib/kanbanView";
+import { filter, loadView, onBoard, scopeSprint, setFilter, view, visible } from "../lib/kanbanView";
 import { isFiltering, NO_FILTER } from "../lib/planning";
 import { KanbanList, KanbanToolbar } from "./KanbanViews";
 import { KanbanTimeline } from "./KanbanTimeline";
+import { KanbanBacklog, SprintDialogs } from "./KanbanBacklog";
+import { KanbanSummary } from "./KanbanSummary";
 import {
   addCard,
   addColumn,
   addDefaultColumns,
   cardById,
-  columnHours,
+  cardKey,
+  ensureTickets,
+  needsTickets,
   DEFAULT_COLUMNS,
   deleteColumn,
   formatHours,
@@ -133,6 +137,14 @@ export function KanbanEditor() {
     setRenamingColumn(null);
   });
 
+  // A board from before ticket ids, or a card that came without one: numbered
+  // now, by whoever may change the board (not while looking at an old version)
+  createEffect(() => {
+    const doc = openDoc();
+    if (doc?.kind !== "kanban" || !canEdit() || !needsTickets()) return;
+    queueMicrotask(() => openDoc()?.id === doc.id && canEdit() && ensureTickets(doc.name));
+  });
+
   // Another board: its own view (remembered per board), and no filter
   createEffect(
     on(
@@ -149,6 +161,12 @@ export function KanbanEditor() {
       <Show when={kanban.columns.length} fallback={<EmptyBoard />}>
         <KanbanToolbar />
         <Switch>
+          <Match when={view() === "summary"}>
+            <KanbanSummary />
+          </Match>
+          <Match when={view() === "backlog"}>
+            <KanbanBacklog />
+          </Match>
           <Match when={view() === "list"}>
             <KanbanList />
           </Match>
@@ -170,6 +188,7 @@ export function KanbanEditor() {
       <Show when={openCardId()}>
         {(id) => <CardDialog cardId={id()} onOpen={setOpenCardId} onClose={() => setOpenCardId(null)} />}
       </Show>
+      <SprintDialogs />
     </div>
   );
 }
@@ -205,7 +224,17 @@ function Column(p: { column: KanbanColumn; index: number }) {
     const at = dropAt();
     return at?.type === "card" && at.column === id() ? at.index : null;
   };
-  const hours = () => columnHours(p.column);
+  // The cards the board shows now: of the sprint that is picked, never of a completed one
+  const shown = () => p.column.cards.filter(onBoard);
+  const hours = () => {
+    let expected = 0;
+    let spent = 0;
+    for (const c of shown()) {
+      expected += c.expectedHours ?? 0;
+      spent += c.spentHours ?? 0;
+    }
+    return { expected, spent };
+  };
 
   return (
     <div
@@ -215,7 +244,7 @@ function Column(p: { column: KanbanColumn; index: number }) {
         "drop-before": colIndicator() === "before",
         "drop-after": colIndicator() === "after",
         dragging: dragging() === id(),
-        "drop-empty": cardDropIndex() !== null && p.column.cards.length === 0,
+        "drop-empty": cardDropIndex() !== null && shown().length === 0,
       }}
       onDragOver={(e) => {
         if (!drag) return;
@@ -261,7 +290,7 @@ function Column(p: { column: KanbanColumn; index: number }) {
           />
         </Show>
         <span class="kanban-count">
-          {isFiltering(filter()) ? `${p.column.cards.filter(visible).length}/${p.column.cards.length}` : p.column.cards.length}
+          {isFiltering(filter()) ? `${shown().filter(visible).length}/${shown().length}` : shown().length}
         </span>
         <Show when={p.column.done}>
           <span class="kanban-done-mark" title="Cards in this column count as done">
@@ -288,7 +317,7 @@ function Column(p: { column: KanbanColumn; index: number }) {
         <For each={p.column.cards}>
           {(card, i) => (
             // Filtered out: not shown, but the others keep their place for dragging
-            <Show when={visible(card)}>
+            <Show when={onBoard(card) && visible(card)}>
               <Card
                 card={card}
                 columnId={id()}
@@ -469,10 +498,14 @@ function Card(p: { card: KanbanCard; columnId: string; index: number; indicator:
           p.card.links?.length ||
           p.card.assigneeIds?.length ||
           p.card.dueDate ||
-          p.card.blockedBy?.length
+          p.card.blockedBy?.length ||
+          p.card.number != null
         }
       >
         <div class="kanban-card-badges">
+          <Show when={cardKey(p.card)}>
+            <span class="ticket-key">{cardKey(p.card)}</span>
+          </Show>
           <BlockedChip card={p.card} />
           <DueChip card={p.card} />
           <Show when={subtasks().total}>
@@ -548,7 +581,7 @@ function CardComposer(p: { columnId: string }) {
   let cancelled = false;
   onMount(() => ref.focus());
   const submit = () => {
-    addCard(p.columnId, ref.value);
+    addCard(p.columnId, ref.value, undefined, scopeSprint());
     ref.value = "";
     ref.focus();
   };
@@ -571,7 +604,7 @@ function CardComposer(p: { columnId: string }) {
         }}
         onBlur={() => {
           // Keep what was typed when clicking elsewhere (but not after Escape).
-          if (!cancelled && ref.value.trim()) addCard(p.columnId, ref.value);
+          if (!cancelled && ref.value.trim()) addCard(p.columnId, ref.value, undefined, scopeSprint());
           setComposing(null);
         }}
       />

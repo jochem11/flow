@@ -62,4 +62,19 @@ describe("boards in the shared document", () => {
     const lanes = (readSnap(doc, "flow").lists.nodes[0] as Record<string, unknown>).lanes as { name: string }[];
     expect(lanes[0].name).toBe("Lane");
   });
+
+  it("keeps a kanban board's sprints and ticket key", () => {
+    const board = structuredClone(kanban) as unknown as { data: Record<string, unknown> };
+    Object.assign(board.data, { key: "WEB", nextNumber: 7, sprints: [{ id: "s1", name: "Sprint 1", goal: "", state: "active" }] });
+    const doc = new Y.Doc();
+    writeSnap(doc, "kanban", snapOf(board as unknown as DocContent)!);
+    const back = readSnap(doc, "kanban");
+    expect(back.values).toEqual({ key: "WEB", nextNumber: 7 });
+    expect(back.lists.sprints).toEqual([{ id: "s1", name: "Sprint 1", goal: "", state: "active" }]);
+    // A board from before them: nothing of it in the shared document
+    const old = new Y.Doc();
+    writeSnap(old, "kanban", snapOf(kanban)!);
+    expect(readSnap(old, "kanban").values).toEqual({});
+    expect(readSnap(old, "kanban").lists.sprints).toEqual([]);
+  });
 });

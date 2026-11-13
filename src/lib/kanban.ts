@@ -3,13 +3,17 @@
 //
 // Subtasks are regular cards with a `parentId`. A card counts as done when its
 // column is marked as a done column (`column.done`), like "Done" in Azure Boards.
+//
+// As in Jira: every card has a ticket id (`WEB-12`: the board's key and the
+// card's number), and is in a sprint or in the backlog (tickets.ts).
 
 import { createSignal } from "solid-js";
 import { createStore, produce, reconcile, unwrap } from "solid-js/store";
 import { me } from "./auth";
 import { uid } from "./store";
-import type { KanbanCard, KanbanColumn, KanbanDoc, KanbanIcon, KanbanLabel, KanbanTimeEntry, NodeColor, Priority } from "./types";
-import { makesLoop, openBlockers } from "./planning";
+import type { KanbanCard, KanbanColumn, KanbanDoc, KanbanIcon, KanbanLabel, KanbanTimeEntry, NodeColor, Priority, Sprint } from "./types";
+import { addDays, makesLoop, openBlockers, today } from "./planning";
+import { byRank, cleanKey, keyFromName, lastRank, needsNumbers, nextNumber, nextSprintName, numberCards, openSprints, rankBetween, stateOf, ticketId } from "./tickets";
 
 export const [kanban, setKanban] = createStore<KanbanDoc>({ columns: [], labels: [] });
 
@@ -40,7 +44,7 @@ function normalize(doc: KanbanDoc): KanbanDoc {
     const byTitle = columns.find((c) => DONE_TITLE.test(c.title.trim()));
     (byTitle ?? columns[columns.length - 1]).done = true;
   }
-  return { ...doc, labels: doc.labels ?? [], columns };
+  return { ...doc, labels: doc.labels ?? [], sprints: doc.sprints ?? [], columns };
 }
 
 /** Replaces the whole board (when opening a document). Does not count as a change. */
@@ -216,21 +220,29 @@ export function moveColumn(id: string, toIndex: number) {
 
 // ---------- cards ----------
 
-export function addCard(columnId: string, title: string, parentId?: string): string | null {
+/** A new card at the bottom of a column, and last in its sprint (`sprintId`; none: the backlog). */
+export function addCard(columnId: string, title: string, parentId?: string, sprintId?: string | null): string | null {
   const value = title.trim();
   if (!value) return null;
-  const card: KanbanCard = { id: uid(), title: value, description: "", parentId, labelIds: [], comments: [] };
-  setKanban("columns", (c) => c.id === columnId, "cards", (cards) => [...cards, card]);
+  const number = nextNumber(kanban);
+  const card: KanbanCard = { id: uid(), number, rank: lastRank(allCards()), title: value, description: "", parentId, labelIds: [], comments: [] };
+  if (sprintId && sprintById(sprintId)) card.sprintId = sprintId;
+  setKanban(
+    produce((board) => {
+      board.columns.find((c) => c.id === columnId)?.cards.push(card);
+      board.nextNumber = number + 1;
+    }),
+  );
   touch();
   return card.id;
 }
 
-/** Adds a subtask in the first column, inheriting the parent's labels. */
+/** Adds a subtask in the first column, in the parent's sprint and with its labels. */
 export function addSubtask(parentId: string, title: string): string | null {
   const first = kanban.columns[0];
   const parent = cardById(parentId);
   if (!first || !parent) return null;
-  const id = addCard(first.id, title, parentId);
+  const id = addCard(first.id, title, parentId, parent.sprintId);
   if (id && parent.labelIds?.length) updateCard(id, { labelIds: [...parent.labelIds] });
   return id;
 }
@@ -555,5 +567,216 @@ export function toggleAssignee(cardId: string, userId: string) {
     const ids = card.assigneeIds ?? [];
     card.assigneeIds = ids.includes(userId) ? ids.filter((id) => id !== userId) : [...ids, userId];
   });
+}
+
+// ---------- ticket ids ----------
+
+/** The board's key: `WEB` in `WEB-12` */
+export const boardKey = () => kanban.key || "CARD";
+/** A card's ticket id (`WEB-12`); nothing while it has no number yet */
+export const cardKey = (card: KanbanCard) => ticketId(kanban.key, card);
+
+/** Is a key or a number missing (a board from before ticket ids, a card added from elsewhere)? */
+export const needsTickets = () => !kanban.key || needsNumbers(kanban);
+
+/**
+ * Gives the board its key (from its name) and every card its number, where they
+ * are missing. A change like any other: it is saved, and everyone gets it.
+ */
+export function ensureTickets(boardName: string) {
+  if (!needsTickets()) return;
+  let changed = false;
+  setKanban(
+    produce((board) => {
+      if (!board.key) {
+        board.key = keyFromName(boardName);
+        changed = true;
+      }
+      if (numberCards(board)) changed = true;
+    }),
+  );
+  if (changed) touch();
+}
+
+/** Another key for the board: every ticket id changes with it. False when it is not a key. */
+export function setBoardKey(text: string): boolean {
+  const key = cleanKey(text);
+  if (key.length < 2) return false;
+  if (key !== kanban.key) {
+    setKanban("key", key);
+    touch();
+  }
+  return true;
+}
+
+// ---------- sprints ----------
+
+export const sprints = (): Sprint[] => kanban.sprints ?? [];
+export const sprintById = (id: string | null | undefined) => (id ? sprints().find((s) => s.id === id) : undefined);
+/** The sprints still to do: running first, then the planned ones */
+export const plannedSprints = () => openSprints(sprints());
+export const activeSprints = () => sprints().filter((s) => stateOf(s) === "active");
+
+/** The sprint a card is in (not one that was deleted meanwhile) */
+export const sprintOf = (card: KanbanCard) => sprintById(card.sprintId);
+/** In a completed sprint: no longer on the board or in the backlog */
+export const isArchived = (card: KanbanCard) => {
+  const s = sprintOf(card);
+  return !!s && stateOf(s) === "done";
+};
+
+/** The cards of a sprint, or (null) of the backlog, in order */
+export function cardsIn(sprintId: string | null): KanbanCard[] {
+  return allCards()
+    .filter((c) => (sprintOf(c)?.id ?? null) === sprintId)
+    .sort(byRank);
+}
+
+export function addSprint(): string {
+  const id = uid();
+  setKanban("sprints", (list) => [...(list ?? []), { id, name: nextSprintName(list ?? []), goal: "", state: "planned" as const }]);
+  touch();
+  return id;
+}
+
+export function updateSprint(id: string, changes: Partial<Pick<Sprint, "name" | "goal" | "startDate" | "endDate">>) {
+  setKanban(
+    "sprints",
+    (s) => s.id === id,
+    produce((sprint) => {
+      if (changes.name !== undefined && changes.name.trim()) sprint.name = changes.name.trim();
+      if (changes.goal !== undefined) sprint.goal = changes.goal ?? "";
+      if (changes.startDate !== undefined) sprint.startDate = changes.startDate || undefined;
+      if (changes.endDate !== undefined) sprint.endDate = changes.endDate || undefined;
+      // It cannot end before it starts
+      if (sprint.startDate && sprint.endDate && sprint.endDate < sprint.startDate) sprint.endDate = sprint.startDate;
+    }),
+  );
+  touch();
+}
+
+/** Starts a sprint. Without dates it runs for two weeks from today. */
+export function startSprint(id: string) {
+  setKanban(
+    "sprints",
+    (s) => s.id === id,
+    produce((sprint) => {
+      sprint.state = "active";
+      sprint.startDate ??= today();
+      sprint.endDate ??= addDays(sprint.startDate, 13);
+      sprint.completedOn = undefined;
+      sprint.carriedOver = undefined;
+    }),
+  );
+  touch();
+}
+
+/**
+ * Completes a sprint. Its cards that are done stay with it (and leave the
+ * board); the others go on to `moveTo`: another sprint, "new" for a new one, or
+ * (null) the backlog. Returns how many went on.
+ */
+export function completeSprint(id: string, moveTo: string | "new" | null): number {
+  if (!sprintById(id)) return 0;
+  const open = cardsIn(id).filter((c) => !isDone(c.id));
+  const target = moveTo === "new" ? addSprint() : sprintById(moveTo)?.id;
+  // After what is in the sprint they go to, in the order they were in
+  let rank = lastRank(target ? cardsIn(target) : []);
+  const ranks = new Map(open.map((c) => [c.id, rank++]));
+  setKanban(
+    produce((board) => {
+      for (const card of board.columns.flatMap((c) => c.cards)) {
+        if (!ranks.has(card.id)) continue;
+        card.sprintId = target;
+        if (target) card.rank = ranks.get(card.id);
+      }
+      const sprint = (board.sprints ?? []).find((s) => s.id === id);
+      if (!sprint) return;
+      sprint.state = "done";
+      sprint.completedOn = today();
+      sprint.carriedOver = open.length;
+    }),
+  );
+  touch();
+  return open.length;
+}
+
+/** A completed sprint that is not over after all: it runs again, with its cards back on the board. */
+export function reopenSprint(id: string) {
+  setKanban(
+    "sprints",
+    (s) => s.id === id,
+    produce((sprint) => {
+      sprint.state = "active";
+      sprint.completedOn = undefined;
+      sprint.carriedOver = undefined;
+    }),
+  );
+  touch();
+}
+
+/** Deletes a sprint; its cards go back to the backlog. */
+export function deleteSprint(id: string) {
+  setKanban(
+    produce((board) => {
+      board.sprints = (board.sprints ?? []).filter((s) => s.id !== id);
+      for (const card of board.columns.flatMap((c) => c.cards)) if (card.sprintId === id) card.sprintId = undefined;
+    }),
+  );
+  touch();
+}
+
+/** Moves a sprint one place earlier (-1) or later (1) among the sprints still to do. */
+export function moveSprint(id: string, by: -1 | 1) {
+  const open = plannedSprints();
+  const other = open[open.findIndex((s) => s.id === id) + by];
+  if (!other) return;
+  setKanban(
+    produce((board) => {
+      const list = board.sprints ?? [];
+      const a = list.findIndex((s) => s.id === id);
+      const b = list.findIndex((s) => s.id === other.id);
+      if (a < 0 || b < 0) return;
+      [list[a], list[b]] = [list[b], list[a]];
+    }),
+  );
+  touch();
+}
+
+/**
+ * Puts a card in a sprint (null: the backlog), before the card `beforeId` there
+ * or, without one, last. Its subtasks that were in the same sprint come along.
+ */
+export function planCard(cardId: string, sprintId: string | null, beforeId?: string | null) {
+  const card = cardById(cardId);
+  if (!card) return;
+  const target = sprintById(sprintId)?.id ?? null;
+  const from = sprintOf(card)?.id ?? null;
+  const list = cardsIn(target).filter((c) => c.id !== cardId);
+  const at = beforeId ? list.findIndex((c) => c.id === beforeId) : -1;
+  const index = at < 0 ? list.length : at;
+  // Dropped where it already is
+  if (from === target && cardsIn(target).findIndex((c) => c.id === cardId) === index) return;
+  let rank = rankBetween(list, index);
+  // No room between its neighbours: the whole list is ranked again, 1, 2, 3, ...
+  const spread = new Map<string, number>();
+  if (rank === null) {
+    const order = [...list.slice(0, index).map((c) => c.id), cardId, ...list.slice(index).map((c) => c.id)];
+    order.forEach((id, i) => spread.set(id, i + 1));
+    rank = spread.get(cardId)!;
+  }
+  const along = from === target ? new Set<string>() : new Set([...withDescendants(cardId)].filter((id) => id !== cardId && (sprintOf(cardById(id)!)?.id ?? null) === from));
+  setKanban(
+    produce((board) => {
+      for (const c of board.columns.flatMap((col) => col.cards)) {
+        if (spread.has(c.id)) c.rank = spread.get(c.id);
+        if (c.id === cardId) {
+          c.sprintId = target ?? undefined;
+          c.rank = rank!;
+        } else if (along.has(c.id)) c.sprintId = target ?? undefined;
+      }
+    }),
+  );
+  touch();
 }
 
